@@ -1,0 +1,15 @@
+{
+  "all_static_checks_passed": true,
+  "checks": {
+    "camera_video_dependency": true,
+    "precision_button": true,
+    "hfr_capability_probe": true,
+    "hfr_capture_controller": true,
+    "hfr_clip_analyzer": true,
+    "impact_detector": true,
+    "240_priority": true,
+    "120_fallback": true,
+    "hfr_qr_recalibration": true
+  },
+  "scope": "Static source validation only; Android compile/device runtime test not executed here."
+}

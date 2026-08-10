@@ -1,0 +1,63 @@
+{
+  "version": "0.4.0-alpha-ultimate",
+  "feature_static_checks_passed": true,
+  "feature_checks": {
+    "autoplay": true,
+    "240_priority": true,
+    "120_fallback": true,
+    "impact_replay": true,
+    "tempo": true,
+    "mat_cal": true,
+    "coach": true,
+    "perfect_score": true,
+    "green_read": true,
+    "flow_grid": true,
+    "game_modes": true,
+    "stats": true,
+    "heatmap": true,
+    "generic_qr": true
+  },
+  "brace_balance_passed": true,
+  "brace_checks": {
+    "ShotModels.kt": true,
+    "GameModes.kt": true,
+    "PreviewImpactDetector.kt": true,
+    "MarkerLayoutResolver.kt": true,
+    "Geometry.kt": true,
+    "CoachEngine.kt": true,
+    "ShotVisionAnalyzer.kt": true,
+    "ImpactReplayView.kt": true,
+    "GreenReadAdvisor.kt": true,
+    "ImpactReplay.kt": true,
+    "MainActivity.kt": true,
+    "PhoneOverlayView.kt": true,
+    "GreenView.kt": true,
+    "StatsRepository.kt": true,
+    "GreenPhysics.kt": true,
+    "HighSpeedCaptureController.kt": true,
+    "AutoCalibrator.kt": true,
+    "ExternalDisplayController.kt": true,
+    "HfrVideoAnalyzer.kt": true,
+    "GameEngine.kt": true,
+    "HfrCapabilityProbe.kt": true,
+    "StrokeScore.kt": true
+  },
+  "pure_kotlin_core_compile": {
+    "passed": true,
+    "modules": [
+      "Geometry",
+      "GreenPhysics",
+      "ShotModels",
+      "StrokeScore",
+      "CoachEngine",
+      "GameModes",
+      "GreenReadAdvisor",
+      "GameEngine"
+    ],
+    "note": "Compiled in a JVM harness with a minimal PointF stub."
+  },
+  "android_full_build": {
+    "executed": false,
+    "note": "Full Android SDK/Gradle toolchain was not available in this runtime. Device build/runtime validation is still required."
+  }
+}

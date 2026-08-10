@@ -1,0 +1,31 @@
+{
+  "version": "0.4.0-alpha-ultimate",
+  "features": {
+    "autoplay": true,
+    "hfr_240_120_fallback": true,
+    "impact_replay": true,
+    "tempo_analysis": true,
+    "mat_friction_auto_cal": true,
+    "local_coach": true,
+    "perfect_stroke_score": true,
+    "green_read_flow_dots": true,
+    "green_aim_line": true,
+    "game_modes": [
+      "practice",
+      "distance",
+      "9-hole",
+      "18-hole",
+      "streak",
+      "pressure",
+      "random-slope"
+    ],
+    "persistent_stats": true,
+    "tv_dispersion_heatmap": true,
+    "generic_qr_marker_fallback": true
+  },
+  "validation": {
+    "pure_kotlin_core_compiled": true,
+    "android_full_build_executed": false,
+    "reason": "Android SDK/Gradle runtime not available in the artifact sandbox; device runtime still required."
+  }
+}
