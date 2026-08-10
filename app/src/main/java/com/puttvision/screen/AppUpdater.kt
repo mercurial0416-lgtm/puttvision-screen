@@ -18,12 +18,12 @@ data class UpdateInfo(
     val versionCode: Int,
     val versionName: String,
     val apkUrl: String,
-    val sha256: String?
+    val sha256: String
 )
 
 class AppUpdater(
     private val activity: Activity,
-    private val manifestUrl: String = "https://puttvision-update.vercel.app/update.json"
+    private val manifestUrl: String = BuildConfig.UPDATE_MANIFEST_URL
 ) {
     private val executor = Executors.newSingleThreadExecutor()
 
@@ -63,19 +63,25 @@ class AppUpdater(
     }
 
     private fun fetchInfo(): UpdateInfo {
+        requireHttps(manifestUrl)
         val c = (URL(manifestUrl).openConnection() as HttpURLConnection).apply {
             connectTimeout = 5000
             readTimeout = 7000
             requestMethod = "GET"
             setRequestProperty("Cache-Control", "no-cache")
         }
+        require(c.responseCode == HttpURLConnection.HTTP_OK) { "update.json HTTP ${c.responseCode}" }
         val text = c.inputStream.bufferedReader().use { it.readText() }
         val j = JSONObject(text)
+        val apkUrl = j.getString("apkUrl")
+        val digest = j.getString("sha256").lowercase()
+        requireHttps(apkUrl)
+        require(digest.matches(Regex("[0-9a-f]{64}"))) { "잘못된 SHA-256" }
         return UpdateInfo(
             j.getInt("versionCode"),
             j.getString("versionName"),
-            j.getString("apkUrl"),
-            j.optString("sha256").takeIf { it.isNotBlank() }
+            apkUrl,
+            digest
         )
     }
 
@@ -97,15 +103,20 @@ class AppUpdater(
                     connectTimeout = 8000
                     readTimeout = 30000
                 }
+                require(c.responseCode == HttpURLConnection.HTTP_OK) { "APK HTTP ${c.responseCode}" }
+                val length = c.contentLengthLong
+                require(length in 1..MAX_APK_BYTES) { "잘못된 APK 크기" }
                 c.inputStream.use { input ->
-                    apk.outputStream().use { output -> input.copyTo(output) }
+                    apk.outputStream().use { output ->
+                        val copied = input.copyTo(output)
+                        require(copied == length) { "APK 다운로드가 완료되지 않았습니다" }
+                    }
                 }
 
-                info.sha256?.let { expected ->
-                    val actual = sha256(apk)
-                    require(actual.equals(expected, ignoreCase = true)) {
-                        "APK 검증 실패"
-                    }
+                val actual = sha256(apk)
+                require(actual == info.sha256) {
+                    apk.delete()
+                    "APK SHA-256 검증 실패"
                 }
 
                 activity.runOnUiThread { install(apk) }
@@ -161,5 +172,15 @@ class AppUpdater(
             }
         }
         return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun requireHttps(value: String) {
+        require(Uri.parse(value).scheme.equals("https", ignoreCase = true)) {
+            "HTTPS 업데이트 주소만 허용됩니다"
+        }
+    }
+
+    companion object {
+        private const val MAX_APK_BYTES = 250L * 1024L * 1024L
     }
 }
