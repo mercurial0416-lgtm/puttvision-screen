@@ -1,18 +1,30 @@
-name: Build PuttVision Release APK
+name: Verify, sign and publish APK
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  build-release:
+  release:
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
+
+      - name: Allocate monotonic version
+        run: |
+          VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "APK_NAME=puttvision-$VERSION_CODE.apk" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v4
         with:
@@ -23,35 +35,81 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Restore fixed release keystore
-        shell: bash
-        run: |
-          base64 -d ci/puttvision-release.jks.b64 > "$RUNNER_TEMP/puttvision-release.jks"
-
-      - name: Build signed release APK
+      - name: Validate deployment secrets
         env:
-          PUTTVISION_STORE_FILE: ${{ runner.temp }}/puttvision-release.jks
-          PUTTVISION_STORE_PASSWORD: PuttVision_2026_UpdateKey
-          PUTTVISION_KEY_ALIAS: puttvision
-          PUTTVISION_KEY_PASSWORD: PuttVision_2026_UpdateKey
-        run: gradle assembleRelease
-
-      - name: Prepare update payload
-        shell: bash
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
+          DIST_TOKEN: ${{ secrets.DISTRIBUTION_TOKEN }}
+          DIST_REPO: ${{ vars.DISTRIBUTION_REPOSITORY }}
+          DIST_BASE_URL: ${{ vars.DISTRIBUTION_BASE_URL }}
         run: |
-          mkdir -p update-payload
-          cp app/build/outputs/apk/release/app-release.apk update-payload/puttvision.apk
-          SHA=$(sha256sum update-payload/puttvision.apk | awk '{print $1}')
-          cat > update-payload/update.json <<EOF
-          {
-            "versionCode": 5,
-            "versionName": "0.5.0-autoupdate",
-            "apkUrl": "https://puttvision-update.vercel.app/puttvision.apk",
-            "sha256": "$SHA"
-          }
-          EOF
+          for name in KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD CERT_SHA256 DIST_TOKEN DIST_REPO DIST_BASE_URL; do
+            test -n "${!name}" || { echo "::error::$name is not configured"; exit 1; }
+          done
+          [[ "$DIST_BASE_URL" == https://* ]] || { echo "::error::Distribution URL must use HTTPS"; exit 1; }
+
+      - name: Restore new release key
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+
+      - name: Verify and build every variant
+        env:
+          PUTTVISION_STORE_FILE: ${{ runner.temp }}/release.jks
+          PUTTVISION_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          PUTTVISION_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          PUTTVISION_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          PUTTVISION_VERSION_CODE: ${{ env.VERSION_CODE }}
+          PUTTVISION_VERSION_NAME: ${{ env.VERSION_NAME }}
+          PUTTVISION_UPDATE_MANIFEST_URL: ${{ vars.DISTRIBUTION_BASE_URL }}/update.json
+        run: gradle --no-daemon clean check assembleDebug assembleRelease
+
+      - name: Verify release signature and version
+        env:
+          EXPECTED_CERT: ${{ secrets.RELEASE_CERT_SHA256 }}
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          ACTUAL_CERT=$($APKSIGNER verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:lower:]' '[:upper:]')
+          test "$ACTUAL_CERT" = "$(printf '%s' "$EXPECTED_CERT" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          "$AAPT" dump badging "$APK" | head -1 | grep "versionCode='$VERSION_CODE'"
+
+      - name: Create SHA-256 update payload
+        env:
+          DIST_BASE_URL: ${{ vars.DISTRIBUTION_BASE_URL }}
+        run: |
+          mkdir payload
+          cp app/build/outputs/apk/release/app-release.apk "payload/$APK_NAME"
+          SHA256=$(sha256sum "payload/$APK_NAME" | cut -d' ' -f1)
+          python3 ci/create_update_manifest.py \
+            --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
+            --apk-url "$DIST_BASE_URL/releases/$APK_NAME" --sha256 "$SHA256" \
+            --output payload/update.json
+          sha256sum --check <(printf '%s  %s\n' "$SHA256" "payload/$APK_NAME")
 
       - uses: actions/upload-artifact@v4
         with:
-          name: PuttVision-v0.5-Release-And-UpdatePayload
-          path: update-payload/
+          name: puttvision-release-${{ env.VERSION_CODE }}
+          path: payload/
+          if-no-files-found: error
+
+      - name: Publish only APK and manifest to public distribution repository
+        env:
+          GH_TOKEN: ${{ secrets.DISTRIBUTION_TOKEN }}
+          DIST_REPO: ${{ vars.DISTRIBUTION_REPOSITORY }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${DIST_REPO}.git" distribution
+          mkdir -p distribution/releases
+          cp "payload/$APK_NAME" distribution/releases/
+          cp payload/update.json distribution/update.json
+          cd distribution
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add update.json "releases/$APK_NAME"
+          git commit -m "Release PuttVision $VERSION_NAME ($VERSION_CODE)"
+          git push

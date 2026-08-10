@@ -11,8 +11,14 @@ android {
         applicationId = "com.puttvision.screen"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0-autoupdate"
+        versionCode = providers.environmentVariable("PUTTVISION_VERSION_CODE")
+            .orElse("5").get().toInt()
+        versionName = providers.environmentVariable("PUTTVISION_VERSION_NAME")
+            .orElse("0.5.0-dev").get()
+
+        val updateManifestUrl = providers.environmentVariable("PUTTVISION_UPDATE_MANIFEST_URL")
+            .orElse("https://example.invalid/puttvision/update.json").get()
+        buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateManifestUrl\"")
     }
 
 
@@ -26,6 +32,10 @@ android {
                 keyPassword = System.getenv("PUTTVISION_KEY_PASSWORD")
             }
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
