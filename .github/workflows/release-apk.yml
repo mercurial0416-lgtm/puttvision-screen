@@ -1,0 +1,57 @@
+name: Build PuttVision Release APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Restore fixed release keystore
+        shell: bash
+        run: |
+          base64 -d ci/puttvision-release.jks.b64 > "$RUNNER_TEMP/puttvision-release.jks"
+
+      - name: Build signed release APK
+        env:
+          PUTTVISION_STORE_FILE: ${{ runner.temp }}/puttvision-release.jks
+          PUTTVISION_STORE_PASSWORD: PuttVision_2026_UpdateKey
+          PUTTVISION_KEY_ALIAS: puttvision
+          PUTTVISION_KEY_PASSWORD: PuttVision_2026_UpdateKey
+        run: gradle assembleRelease
+
+      - name: Prepare update payload
+        shell: bash
+        run: |
+          mkdir -p update-payload
+          cp app/build/outputs/apk/release/app-release.apk update-payload/puttvision.apk
+          SHA=$(sha256sum update-payload/puttvision.apk | awk '{print $1}')
+          cat > update-payload/update.json <<EOF
+          {
+            "versionCode": 5,
+            "versionName": "0.5.0-autoupdate",
+            "apkUrl": "https://puttvision-update.vercel.app/puttvision.apk",
+            "sha256": "$SHA"
+          }
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PuttVision-v0.5-Release-And-UpdatePayload
+          path: update-payload/

@@ -11,8 +11,28 @@ android {
         applicationId = "com.puttvision.screen"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0-alpha-ultimate"
+        versionCode = 5
+        versionName = "0.5.0-autoupdate"
+    }
+
+
+    signingConfigs {
+        create("release") {
+            val ks = System.getenv("PUTTVISION_STORE_FILE")
+            if (!ks.isNullOrBlank()) {
+                storeFile = file(ks)
+                storePassword = System.getenv("PUTTVISION_STORE_PASSWORD")
+                keyAlias = System.getenv("PUTTVISION_KEY_ALIAS")
+                keyPassword = System.getenv("PUTTVISION_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     compileOptions {

@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var displayController: ExternalDisplayController
     private lateinit var statsRepository: StatsRepository
+    private lateinit var appUpdater: AppUpdater
 
     private val engine = GameEngine()
     private val tracker = ShotTracker()
@@ -94,6 +95,8 @@ class MainActivity : AppCompatActivity() {
         statsRepository =
             StatsRepository(this)
 
+        appUpdater = AppUpdater(this)
+
         engine.seedHistory(
             statsRepository.all()
         )
@@ -137,6 +140,8 @@ class MainActivity : AppCompatActivity() {
             }
 
         displayController.start()
+
+        mainHandler.postDelayed({ appUpdater.check(silent = true) }, 1800L)
 
         probeHfr()
 
@@ -435,6 +440,17 @@ class MainActivity : AppCompatActivity() {
         row2.addView(
             button("TV 재연결") {
                 displayController.refresh()
+            },
+            LinearLayout.LayoutParams(
+                0,
+                -2,
+                1f
+            )
+        )
+
+        row2.addView(
+            button("업데이트") {
+                appUpdater.check(silent = false)
             },
             LinearLayout.LayoutParams(
                 0,
