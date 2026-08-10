@@ -3,7 +3,10 @@ package com.puttvision.screen
 import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -247,21 +250,37 @@ class MainActivity : AppCompatActivity() {
                     LinearLayout.VERTICAL
 
                 setPadding(
-                    18,
-                    12,
-                    18,
-                    16
+                    dp(20),
+                    dp(16),
+                    dp(20),
+                    dp(18)
                 )
 
-                setBackgroundColor(
-                    Color.argb(
-                        232,
-                        7,
-                        15,
-                        10
-                    )
+                background = roundedBackground(
+                    color = Color.argb(246, 8, 18, 13),
+                    radiusDp = 24f,
+                    strokeColor = Color.rgb(35, 66, 48)
                 )
+
+                elevation = dp(12).toFloat()
             }
+
+        val titleRow =
+            LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+            }
+
+        titleRow.addView(
+            TextView(this).apply {
+                text = "PUTTVISION"
+                setTextColor(Color.WHITE)
+                textSize = 18f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                letterSpacing = 0.12f
+            },
+            LinearLayout.LayoutParams(0, -2, 1f)
+        )
 
         tvStatus =
             TextView(this).apply {
@@ -269,13 +288,17 @@ class MainActivity : AppCompatActivity() {
                     Color.LTGRAY
                 )
 
-                textSize = 12f
+                textSize = 11f
                 text = "○ TV 확인중"
+                gravity = Gravity.END
             }
 
-        panel.addView(
-            tvStatus
+        titleRow.addView(
+            tvStatus,
+            LinearLayout.LayoutParams(-2, -2)
         )
+
+        panel.addView(titleRow)
 
         hfrStatus =
             TextView(this).apply {
@@ -289,6 +312,7 @@ class MainActivity : AppCompatActivity() {
 
                 textSize = 12f
                 text = "HFR 확인중"
+                setPadding(0, dp(5), 0, 0)
             }
 
         panel.addView(
@@ -308,9 +332,9 @@ class MainActivity : AppCompatActivity() {
 
                 setPadding(
                     0,
-                    4,
+                    dp(4),
                     0,
-                    6
+                    dp(12)
                 )
             }
 
@@ -330,7 +354,21 @@ class MainActivity : AppCompatActivity() {
         ): Button =
             Button(this).apply {
                 text = label
-                textSize = 10.5f
+                textSize = 11f
+                isAllCaps = false
+                setTextColor(Color.rgb(232, 244, 236))
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                minHeight = dp(42)
+                minimumHeight = dp(42)
+                minWidth = 0
+                minimumWidth = 0
+                setPadding(dp(5), 0, dp(5), 0)
+                backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+                background = roundedBackground(
+                    color = Color.rgb(20, 42, 29),
+                    radiusDp = 12f,
+                    strokeColor = Color.rgb(50, 89, 65)
+                )
                 setOnClickListener {
                     click()
                 }
@@ -356,7 +394,7 @@ class MainActivity : AppCompatActivity() {
                 0,
                 -2,
                 1f
-            )
+            ).withEndMargin(dp(6))
         )
 
         row1.addView(
@@ -367,7 +405,7 @@ class MainActivity : AppCompatActivity() {
                 0,
                 -2,
                 1f
-            )
+            ).withEndMargin(dp(6))
         )
 
         row1.addView(
@@ -378,7 +416,7 @@ class MainActivity : AppCompatActivity() {
                 0,
                 -2,
                 1.15f
-            )
+            ).withEndMargin(dp(6))
         )
 
         row1.addView(
@@ -393,7 +431,10 @@ class MainActivity : AppCompatActivity() {
         )
 
         panel.addView(
-            row1
+            row1,
+            LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(7)
+            }
         )
 
         val row2 =
@@ -434,7 +475,7 @@ class MainActivity : AppCompatActivity() {
                 0,
                 -2,
                 1.45f
-            )
+            ).withEndMargin(dp(6))
         )
 
         row2.addView(
@@ -445,7 +486,7 @@ class MainActivity : AppCompatActivity() {
                 0,
                 -2,
                 1f
-            )
+            ).withEndMargin(dp(6))
         )
 
         row2.addView(
@@ -460,7 +501,10 @@ class MainActivity : AppCompatActivity() {
         )
 
         panel.addView(
-            row2
+            row2,
+            LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(10)
+            }
         )
 
         speedLabel =
@@ -474,6 +518,8 @@ class MainActivity : AppCompatActivity() {
             SeekBar(this).apply {
                 max = 20
                 progress = 8
+                progressTintList = ColorStateList.valueOf(Color.rgb(137, 247, 176))
+                thumbTintList = ColorStateList.valueOf(Color.WHITE)
 
                 setOnSeekBarChangeListener(
                     simpleSeek {
@@ -499,6 +545,8 @@ class MainActivity : AppCompatActivity() {
             SeekBar(this).apply {
                 max = 140
                 progress = 40
+                progressTintList = ColorStateList.valueOf(Color.rgb(137, 247, 176))
+                thumbTintList = ColorStateList.valueOf(Color.WHITE)
 
                 setOnSeekBarChangeListener(
                     simpleSeek {
@@ -550,7 +598,9 @@ class MainActivity : AppCompatActivity() {
             LinearLayout.LayoutParams(
                 -1,
                 -2
-            )
+            ).also {
+                it.marginEnd = dp(8)
+            }
         )
 
         val right =
@@ -593,7 +643,7 @@ class MainActivity : AppCompatActivity() {
                 0,
                 -2,
                 1f
-            )
+            ).withEndMargin(dp(8))
         )
 
         slopes.addView(
@@ -628,6 +678,23 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    private fun LinearLayout.LayoutParams.withEndMargin(margin: Int) =
+        apply { marginEnd = margin }
+
+    private fun roundedBackground(
+        color: Int,
+        radiusDp: Float,
+        strokeColor: Int
+    ) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = radiusDp * resources.displayMetrics.density
+        setStroke(dp(1), strokeColor)
+    }
+
     private fun updateAutoButton() {
         if (!::autoButton.isInitialized) {
             return
@@ -652,6 +719,8 @@ class MainActivity : AppCompatActivity() {
             )
 
             textSize = 11.5f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(0, dp(2), 0, 0)
         }
 
     private fun simpleSeek(
