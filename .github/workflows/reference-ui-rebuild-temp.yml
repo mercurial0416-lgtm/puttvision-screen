@@ -1,0 +1,835 @@
+name: Reference UI rebuild temp
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ '.github/workflows/reference-ui-rebuild-temp.yml' ]
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Rebuild reference UI
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          main_path = Path('app/src/main/java/com/puttvision/screen/MainActivity.kt')
+          text = main_path.read_text()
+
+          def replace_between(source: str, start_marker: str, next_marker: str, block: str) -> str:
+              start = source.index(start_marker)
+              end = source.index(next_marker, start)
+              return source[:start] + block.rstrip() + '\n\n    ' + source[end:]
+
+          build_ui = r'''private fun buildUi() {
+              val compact = compactLandscape
+              val root = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  setBackgroundColor(Pv.inkDeep)
+                  setPadding(pvDp(if (compact) 8 else 12), pvDp(if (compact) 5 else 8), pvDp(if (compact) 8 else 12), pvDp(if (compact) 7 else 10))
+              }
+
+              val header = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+
+              val brand = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+              val brandLine = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+              brandLine.addView(TextView(this).apply {
+                  text = "PuttVision"
+                  setTextColor(Pv.textHi)
+                  textSize = pvSp(if (compact) 15.5f else 18f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  includeFontPadding = false
+              })
+              brandLine.addView(TextView(this).apply {
+                  text = "  SCREEN"
+                  setTextColor(Pv.primary)
+                  textSize = pvSp(if (compact) 9f else 10f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  letterSpacing = 0.14f
+                  includeFontPadding = false
+              })
+              brand.addView(brandLine)
+              brand.addView(TextView(this).apply {
+                  text = "HFR PRECISION · PUTTING LAUNCH MONITOR"
+                  setTextColor(Pv.textLo)
+                  textSize = pvSp(if (compact) 6.8f else 7.8f)
+                  letterSpacing = 0.08f
+                  includeFontPadding = false
+                  maxLines = 1
+              })
+              header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+
+              fun statusChip(initial: String, accent: Int, click: () -> Unit): TextView = TextView(this).apply {
+                  text = initial
+                  setTextColor(accent)
+                  textSize = pvSp(if (compact) 8.2f else 9.2f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  gravity = Gravity.CENTER
+                  setSingleLine(true)
+                  includeFontPadding = false
+                  minHeight = pvDp(if (compact) 30 else 34)
+                  background = pvRounded(Pv.surfaceLo, 100f, Pv.line)
+                  setPadding(pvDp(if (compact) 9 else 12), pvDp(5), pvDp(if (compact) 9 else 12), pvDp(5))
+                  isClickable = true
+                  isFocusable = true
+                  setOnClickListener { click() }
+              }
+
+              hfrStatus = statusChip("HFR 확인중", Pv.primary) { toast(lastHfrStatusMessage) }
+              header.addView(hfrStatus, LinearLayout.LayoutParams(-2, -2).apply { marginStart = pvDp(5) })
+
+              tvStatus = statusChip("○ TV", Pv.textMid) { toast(lastTvStatusMessage) }
+              header.addView(tvStatus, LinearLayout.LayoutParams(-2, -2).apply { marginStart = pvDp(5) })
+
+              modeButton = pvButton(engine.gameModes.status.mode.label, PvButtonStyle.SECONDARY, textSp = if (compact) 8.5f else 9.5f, radiusDp = 100f) {
+                  if (engine.state?.running == true) {
+                      toast("공이 굴러가는 동안에는 모드를 바꿀 수 없습니다")
+                  } else if (sessionActive) {
+                      pauseSessionForMenu()
+                      if (activeSessionIsGame) showGameEntrance() else showPracticeEntrance()
+                  } else {
+                      showHomeMenu()
+                  }
+              }
+              header.addView(modeButton, LinearLayout.LayoutParams(pvDp(if (compact) 78 else 88), pvDp(if (compact) 30 else 34)).apply { marginStart = pvDp(5) })
+
+              autoButton = pvButton("AUTO ON", PvButtonStyle.PRIMARY, textSp = if (compact) 8.5f else 9.5f, radiusDp = 100f) {
+                  autoPlayEnabled = !autoPlayEnabled
+                  autoGeneration++
+                  updateAutoButton()
+                  if (autoPlayEnabled) maybeAutoStartAfterCalibration()
+              }
+              header.addView(autoButton, LinearLayout.LayoutParams(pvDp(if (compact) 70 else 78), pvDp(if (compact) 30 else 34)).apply { marginStart = pvDp(5) })
+
+              root.addView(header, LinearLayout.LayoutParams(-1, pvDp(if (compact) 39 else 45)))
+
+              val cameraFrame = FrameLayout(this).apply {
+                  background = pvRounded(Color.rgb(4, 7, 9), Pv.rLg, Pv.line)
+                  setPadding(pvDp(2), pvDp(2), pvDp(2), pvDp(2))
+              }
+              previewView = PreviewView(this).apply {
+                  scaleType = PreviewView.ScaleType.FILL_CENTER
+                  implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+              }
+              cameraFrame.addView(previewView, FrameLayout.LayoutParams(-1, -1))
+
+              overlay = PhoneOverlayView(this)
+              cameraFrame.addView(overlay, FrameLayout.LayoutParams(-1, -1))
+
+              val impactPreview = ReferenceImpactPreviewView(this)
+              cameraFrame.addView(
+                  impactPreview,
+                  FrameLayout.LayoutParams(pvDp(if (compact) 176 else 220), pvDp(if (compact) 88 else 108), Gravity.TOP or Gravity.END).apply {
+                      topMargin = pvDp(if (compact) 8 else 12)
+                      rightMargin = pvDp(if (compact) 8 else 12)
+                  }
+              )
+
+              replayView = ImpactReplayView(this)
+              cameraFrame.addView(replayView, FrameLayout.LayoutParams(-1, -1))
+
+              root.addView(cameraFrame, LinearLayout.LayoutParams(-1, 0, 1f).apply {
+                  topMargin = pvDp(if (compact) 5 else 8)
+                  bottomMargin = pvDp(if (compact) 5 else 8)
+              })
+
+              val dashboard = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  background = pvRounded(Pv.surface, Pv.rLg, Pv.lineSoft)
+                  setPadding(pvDp(if (compact) 7 else 10), pvDp(if (compact) 6 else 9), pvDp(if (compact) 7 else 10), pvDp(if (compact) 6 else 9))
+              }
+
+              fun heroMetric(title: String, key: String, unit: String): LinearLayout {
+                  val card = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      background = pvRounded(Pv.surfaceHi, Pv.rMd, Pv.lineSoft)
+                      setPadding(pvDp(if (compact) 10 else 14), pvDp(5), pvDp(if (compact) 10 else 14), pvDp(5))
+                  }
+                  card.addView(TextView(this).apply {
+                      text = title
+                      setTextColor(Pv.textMid)
+                      textSize = pvSp(if (compact) 7.2f else 8.2f)
+                      typeface = Typeface.DEFAULT_BOLD
+                      includeFontPadding = false
+                      maxLines = 1
+                  })
+                  val valueRow = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.BOTTOM
+                  }
+                  val value = TextView(this).apply {
+                      text = "--"
+                      setTextColor(Pv.textHi)
+                      textSize = pvSp(if (compact) 17f else 21f)
+                      typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                      includeFontPadding = false
+                      maxLines = 1
+                  }
+                  metricCards[key] = value
+                  valueRow.addView(value)
+                  if (unit.isNotEmpty()) valueRow.addView(TextView(this).apply {
+                      text = "  $unit"
+                      setTextColor(Pv.textLo)
+                      textSize = pvSp(if (compact) 7.5f else 8.5f)
+                      typeface = Typeface.DEFAULT_BOLD
+                      includeFontPadding = false
+                      setPadding(0, 0, 0, pvDp(2))
+                  })
+                  card.addView(valueRow, LinearLayout.LayoutParams(-1, 0, 1f))
+                  return card
+              }
+
+              val mainMetrics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+              val mainH = pvDp(if (compact) 48 else 60)
+              listOf(
+                  Triple("볼 스피드", "ball", "m/s"),
+                  Triple("출발 각도", "launch", "deg"),
+                  Triple("헤드 스피드", "head", "m/s")
+              ).forEachIndexed { i, (title, key, unit) ->
+                  mainMetrics.addView(heroMetric(title, key, unit), LinearLayout.LayoutParams(0, mainH, 1f).apply {
+                      if (i > 0) marginStart = pvDp(if (compact) 5 else 7)
+                  })
+              }
+              dashboard.addView(mainMetrics)
+
+              fun miniMetric(title: String, key: String): LinearLayout {
+                  val card = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER
+                      background = pvRounded(Pv.surfaceLo, Pv.rSm, Pv.lineSoft)
+                      setPadding(pvDp(3), pvDp(2), pvDp(3), pvDp(2))
+                  }
+                  card.addView(TextView(this).apply {
+                      text = title
+                      setTextColor(Pv.textLo)
+                      textSize = pvSp(if (compact) 5.9f else 6.8f)
+                      includeFontPadding = false
+                      maxLines = 1
+                  })
+                  val value = TextView(this).apply {
+                      text = "--"
+                      setTextColor(Pv.textHi)
+                      textSize = pvSp(if (compact) 8.6f else 10.2f)
+                      typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                      includeFontPadding = false
+                      maxLines = 1
+                  }
+                  metricCards[key] = value
+                  card.addView(value)
+                  return card
+              }
+
+              val miniRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+              val miniDefs = listOf(
+                  "FACE" to "face", "PATH" to "path", "F→P" to "f2p",
+                  "IMPACT" to "impact", "SMASH" to "smash", "TEMPO" to "tempo"
+              )
+              miniDefs.forEachIndexed { i, (title, key) ->
+                  miniRow.addView(miniMetric(title, key), LinearLayout.LayoutParams(0, pvDp(if (compact) 31 else 38), 1f).apply {
+                      if (i > 0) marginStart = pvDp(4)
+                  })
+              }
+              dashboard.addView(miniRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(if (compact) 4 else 6) })
+
+              val statusRow = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+                  background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.lineSoft)
+                  setPadding(pvDp(if (compact) 9 else 12), pvDp(4), pvDp(if (compact) 9 else 12), pvDp(4))
+              }
+              shotPanelTitle = TextView(this).apply {
+                  text = "SHOT"
+                  setTextColor(Pv.primary)
+                  textSize = pvSp(if (compact) 7f else 8f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  letterSpacing = 0.12f
+                  includeFontPadding = false
+              }
+              statusRow.addView(shotPanelTitle)
+              metricText = TextView(this).apply {
+                  text = "  READY · 공을 놓고 퍼팅하세요"
+                  setTextColor(Pv.textHi)
+                  textSize = pvSp(if (compact) 7.7f else 9f)
+                  includeFontPadding = false
+                  maxLines = 2
+              }
+              statusRow.addView(metricText, LinearLayout.LayoutParams(0, -2, 1f))
+              settingSummary = TextView(this).apply {
+                  setTextColor(Pv.textMid)
+                  textSize = pvSp(if (compact) 6.5f else 7.5f)
+                  typeface = Typeface.MONOSPACE
+                  includeFontPadding = false
+                  maxLines = 1
+                  gravity = Gravity.END
+              }
+              statusRow.addView(settingSummary, LinearLayout.LayoutParams(0, -2, 0.65f))
+              dashboard.addView(statusRow, LinearLayout.LayoutParams(-1, pvDp(if (compact) 29 else 34)).apply { topMargin = pvDp(if (compact) 4 else 6) })
+
+              val actions = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+              val actionH = pvDp(if (compact) 34 else 40)
+              actions.addView(pvButton("재캘리브레이션", PvButtonStyle.SECONDARY, textSp = if (compact) 8.4f else 9.4f) { beginAutoCalibration() }, LinearLayout.LayoutParams(0, actionH, 0.95f).apply { marginEnd = pvDp(5) })
+              actions.addView(pvButton("PRECISION READY", PvButtonStyle.PRIMARY, textSp = if (compact) 9.2f else 10.6f) { armPrecision() }, LinearLayout.LayoutParams(0, actionH, 1.25f).apply { marginStart = pvDp(2); marginEnd = pvDp(2) })
+              settingsToggle = pvButton("설정 / 환경", PvButtonStyle.SECONDARY, textSp = if (compact) 8.4f else 9.4f) { showSettingsDialog() }
+              actions.addView(settingsToggle, LinearLayout.LayoutParams(0, actionH, 0.95f).apply { marginStart = pvDp(5) })
+              dashboard.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(if (compact) 4 else 6) })
+
+              settingsPanel = LinearLayout(this).apply { visibility = View.GONE }
+              speedLabel = settingLabel()
+              distanceLabel = settingLabel()
+              sideLabel = settingLabel()
+              longLabel = settingLabel()
+              updateSettingLabels()
+              updateAutoButton()
+
+              root.addView(dashboard, LinearLayout.LayoutParams(-1, -2))
+
+              val shell = FrameLayout(this)
+              shell.addView(root, FrameLayout.LayoutParams(-1, -1))
+              menuOverlay = buildSmartPuttMenu()
+              shell.addView(menuOverlay, FrameLayout.LayoutParams(-1, -1))
+              setContentView(shell)
+          }'''
+
+          home_ui = r'''private fun buildVideoHomeScreen(): View {
+              val compact = compactLandscape
+              val root = FrameLayout(this).apply { setBackgroundColor(Pv.inkDeep) }
+
+              val body = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+                  setPadding(
+                      sdp(if (compact) 18 else 28),
+                      sdp(if (compact) 48 else 58),
+                      sdp(if (compact) 18 else 28),
+                      sdp(if (compact) 14 else 22)
+                  )
+              }
+
+              val hero = FrameLayout(this).apply {
+                  background = pvRounded(Color.rgb(7, 12, 13), Pv.rXl, Pv.line)
+                  clipToOutline = true
+              }
+              hero.addView(ReferenceHeroView(this), FrameLayout.LayoutParams(-1, -1))
+              val heroCopy = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  gravity = Gravity.BOTTOM
+                  setPadding(sdp(if (compact) 15 else 22), sdp(12), sdp(if (compact) 15 else 22), sdp(if (compact) 14 else 20))
+              }
+              heroCopy.addView(TextView(this).apply {
+                  text = "PRECISION PUTTING"
+                  setTextColor(Pv.primary)
+                  textSize = scaledSp(if (compact) 8f else 9.5f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  letterSpacing = 0.15f
+                  includeFontPadding = false
+              })
+              heroCopy.addView(TextView(this).apply {
+                  text = "스마트폰이\n런치모니터가 됩니다"
+                  setTextColor(Pv.textHi)
+                  textSize = scaledSp(if (compact) 21f else 28f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  includeFontPadding = false
+                  setLineSpacing(sdp(2).toFloat(), 1f)
+              })
+              heroCopy.addView(TextView(this).apply {
+                  text = "240fps · 자동 캘리브레이션 · TV 스크린 시뮬레이터"
+                  setTextColor(Pv.textMid)
+                  textSize = scaledSp(if (compact) 7.5f else 9f)
+                  includeFontPadding = false
+                  setPadding(0, sdp(5), 0, 0)
+              })
+              hero.addView(heroCopy, FrameLayout.LayoutParams(-1, -1))
+              body.addView(hero, LinearLayout.LayoutParams(0, -1, 0.51f).apply { marginEnd = sdp(if (compact) 12 else 18) })
+
+              val right = LinearLayout(this).apply {
+                  orientation = LinearLayout.VERTICAL
+                  gravity = Gravity.CENTER_VERTICAL
+              }
+              val logo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+              logo.addView(TextView(this).apply {
+                  text = "Putt"
+                  setTextColor(Pv.primary)
+                  textSize = scaledSp(if (compact) 29f else 36f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  includeFontPadding = false
+              })
+              logo.addView(TextView(this).apply {
+                  text = "Vision"
+                  setTextColor(Pv.textHi)
+                  textSize = scaledSp(if (compact) 29f else 36f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  includeFontPadding = false
+              })
+              right.addView(logo)
+              right.addView(TextView(this).apply {
+                  text = "SCREEN PUTTING SIMULATOR"
+                  setTextColor(Pv.textLo)
+                  textSize = scaledSp(if (compact) 7.5f else 9f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  letterSpacing = 0.18f
+                  includeFontPadding = false
+              })
+
+              fun homeTile(kicker: String, title: String, sub: String, accent: Int, click: () -> Unit): LinearLayout =
+                  LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      background = pvRounded(Pv.surfaceHi, Pv.rLg, Pv.line)
+                      setPadding(sdp(if (compact) 14 else 18), sdp(8), sdp(if (compact) 12 else 16), sdp(8))
+                      val copy = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+                      copy.addView(TextView(this@MainActivity).apply {
+                          text = kicker
+                          setTextColor(accent)
+                          textSize = scaledSp(if (compact) 7f else 8f)
+                          typeface = Typeface.DEFAULT_BOLD
+                          letterSpacing = 0.10f
+                          includeFontPadding = false
+                      })
+                      copy.addView(TextView(this@MainActivity).apply {
+                          text = title
+                          setTextColor(Pv.textHi)
+                          textSize = scaledSp(if (compact) 17f else 20f)
+                          typeface = Typeface.DEFAULT_BOLD
+                          includeFontPadding = false
+                      })
+                      copy.addView(TextView(this@MainActivity).apply {
+                          text = sub
+                          setTextColor(Pv.textMid)
+                          textSize = scaledSp(if (compact) 7f else 8f)
+                          includeFontPadding = false
+                          maxLines = 1
+                      })
+                      addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+                      addView(TextView(this@MainActivity).apply {
+                          text = "›"
+                          setTextColor(accent)
+                          textSize = scaledSp(if (compact) 30f else 36f)
+                          typeface = Typeface.DEFAULT
+                          gravity = Gravity.CENTER
+                          includeFontPadding = false
+                      }, LinearLayout.LayoutParams(sdp(28), -1))
+                      isClickable = true
+                      isFocusable = true
+                      setOnClickListener { click() }
+                  }
+
+              val tileH = sdp(if (compact) 65 else 76)
+              right.addView(homeTile("PRACTICE", "연습장", "거리 · 컵 · 경사 · 반복 연습", Pv.primary) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, tileH).apply { topMargin = sdp(if (compact) 11 else 17) })
+              right.addView(homeTile("GAME ZONE", "게임장", "1~4인 · 9홀 · 18홀 · 랜덤 경사", Pv.amber) { showGameEntrance() }, LinearLayout.LayoutParams(-1, tileH).apply { topMargin = sdp(if (compact) 8 else 10) })
+
+              val connection = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+                  background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.lineSoft)
+                  setPadding(sdp(10), sdp(6), sdp(10), sdp(6))
+              }
+              connection.addView(TextView(this).apply {
+                  text = "PHONE"
+                  setTextColor(Pv.primary)
+                  textSize = scaledSp(7f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  includeFontPadding = false
+              })
+              connection.addView(TextView(this).apply {
+                  text = "  →  HDMI / DeX  →  TV SCREEN"
+                  setTextColor(Pv.textMid)
+                  textSize = scaledSp(7f)
+                  typeface = Typeface.DEFAULT_BOLD
+                  includeFontPadding = false
+              })
+              right.addView(connection, LinearLayout.LayoutParams(-1, sdp(if (compact) 29 else 34)).apply { topMargin = sdp(if (compact) 8 else 10) })
+              body.addView(right, LinearLayout.LayoutParams(0, -1, 0.49f))
+
+              root.addView(body, FrameLayout.LayoutParams(-1, -1))
+
+              val top = LinearLayout(this).apply {
+                  orientation = LinearLayout.HORIZONTAL
+                  gravity = Gravity.CENTER_VERTICAL
+                  setPadding(sdp(if (compact) 12 else 18), sdp(if (compact) 6 else 10), sdp(if (compact) 12 else 18), 0)
+                  elevation = pvDp(14).toFloat()
+              }
+              top.addView(roundMenuIcon("◎", "언어") { toast("현재 한국어") })
+              top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+              top.addView(roundMenuIcon("⚙", "환경") { showSettingsDialog() })
+              top.addView(roundMenuIcon("⇥", "종료") { finishAffinity() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = sdp(8) })
+              root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+              return root
+          }'''
+
+          text = replace_between(text, 'private fun buildUi() {', 'private fun buildSmartPuttMenu', build_ui)
+          text = replace_between(text, 'private fun buildVideoHomeScreen(): View {', 'private fun sectionPanel', home_ui)
+          main_path.write_text(text)
+
+          Path('app/src/main/java/com/puttvision/screen/ReferenceUiViews.kt').write_text(r'''package com.puttvision.screen
+
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.Typeface
+import android.view.View
+import kotlin.math.max
+import kotlin.math.sin
+
+class ReferenceImpactPreviewView(context: Context) : View(context) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    init {
+        isClickable = false
+        isFocusable = false
+        setBackgroundColor(Color.TRANSPARENT)
+    }
+
+    override fun onDraw(c: Canvas) {
+        super.onDraw(c)
+        val d = resources.displayMetrics.density
+        val r = RectF(0f, 0f, width.toFloat(), height.toFloat())
+        p.color = Color.argb(224, 7, 10, 14)
+        c.drawRoundRect(r, 14f * d, 14f * d, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1f * d
+        p.color = Color.argb(170, 48, 61, 72)
+        c.drawRoundRect(RectF(0.5f * d, 0.5f * d, width - 0.5f * d, height - 0.5f * d), 14f * d, 14f * d, p)
+        p.style = Paint.Style.FILL
+
+        p.color = Pv.textHi
+        p.textSize = 8.5f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        c.drawText("임팩트 구간 미리보기", 10f * d, 16f * d, p)
+
+        val cy = height * .50f
+        p.color = Color.rgb(42, 52, 64)
+        c.drawRoundRect(RectF(10f * d, cy - 7f * d, 54f * d, cy + 7f * d), 5f * d, 5f * d, p)
+        p.color = Color.rgb(255, 145, 40)
+        c.drawCircle(20f * d, cy, 3.8f * d, p)
+        p.color = Pv.info
+        c.drawCircle(44f * d, cy, 3.8f * d, p)
+        p.color = Color.WHITE
+        c.drawCircle(70f * d, cy, 5f * d, p)
+
+        val graphL = 88f * d
+        val graphR = width - 10f * d
+        val graphTop = 27f * d
+        val graphBottom = height - 22f * d
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1.3f * d
+        p.color = Color.argb(210, 78, 209, 121)
+        val path = Path()
+        var first = true
+        var x = graphL
+        while (x <= graphR) {
+            val t = ((x - graphL) / max(1f, graphR - graphL))
+            val spike = sin(t * 18f) * 0.12f + if (t in .42f..57f) sin((t - .42f) * 22f) * .46f else 0f
+            val y = (graphTop + graphBottom) / 2f - spike * (graphBottom - graphTop)
+            if (first) { path.moveTo(x, y); first = false } else path.lineTo(x, y)
+            x += 2f * d
+        }
+        c.drawPath(path, p)
+        p.strokeWidth = 1.1f * d
+        p.color = Color.argb(220, 174, 111, 255)
+        val impactX = graphL + (graphR - graphL) * .5f
+        c.drawLine(impactX, graphTop, impactX, graphBottom, p)
+        p.style = Paint.Style.FILL
+
+        p.typeface = Typeface.DEFAULT
+        p.textSize = 6.5f * d
+        p.color = Pv.textLo
+        c.drawText("-100ms", graphL, height - 7f * d, p)
+        c.drawText("0", impactX - 2f * d, height - 7f * d, p)
+        p.textAlign = Paint.Align.RIGHT
+        c.drawText("+100ms", graphR, height - 7f * d, p)
+        p.textAlign = Paint.Align.LEFT
+    }
+}
+
+class ReferenceHeroView(context: Context) : View(context) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    init {
+        isClickable = false
+        isFocusable = false
+    }
+
+    override fun onDraw(c: Canvas) {
+        super.onDraw(c)
+        val w = width.toFloat()
+        val h = height.toFloat()
+
+        p.shader = LinearGradient(0f, 0f, 0f, h, Color.rgb(11, 26, 31), Color.rgb(23, 77, 43), Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, p)
+        p.shader = null
+
+        val horizon = h * .32f
+        p.shader = LinearGradient(0f, horizon, 0f, h, Color.rgb(55, 126, 61), Color.rgb(23, 69, 38), Shader.TileMode.CLAMP)
+        c.drawRect(0f, horizon, w, h, p)
+        p.shader = null
+
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = max(1f, w * .002f)
+        p.color = Color.argb(62, 146, 238, 169)
+        for (i in -5..5) {
+            val bx = w * .5f + i * w * .11f
+            val tx = w * .54f + i * w * .025f
+            c.drawLine(bx, h, tx, horizon, p)
+        }
+        for (i in 1..8) {
+            val t = i / 8f
+            val y = h - (h - horizon) * t * t
+            c.drawLine(w * (.06f + .18f * t), y, w * (.96f - .18f * t), y, p)
+        }
+
+        val ballX = w * .38f
+        val ballY = h * .66f
+        val cupX = w * .69f
+        val cupY = h * .43f
+        p.strokeWidth = max(3f, w * .008f)
+        p.color = Color.argb(225, 236, 255, 241)
+        val aim = Path().apply {
+            moveTo(ballX, ballY)
+            cubicTo(w * .47f, h * .59f, w * .61f, h * .54f, cupX, cupY)
+        }
+        c.drawPath(aim, p)
+        p.style = Paint.Style.FILL
+
+        p.color = Color.argb(80, 0, 0, 0)
+        c.drawOval(RectF(ballX - w * .035f, ballY + h * .018f, ballX + w * .035f, ballY + h * .036f), p)
+        p.color = Color.WHITE
+        c.drawCircle(ballX, ballY, max(7f, w * .018f), p)
+
+        p.color = Color.WHITE
+        c.drawRect(cupX - 1.5f, cupY - h * .16f, cupX + 1.5f, cupY, p)
+        val flag = Path().apply {
+            moveTo(cupX + 1.5f, cupY - h * .16f)
+            lineTo(cupX + w * .09f, cupY - h * .135f)
+            lineTo(cupX + 1.5f, cupY - h * .105f)
+            close()
+        }
+        p.color = Pv.amber
+        c.drawPath(flag, p)
+        p.style = Paint.Style.FILL
+    }
+}
+''')
+
+          Path('app/src/main/java/com/puttvision/screen/PhoneOverlayView.kt').write_text(r'''package com.puttvision.screen
+
+import android.content.Context
+import android.graphics.*
+import android.view.View
+import kotlin.math.max
+
+class PhoneOverlayView(context: Context) : View(context) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    init {
+        isClickable = false
+        isFocusable = false
+    }
+
+    var status: String = "자동 캘리브레이션 대기"
+    var calibrationImagePoints: List<PointF> = emptyList()
+    var lastOverlay: VisionOverlay? = null
+
+    override fun onDraw(c: Canvas) {
+        super.onDraw(c)
+        val d = resources.displayMetrics.density
+
+        drawGrid(c, d)
+        drawCameraBadges(c, d)
+        drawCalibrationBadge(c, d)
+        drawTracking(c, d)
+        drawStatus(c, d)
+    }
+
+    private fun drawGrid(c: Canvas, d: Float) {
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = .65f * d
+        p.color = Color.argb(43, 78, 209, 121)
+        for (i in 1 until 12) {
+            val x = width * i / 12f
+            c.drawLine(x, 0f, x, height.toFloat(), p)
+        }
+        for (i in 1 until 8) {
+            val y = height * i / 8f
+            c.drawLine(0f, y, width.toFloat(), y, p)
+        }
+        p.color = Color.argb(100, 78, 209, 121)
+        p.strokeWidth = 1f * d
+        c.drawLine(width / 2f, 0f, width / 2f, height.toFloat(), p)
+        c.drawCircle(width / 2f, height * .66f, 13f * d, p)
+        p.style = Paint.Style.FILL
+    }
+
+    private fun drawCameraBadges(c: Canvas, d: Float) {
+        val left = 10f * d
+        val top = 9f * d
+        val box = RectF(left, top, left + 112f * d, top + 50f * d)
+        p.color = Color.argb(220, 6, 10, 13)
+        c.drawRoundRect(box, 11f * d, 11f * d, p)
+
+        p.color = Pv.primary
+        p.textSize = 10.5f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        c.drawText("240fps", left + 9f * d, top + 16f * d, p)
+        p.color = Pv.textMid
+        p.textSize = 7.5f * d
+        p.typeface = Typeface.DEFAULT
+        c.drawText("FHD 1920×1080", left + 9f * d, top + 30f * d, p)
+
+        p.color = Pv.primaryDim
+        c.drawRoundRect(RectF(left + 8f * d, top + 35f * d, left + 65f * d, top + 47f * d), 6f * d, 6f * d, p)
+        p.color = Pv.primary
+        p.textSize = 6.5f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        c.drawText("HFR MODE", left + 14f * d, top + 44f * d, p)
+
+        val right = width - 10f * d
+        val badgeL = right - 72f * d
+        p.color = Color.argb(210, 6, 10, 13)
+        c.drawRoundRect(RectF(badgeL, top, right, top + 25f * d), 10f * d, 10f * d, p)
+        p.color = Pv.textHi
+        p.textSize = 7.5f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        c.drawText("AUTO", badgeL + 9f * d, top + 16f * d, p)
+        p.color = Pv.primary
+        c.drawCircle(right - 12f * d, top + 12.5f * d, 3.2f * d, p)
+    }
+
+    private fun drawCalibrationBadge(c: Canvas, d: Float) {
+        val calibrated = calibrationImagePoints.size >= 4
+        val left = 10f * d
+        val bottom = height - 10f * d
+        val w = if (calibrated) 90f * d else 104f * d
+        p.color = Color.argb(215, 6, 10, 13)
+        c.drawRoundRect(RectF(left, bottom - 25f * d, left + w, bottom), 11f * d, 11f * d, p)
+        p.color = if (calibrated) Pv.primary else Pv.amber
+        c.drawCircle(left + 11f * d, bottom - 12.5f * d, 3.6f * d, p)
+        p.textSize = 8.2f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        c.drawText(if (calibrated) "CALIBRATED" else "CALIBRATING", left + 20f * d, bottom - 9f * d, p)
+    }
+
+    private fun drawTracking(c: Canvas, d: Float) {
+        calibrationImagePoints.mapNotNull { mapRawToView(it, lastOverlay?.frameInfo) }.forEach { pt ->
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 1.2f * d
+            p.color = Color.argb(210, 255, 214, 58)
+            c.drawRect(pt.x - 6f * d, pt.y - 6f * d, pt.x + 6f * d, pt.y + 6f * d, p)
+            p.style = Paint.Style.FILL
+        }
+
+        lastOverlay?.let { ov ->
+            ov.ballImage?.let { raw ->
+                mapRawToView(raw, ov.frameInfo)?.let { pt ->
+                    p.style = Paint.Style.STROKE
+                    p.strokeWidth = 2.2f * d
+                    p.color = Color.WHITE
+                    c.drawCircle(pt.x, pt.y, 9f * d, p)
+                    p.style = Paint.Style.FILL
+                }
+            }
+            val heel = ov.heelImage?.let { mapRawToView(it, ov.frameInfo) }
+            val toe = ov.toeImage?.let { mapRawToView(it, ov.frameInfo) }
+            if (heel != null) {
+                p.color = Color.rgb(255, 145, 40)
+                c.drawCircle(heel.x, heel.y, 6f * d, p)
+            }
+            if (toe != null) {
+                p.color = Color.rgb(63, 167, 255)
+                c.drawCircle(toe.x, toe.y, 6f * d, p)
+            }
+            if (heel != null && toe != null) {
+                p.strokeWidth = 1.8f * d
+                p.color = Color.WHITE
+                c.drawLine(heel.x, heel.y, toe.x, toe.y, p)
+            }
+        }
+    }
+
+    private fun drawStatus(c: Canvas, d: Float) {
+        val safe = if (status.length > 42) status.take(41) + "…" else status
+        p.textSize = 7f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        val textW = p.measureText(safe)
+        val cx = width / 2f
+        val bottom = height - 10f * d
+        val left = (cx - textW / 2f - 10f * d).coerceAtLeast(112f * d)
+        val right = (cx + textW / 2f + 10f * d).coerceAtMost(width - 10f * d)
+        if (right <= left) return
+        p.color = Color.argb(190, 6, 10, 13)
+        c.drawRoundRect(RectF(left, bottom - 22f * d, right, bottom), 10f * d, 10f * d, p)
+        p.color = Pv.textHi
+        c.drawText(safe, left + 10f * d, bottom - 7f * d, p)
+    }
+
+    private fun mapRawToView(raw: PointF, frame: FrameInfo?): PointF? {
+        frame ?: return null
+        val iw = frame.width.toFloat()
+        val ih = frame.height.toFloat()
+        val rx: Float
+        val ry: Float
+        val rw: Float
+        val rh: Float
+        when ((frame.rotationDegrees % 360 + 360) % 360) {
+            90 -> { rx = ih - raw.y; ry = raw.x; rw = ih; rh = iw }
+            180 -> { rx = iw - raw.x; ry = ih - raw.y; rw = iw; rh = ih }
+            270 -> { rx = raw.y; ry = iw - raw.x; rw = ih; rh = iw }
+            else -> { rx = raw.x; ry = raw.y; rw = iw; rh = ih }
+        }
+        if (width <= 0 || height <= 0 || rw <= 0f || rh <= 0f) return null
+        val scale = max(width / rw, height / rh)
+        val dx = (width - rw * scale) / 2f
+        val dy = (height - rh * scale) / 2f
+        return PointF(dx + rx * scale, dy + ry * scale)
+    }
+}
+''')
+          PY
+
+      - name: Compile check
+        run: gradle assembleDebug
+
+      - name: Commit UI rebuild and remove temp workflow
+        shell: bash
+        run: |
+          rm -f .github/workflows/reference-ui-rebuild-temp.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: match PuttVision reference UI" || exit 0
+          git push origin HEAD:main
