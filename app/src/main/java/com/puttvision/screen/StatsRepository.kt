@@ -118,7 +118,18 @@ class StatsRepository(context: Context) {
                 r.targetDistanceM,
                 r.stimpMeters,
                 r.sideSlopePct,
-                r.longSlopePct
+                r.longSlopePct,
+                m.headSpeedMps ?: "",
+                m.faceToPathDeg ?: "",
+                m.smash ?: "",
+                m.confidence ?: "",
+                m.backswingMs ?: "",
+                m.downswingMs ?: "",
+                m.backswingLengthCm ?: "",
+                m.peakHeadAccelerationMps2 ?: "",
+                m.rawBallSpeedMps ?: "",
+                m.estimatedMatDecelMps2 ?: "",
+                m.estimatedMatStimpM ?: ""
             ).joinToString("|")
         }
 
@@ -136,14 +147,22 @@ class StatsRepository(context: Context) {
                 val metrics = ShotMetrics(
                     ballSpeedMps = p[2].toDouble(),
                     launchAngleDeg = p[3].toDouble(),
-                    headSpeedMps = null,
+                    headSpeedMps = p.getOrNull(17)?.toDoubleOrNull(),
                     faceAngleDeg = p[4].toDoubleOrNull(),
                     pathAngleDeg = p[5].toDoubleOrNull(),
-                    faceToPathDeg = null,
-                    smash = null,
+                    faceToPathDeg = p.getOrNull(18)?.toDoubleOrNull(),
+                    smash = p.getOrNull(19)?.toDoubleOrNull(),
                     impactOffsetMm = p[7].toDoubleOrNull(),
                     measuredAtNs = 0L,
-                    tempoRatio = p[6].toDoubleOrNull()
+                    tempoRatio = p[6].toDoubleOrNull(),
+                    backswingMs = p.getOrNull(21)?.toDoubleOrNull(),
+                    downswingMs = p.getOrNull(22)?.toDoubleOrNull(),
+                    backswingLengthCm = p.getOrNull(23)?.toDoubleOrNull(),
+                    peakHeadAccelerationMps2 = p.getOrNull(24)?.toDoubleOrNull(),
+                    rawBallSpeedMps = p.getOrNull(25)?.toDoubleOrNull(),
+                    estimatedMatDecelMps2 = p.getOrNull(26)?.toDoubleOrNull(),
+                    estimatedMatStimpM = p.getOrNull(27)?.toDoubleOrNull(),
+                    confidence = p.getOrNull(20)?.toDoubleOrNull()
                 )
 
                 val result =

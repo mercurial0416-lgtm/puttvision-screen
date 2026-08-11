@@ -111,6 +111,8 @@ class AutoCalibrator(
                                         resolved.source
                                 )
                             )
+                            stableHits = 0
+                            lastSignature = ""
                         } else {
                             stableHits = 0
 
