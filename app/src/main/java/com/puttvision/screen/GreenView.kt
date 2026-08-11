@@ -48,7 +48,6 @@ class GreenView(
         c.drawRect(0f, 0f, w, horizon, p)
         p.shader = null
 
-        // Quiet atmospheric layers instead of cartoon clouds.
         p.color = Color.argb(28, 240, 246, 247)
         repeat(6) { i ->
             val cx = w * (.10f + i * .17f)
@@ -56,7 +55,6 @@ class GreenView(
             c.drawOval(RectF(cx - w * .085f, cy - h * .018f, cx + w * .085f, cy + h * .018f), p)
         }
 
-        // Distant course/tree silhouette.
         p.color = Color.rgb(22, 60, 39)
         val treeBase = horizon + h * .055f
         repeat(30) { i ->
@@ -73,7 +71,6 @@ class GreenView(
         c.drawRect(0f, horizon, w, h, p)
         p.shader = null
 
-        // Cinematic lower vignette keeps HUD readable on bright TVs.
         p.shader = LinearGradient(
             0f, h * .58f, 0f, h,
             Color.TRANSPARENT, Color.argb(126, 3, 7, 7), Shader.TileMode.CLAMP
@@ -121,7 +118,6 @@ class GreenView(
             return centerX + (x / sideRange).toFloat() * halfWidthAt(yp)
         }
 
-        // Subtle mowing bands.
         p.style = Paint.Style.STROKE
         p.strokeWidth = max(1f, w * .00055f)
         for (i in 1..11) {
@@ -133,7 +129,6 @@ class GreenView(
         }
         p.style = Paint.Style.FILL
 
-        // Aim/break line: refined and thin, not a giant white pipe.
         val read = GreenReadAdvisor.read(settings)
         val holeY = settings.holeDistanceM
         val aimX = read.aimOffsetCm / 100.0
@@ -244,7 +239,7 @@ class GreenView(
         p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         p.textSize = max(22f, w * .017f)
         p.color = Pv.textHi
-        val rightValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else game.gameScore
+        val rightValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else "${game.gameScore}"
         c.drawText(rightValue, right - padX, valueY, p)
         p.textAlign = Paint.Align.LEFT
         p.typeface = Typeface.DEFAULT
