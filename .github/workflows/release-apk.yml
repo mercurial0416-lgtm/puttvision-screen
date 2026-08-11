@@ -31,7 +31,7 @@ jobs:
         shell: bash
         run: |
           VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="0.6.${GITHUB_RUN_NUMBER}"
+          VERSION_NAME="0.7.${GITHUB_RUN_NUMBER}"
           echo "PV_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"

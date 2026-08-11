@@ -15,11 +15,26 @@ class PhoneOverlayView(context: Context) : View(context) {
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
 
-        p.color = Color.argb(195, 4, 10, 7)
-        c.drawRoundRect(18f, 18f, width - 18f, 92f, 18f, 18f, p)
-        p.color = Color.WHITE
-        p.textSize = 29f
-        c.drawText(status, 38f, 64f, p)
+        val d = resources.displayMetrics.density
+        val chipTop = 92f * d
+        val chipBottom = chipTop + 42f * d
+
+        p.color = Color.argb(188, 4, 12, 8)
+        c.drawRoundRect(16f * d, chipTop, width - 16f * d, chipBottom, 18f * d, 18f * d, p)
+        p.color = Color.rgb(220, 238, 227)
+        p.textSize = 15f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        c.drawText("●  $status", 30f * d, chipTop + 27f * d, p)
+        p.typeface = Typeface.DEFAULT
+
+        // Subtle center guide: useful during setup without covering the camera feed.
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1.2f * d
+        p.color = Color.argb(80, 150, 245, 190)
+        val cx = width / 2f
+        c.drawLine(cx, chipBottom + 10f * d, cx, height * 0.72f, p)
+        c.drawCircle(cx, height * 0.50f, 18f * d, p)
+        p.style = Paint.Style.FILL
 
         calibrationImagePoints.mapNotNull { mapRawToView(it, lastOverlay?.frameInfo) }.forEachIndexed { i, pt ->
             p.color = Color.rgb(255, 210, 65)

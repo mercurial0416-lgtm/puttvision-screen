@@ -4,11 +4,15 @@ import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Size
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -74,6 +78,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var longLabel: TextView
     private lateinit var autoButton: Button
     private lateinit var modeButton: Button
+    private lateinit var settingsPanel: LinearLayout
+    private lateinit var settingSummary: TextView
+    private lateinit var settingsToggle: Button
 
     private val permission =
         registerForActivityResult(
@@ -195,438 +202,279 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildUi() {
-        val root =
-            FrameLayout(this).apply {
-                setBackgroundColor(
-                    Color.BLACK
-                )
-            }
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+        }
 
-        previewView =
-            PreviewView(this).apply {
-                scaleType =
-                    PreviewView.ScaleType.FIT_CENTER
+        previewView = PreviewView(this).apply {
+            scaleType = PreviewView.ScaleType.FIT_CENTER
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+        root.addView(previewView, FrameLayout.LayoutParams(-1, -1))
 
-                implementationMode =
-                    PreviewView.ImplementationMode.COMPATIBLE
-            }
+        overlay = PhoneOverlayView(this)
+        root.addView(overlay, FrameLayout.LayoutParams(-1, -1))
+
+        replayView = ImpactReplayView(this)
+        root.addView(replayView, FrameLayout.LayoutParams(-1, -1))
+
+        // Top glass HUD: uses the black letterbox area instead of wasting it.
+        val topHud = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(11), dp(16), dp(11))
+            background = roundedBg(Color.argb(222, 4, 12, 8), 22f, Color.argb(100, 125, 239, 185))
+            elevation = dp(5).toFloat()
+        }
+
+        val brandRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val brand = TextView(this).apply {
+            text = "PUTTVISION"
+            setTextColor(Color.WHITE)
+            textSize = 17f
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.08f
+        }
+        brandRow.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+
+        tvStatus = TextView(this).apply {
+            setTextColor(Color.LTGRAY)
+            textSize = 11.5f
+            text = "○ TV"
+            gravity = Gravity.END
+        }
+        brandRow.addView(tvStatus)
+        topHud.addView(brandRow)
+
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, 0)
+        }
+
+        val sensorLabel = TextView(this).apply {
+            text = "● SENSOR READY"
+            setTextColor(Color.rgb(135, 245, 178))
+            textSize = 11.5f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        statusRow.addView(sensorLabel, LinearLayout.LayoutParams(0, -2, 1f))
+
+        hfrStatus = TextView(this).apply {
+            setTextColor(Color.rgb(135, 245, 178))
+            textSize = 11.5f
+            text = "HFR 확인중"
+            gravity = Gravity.END
+        }
+        statusRow.addView(hfrStatus)
+        topHud.addView(statusRow)
 
         root.addView(
-            previewView,
-            FrameLayout.LayoutParams(
-                -1,
-                -1
-            )
-        )
-
-        overlay =
-            PhoneOverlayView(this)
-
-        root.addView(
-            overlay,
-            FrameLayout.LayoutParams(
-                -1,
-                -1
-            )
-        )
-
-        replayView =
-            ImpactReplayView(this)
-
-        root.addView(
-            replayView,
-            FrameLayout.LayoutParams(
-                -1,
-                -1
-            )
-        )
-
-        val panel =
-            LinearLayout(this).apply {
-                orientation =
-                    LinearLayout.VERTICAL
-
-                setPadding(
-                    18,
-                    12,
-                    18,
-                    16
-                )
-
-                setBackgroundColor(
-                    Color.argb(
-                        232,
-                        7,
-                        15,
-                        10
-                    )
-                )
+            topHud,
+            FrameLayout.LayoutParams(-1, -2).apply {
+                gravity = Gravity.TOP
+                setMargins(dp(12), dp(12), dp(12), 0)
             }
-
-        tvStatus =
-            TextView(this).apply {
-                setTextColor(
-                    Color.LTGRAY
-                )
-
-                textSize = 12f
-                text = "○ TV 확인중"
-            }
-
-        panel.addView(
-            tvStatus
         )
 
-        hfrStatus =
-            TextView(this).apply {
-                setTextColor(
-                    Color.rgb(
-                        137,
-                        247,
-                        176
-                    )
-                )
+        // Bottom controller card. Advanced settings are hidden by default.
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(14))
+            background = roundedBg(Color.argb(238, 5, 14, 9), 26f, Color.argb(90, 116, 224, 170))
+            elevation = dp(8).toFloat()
+        }
 
-                textSize = 12f
-                text = "HFR 확인중"
-            }
+        metricText = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 16.5f
+            typeface = Typeface.DEFAULT_BOLD
+            text = "READY · 공을 놓고 퍼팅하세요"
+        }
+        panel.addView(metricText)
 
-        panel.addView(
-            hfrStatus
-        )
+        settingSummary = TextView(this).apply {
+            setTextColor(Color.rgb(178, 199, 187))
+            textSize = 11.5f
+            setPadding(0, dp(3), 0, dp(10))
+        }
+        panel.addView(settingSummary)
 
-        metricText =
-            TextView(this).apply {
-                setTextColor(
-                    Color.WHITE
-                )
-
-                textSize = 13f
-
-                text =
-                    "AUTO ON · 자동캘 → 자동 READY → 퍼팅"
-
-                setPadding(
-                    0,
-                    4,
-                    0,
-                    6
-                )
-            }
-
-        panel.addView(
-            metricText
-        )
-
-        val row1 =
-            LinearLayout(this).apply {
-                orientation =
-                    LinearLayout.HORIZONTAL
-            }
-
-        fun button(
-            label: String,
-            click: () -> Unit
-        ): Button =
+        fun button(label: String, accent: Boolean = false, click: () -> Unit): Button =
             Button(this).apply {
                 text = label
-                textSize = 10.5f
-                setOnClickListener {
-                    click()
-                }
-            }
-
-        autoButton =
-            button("AUTO ON") {
-                autoPlayEnabled =
-                    !autoPlayEnabled
-
-                autoGeneration++
-
-                updateAutoButton()
-
-                if (autoPlayEnabled) {
-                    maybeAutoStartAfterCalibration()
-                }
-            }
-
-        row1.addView(
-            autoButton,
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1f
-            )
-        )
-
-        row1.addView(
-            button("자동 캘") {
-                beginAutoCalibration()
-            },
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1f
-            )
-        )
-
-        row1.addView(
-            button("PRECISION") {
-                armPrecision()
-            },
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1.15f
-            )
-        )
-
-        row1.addView(
-            button("STATS") {
-                showStats()
-            },
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1f
-            )
-        )
-
-        panel.addView(
-            row1
-        )
-
-        val row2 =
-            LinearLayout(this).apply {
-                orientation =
-                    LinearLayout.HORIZONTAL
-            }
-
-        modeButton =
-            button(
-                "MODE: ${engine.gameModes.status.mode.label}"
-            ) {
-                if (
-                    engine.state?.running == true
-                ) {
-                    toast(
-                        "공 굴러가는 중엔 모드 변경 막아놨음"
-                    )
-                } else {
-                    val mode =
-                        engine.gameModes.nextMode()
-
-                    modeButton.text =
-                        "MODE: ${mode.label}"
-
-                    engine.resetSimulation()
-
-                    metricText.text =
-                        "${mode.label} 모드 준비 · 거리/경사 자동 세팅"
-
-                    updateSettingLabels()
-                }
-            }
-
-        row2.addView(
-            modeButton,
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1.45f
-            )
-        )
-
-        row2.addView(
-            button("TV 재연결") {
-                displayController.refresh()
-            },
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1f
-            )
-        )
-
-        row2.addView(
-            button("업데이트") {
-                appUpdater.check(silent = false)
-            },
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1f
-            )
-        )
-
-        panel.addView(
-            row2
-        )
-
-        speedLabel =
-            settingLabel()
-
-        panel.addView(
-            speedLabel
-        )
-
-        panel.addView(
-            SeekBar(this).apply {
-                max = 20
-                progress = 8
-
-                setOnSeekBarChangeListener(
-                    simpleSeek {
-                        engine.settings.stimpMeters =
-                            2.0 +
-                                it /
-                                10.0
-
-                        updateSettingLabels()
-                    }
+                isAllCaps = false
+                textSize = 11.5f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(if (accent) Color.rgb(4, 24, 14) else Color.WHITE)
+                backgroundTintList = ColorStateList.valueOf(
+                    if (accent) Color.rgb(126, 238, 174) else Color.rgb(37, 49, 43)
                 )
-            }
-        )
-
-        distanceLabel =
-            settingLabel()
-
-        panel.addView(
-            distanceLabel
-        )
-
-        panel.addView(
-            SeekBar(this).apply {
-                max = 140
-                progress = 40
-
-                setOnSeekBarChangeListener(
-                    simpleSeek {
-                        engine.settings.holeDistanceM =
-                            1.0 +
-                                it /
-                                10.0
-
-                        updateSettingLabels()
-                    }
-                )
-            }
-        )
-
-        val slopes =
-            LinearLayout(this).apply {
-                orientation =
-                    LinearLayout.HORIZONTAL
+                minHeight = dp(46)
+                setPadding(dp(7), 0, dp(7), 0)
+                setOnClickListener { click() }
             }
 
-        val left =
-            LinearLayout(this).apply {
-                orientation =
-                    LinearLayout.VERTICAL
+        val primary = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 3f
+        }
+
+        autoButton = button("AUTO ON", true) {
+            autoPlayEnabled = !autoPlayEnabled
+            autoGeneration++
+            updateAutoButton()
+            if (autoPlayEnabled) maybeAutoStartAfterCalibration()
+        }
+        primary.addView(autoButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginEnd = dp(5) })
+
+        primary.addView(
+            button("자동 캘") { beginAutoCalibration() },
+            LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(2); marginEnd = dp(3) }
+        )
+
+        primary.addView(
+            button("PRECISION") { armPrecision() },
+            LinearLayout.LayoutParams(0, dp(50), 1f).apply { marginStart = dp(5) }
+        )
+        panel.addView(primary)
+
+        val secondary = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(7), 0, 0)
+        }
+
+        modeButton = button("${engine.gameModes.status.mode.label}") {
+            if (engine.state?.running == true) {
+                toast("공 굴러가는 중엔 모드 변경 막아놨음")
+            } else {
+                val mode = engine.gameModes.nextMode()
+                modeButton.text = mode.label
+                engine.resetSimulation()
+                metricText.text = "${mode.label} · READY"
+                updateSettingLabels()
             }
+        }
+        secondary.addView(modeButton, LinearLayout.LayoutParams(0, dp(45), 1.35f).apply { marginEnd = dp(4) })
 
-        sideLabel =
-            settingLabel()
-
-        left.addView(
-            sideLabel
+        secondary.addView(
+            button("STATS") { showStats() },
+            LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginStart = dp(3); marginEnd = dp(3) }
         )
 
-        left.addView(
-            SeekBar(this).apply {
-                max = 100
-                progress = 50
+        settingsToggle = button("세팅 ▾") {
+            val open = settingsPanel.visibility != View.VISIBLE
+            settingsPanel.visibility = if (open) View.VISIBLE else View.GONE
+            settingsToggle.text = if (open) "세팅 ▴" else "세팅 ▾"
+        }
+        secondary.addView(settingsToggle, LinearLayout.LayoutParams(0, dp(45), 1f).apply { marginStart = dp(4) })
+        panel.addView(secondary)
 
-                setOnSeekBarChangeListener(
-                    simpleSeek {
-                        engine.settings.sideSlopePct =
-                            (it - 50) /
-                                10.0
+        settingsPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(0, dp(8), 0, 0)
+        }
 
-                        updateSettingLabels()
-                    }
-                )
-            },
-            LinearLayout.LayoutParams(
-                -1,
-                -2
-            )
+        val utilityRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        utilityRow.addView(
+            button("TV 재연결") { displayController.refresh() },
+            LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(4) }
         )
-
-        val right =
-            LinearLayout(this).apply {
-                orientation =
-                    LinearLayout.VERTICAL
-            }
-
-        longLabel =
-            settingLabel()
-
-        right.addView(
-            longLabel
+        utilityRow.addView(
+            button("업데이트") { appUpdater.check(silent = false) },
+            LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(4) }
         )
+        settingsPanel.addView(utilityRow)
 
-        right.addView(
-            SeekBar(this).apply {
-                max = 100
-                progress = 50
+        speedLabel = settingLabel()
+        settingsPanel.addView(speedLabel)
+        settingsPanel.addView(SeekBar(this).apply {
+            max = 20
+            progress = 8
+            progressTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            thumbTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            setOnSeekBarChangeListener(simpleSeek {
+                engine.settings.stimpMeters = 2.0 + it / 10.0
+                updateSettingLabels()
+            })
+        })
 
-                setOnSeekBarChangeListener(
-                    simpleSeek {
-                        engine.settings.longSlopePct =
-                            (it - 50) /
-                                10.0
+        distanceLabel = settingLabel()
+        settingsPanel.addView(distanceLabel)
+        settingsPanel.addView(SeekBar(this).apply {
+            max = 140
+            progress = 40
+            progressTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            thumbTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            setOnSeekBarChangeListener(simpleSeek {
+                engine.settings.holeDistanceM = 1.0 + it / 10.0
+                updateSettingLabels()
+            })
+        })
 
-                        updateSettingLabels()
-                    }
-                )
-            },
-            LinearLayout.LayoutParams(
-                -1,
-                -2
-            )
-        )
+        val slopes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sideLabel = settingLabel()
+        left.addView(sideLabel)
+        left.addView(SeekBar(this).apply {
+            max = 100
+            progress = 50
+            progressTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            thumbTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            setOnSeekBarChangeListener(simpleSeek {
+                engine.settings.sideSlopePct = (it - 50) / 10.0
+                updateSettingLabels()
+            })
+        })
 
-        slopes.addView(
-            left,
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1f
-            )
-        )
-
-        slopes.addView(
-            right,
-            LinearLayout.LayoutParams(
-                0,
-                -2,
-                1f
-            )
-        )
-
-        panel.addView(
-            slopes
-        )
+        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        longLabel = settingLabel()
+        right.addView(longLabel)
+        right.addView(SeekBar(this).apply {
+            max = 100
+            progress = 50
+            progressTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            thumbTintList = ColorStateList.valueOf(Color.rgb(126, 238, 174))
+            setOnSeekBarChangeListener(simpleSeek {
+                engine.settings.longSlopePct = (it - 50) / 10.0
+                updateSettingLabels()
+            })
+        })
+        slopes.addView(left, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(4) })
+        slopes.addView(right, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(4) })
+        settingsPanel.addView(slopes)
+        panel.addView(settingsPanel)
 
         updateSettingLabels()
         updateAutoButton()
 
         root.addView(
             panel,
-            FrameLayout.LayoutParams(
-                -1,
-                -2
-            ).apply {
-                gravity =
-                    Gravity.BOTTOM
+            FrameLayout.LayoutParams(-1, -2).apply {
+                gravity = Gravity.BOTTOM
+                setMargins(dp(10), 0, dp(10), dp(10))
             }
         )
 
-        setContentView(
-            root
-        )
+        setContentView(root)
     }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    private fun roundedBg(color: Int, radiusDp: Float, strokeColor: Int = Color.TRANSPARENT): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(color)
+            cornerRadius = radiusDp * resources.displayMetrics.density
+            if (strokeColor != Color.TRANSPARENT) {
+                setStroke(dp(1), strokeColor)
+            }
+        }
 
     private fun updateAutoButton() {
         if (!::autoButton.isInitialized) {
@@ -639,6 +487,13 @@ class MainActivity : AppCompatActivity() {
             } else {
                 "AUTO OFF"
             }
+
+        autoButton.backgroundTintList = ColorStateList.valueOf(
+            if (autoPlayEnabled) Color.rgb(126, 238, 174) else Color.rgb(58, 66, 62)
+        )
+        autoButton.setTextColor(
+            if (autoPlayEnabled) Color.rgb(4, 24, 14) else Color.WHITE
+        )
     }
 
     private fun settingLabel(): TextView =
@@ -697,6 +552,11 @@ class MainActivity : AppCompatActivity() {
 
         longLabel.text =
             "종경사 ${"%+.1f".format(engine.settings.longSlopePct)}%"
+
+        if (::settingSummary.isInitialized) {
+            settingSummary.text =
+                "${engine.gameModes.status.mode.label}  ·  ${"%.1f".format(engine.settings.holeDistanceM)}m  ·  GREEN ${"%.1f".format(engine.settings.stimpMeters)}  ·  LR ${"%+.1f".format(engine.settings.sideSlopePct)}%  FB ${"%+.1f".format(engine.settings.longSlopePct)}%"
+        }
     }
 
     private fun openProvider() {

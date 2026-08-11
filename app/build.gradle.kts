@@ -11,8 +11,8 @@ android {
         applicationId = "com.puttvision.screen"
         minSdk = 26
         targetSdk = 36
-        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 6
-        versionName = System.getenv("PV_VERSION_NAME") ?: "0.6.0-one-tap-deploy"
+        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 7
+        versionName = System.getenv("PV_VERSION_NAME") ?: "0.7.0-friends-style-ui"
     }
 
 

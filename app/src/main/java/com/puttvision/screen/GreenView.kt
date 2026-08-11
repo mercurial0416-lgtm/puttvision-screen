@@ -37,24 +37,46 @@ class GreenView(
     }
 
     private fun drawBackground(c: Canvas) {
+        val horizon = height * 0.19f
+
         p.shader = LinearGradient(
             0f,
             0f,
             0f,
-            height.toFloat(),
-            Color.rgb(4, 18, 12),
-            Color.rgb(1, 7, 6),
+            horizon,
+            Color.rgb(19, 41, 38),
+            Color.rgb(7, 19, 15),
             Shader.TileMode.CLAMP
         )
+        c.drawRect(0f, 0f, width.toFloat(), horizon, p)
+        p.shader = null
 
-        c.drawRect(
+        // Distant course silhouette for a more screen-golf / stadium feel.
+        val hill = Path().apply {
+            moveTo(0f, horizon)
+            lineTo(width * 0.00f, horizon * 0.86f)
+            lineTo(width * 0.13f, horizon * 0.56f)
+            lineTo(width * 0.27f, horizon * 0.78f)
+            lineTo(width * 0.42f, horizon * 0.45f)
+            lineTo(width * 0.58f, horizon * 0.72f)
+            lineTo(width * 0.76f, horizon * 0.50f)
+            lineTo(width.toFloat(), horizon * 0.80f)
+            lineTo(width.toFloat(), horizon)
+            close()
+        }
+        p.color = Color.rgb(11, 48, 31)
+        c.drawPath(hill, p)
+
+        p.shader = LinearGradient(
             0f,
+            horizon,
             0f,
-            width.toFloat(),
             height.toFloat(),
-            p
+            Color.rgb(8, 50, 31),
+            Color.rgb(2, 12, 8),
+            Shader.TileMode.CLAMP
         )
-
+        c.drawRect(0f, horizon, width.toFloat(), height.toFloat(), p)
         p.shader = null
     }
 
@@ -62,9 +84,9 @@ class GreenView(
         c: Canvas,
         nowNs: Long
     ) {
-        val margin = width * 0.055f
-        val top = height * 0.055f
-        val bottom = height * 0.94f
+        val margin = width * 0.035f
+        val top = height * 0.145f
+        val bottom = height * 0.965f
         val greenLeft = margin
         val greenRight = width - margin
 
@@ -80,8 +102,8 @@ class GreenView(
             top,
             greenRight,
             bottom,
-            Color.rgb(29, 126, 72),
-            Color.rgb(9, 69, 44),
+            Color.rgb(43, 151, 82),
+            Color.rgb(10, 78, 45),
             Shader.TileMode.CLAMP
         )
 
@@ -597,7 +619,7 @@ class GreenView(
             Typeface.DEFAULT_BOLD
 
         c.drawText(
-            "PUTTVISION ULTIMATE",
+            "PUTTVISION SCREEN",
             x,
             y,
             p
