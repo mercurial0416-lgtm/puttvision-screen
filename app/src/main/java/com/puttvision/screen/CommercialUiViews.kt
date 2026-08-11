@@ -221,14 +221,6 @@ class CommercialModeVisualView(
         p.color = accent
         c.drawCircle(w * .69f, h * .30f, max(4f, w * .012f), p)
 
-        p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(20f, w * .048f)
-        p.color = Pv.textHi
-        c.drawText(if (game) "MATCH PLAY" else "PRACTICE LAB", w * .10f, h * .23f, p)
-        p.typeface = Typeface.DEFAULT
-        p.textSize = max(11f, w * .022f)
-        p.color = Pv.textMid
-        c.drawText(if (game) "1–4 PLAYER · COURSE · CHALLENGE" else "DISTANCE · CUP · BREAK · REPEAT", w * .10f, h * .31f, p)
     }
 }
 
