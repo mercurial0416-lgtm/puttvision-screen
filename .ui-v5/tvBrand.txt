@@ -48,7 +48,7 @@ private fun drawBrandRail(c: Canvas) {
     p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     p.textSize = max(18f, w * .014f)
     p.color = Pv.textHi
-    val modeValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else game.gameScore
+    val modeValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else game.gameScore.toString()
     c.drawText(modeValue, right - pad, top + h * .065f, p)
     p.textAlign = Paint.Align.LEFT
     p.typeface = Typeface.DEFAULT
