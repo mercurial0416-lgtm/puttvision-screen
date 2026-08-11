@@ -1016,7 +1016,7 @@ class MainActivity : AppCompatActivity() {
 
         val utility2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0) }
         utility2.addView(util("TV 재연결") { displayController.refresh() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
-        utility2.addView(util("컵 가이드") { showCupGuideDialog() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
+        utility2.addView(util("컵 가이드") { showCupGuideScreen() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
         box.addView(utility2)
 
         val deployRow = LinearLayout(this).apply {

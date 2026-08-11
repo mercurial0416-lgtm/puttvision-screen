@@ -11,8 +11,8 @@ android {
         applicationId = "com.puttvision.screen"
         minSdk = 26
         targetSdk = 36
-        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 8
-        versionName = System.getenv("PV_VERSION_NAME") ?: "0.8.0-preview-exact"
+        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 101
+        versionName = System.getenv("PV_VERSION_NAME") ?: "1.0.1-video-layout"
     }
 
 
