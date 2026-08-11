@@ -3,6 +3,7 @@ package com.puttvision.screen
 import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -532,6 +533,18 @@ class MainActivity : AppCompatActivity() {
         utility.addView(util("TV 재연결") { displayController.refresh() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(2); marginEnd = dp(2) })
         utility.addView(util("업데이트") { appUpdater.check(silent = false) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
         box.addView(utility)
+
+        val deployRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(8), 0, 0)
+        }
+        deployRow.addView(
+            util("ZIP 배포") {
+                startActivity(Intent(this, DeployActivity::class.java))
+            },
+            LinearLayout.LayoutParams(0, dp(44), 1f)
+        )
+        box.addView(deployRow)
 
         AlertDialog.Builder(this)
             .setTitle("PuttVision 설정 / 환경")
