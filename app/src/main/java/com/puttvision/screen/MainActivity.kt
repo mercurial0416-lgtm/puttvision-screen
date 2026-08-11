@@ -658,8 +658,8 @@ class MainActivity : AppCompatActivity() {
         speedPanel.addView(TextView(this).apply {
             text = "%.1f".format(practiceGreenSpeed)
             textSize = scaledSp(24f)
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextColor(Pv.primary)
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         val speedSeek = SeekBar(this).apply {
@@ -691,7 +691,7 @@ class MainActivity : AppCompatActivity() {
         }
         lower.addView(lowerRow)
         val distanceLine = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        distanceLine.addView(TextView(this).apply { text = "2m"; setTextColor(Color.WHITE); textSize = 11f })
+        distanceLine.addView(TextView(this).apply { text = "2m"; setTextColor(Pv.textMid); textSize = 11f; typeface = Typeface.MONOSPACE })
         val dSeek = SeekBar(this).apply {
             max = 13
             progress = (practiceDistanceM - 2).coerceIn(0, 13)
@@ -702,7 +702,7 @@ class MainActivity : AppCompatActivity() {
             })
         }
         distanceLine.addView(dSeek, LinearLayout.LayoutParams(0, sdp(36), 1f).apply { marginStart = sdp(10); marginEnd = sdp(10) })
-        distanceLine.addView(TextView(this).apply { text = "15m"; setTextColor(Color.WHITE); textSize = 11f })
+        distanceLine.addView(TextView(this).apply { text = "15m"; setTextColor(Pv.textMid); textSize = 11f; typeface = Typeface.MONOSPACE })
         lower.addView(distanceLine)
         left.addView(lower, LinearLayout.LayoutParams(-1, 0, 0.48f).apply { topMargin = dp(6) })
 
@@ -750,7 +750,7 @@ class MainActivity : AppCompatActivity() {
 
         val speed = sectionPanel(); speed.addView(tinyCaption("그린스피드"))
         speed.addView(TextView(this).apply {
-            text = "2.8\n약간빠름"; gravity = Gravity.CENTER; textSize = scaledSp(18f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
+            text = "2.8\n약간빠름"; gravity = Gravity.CENTER; textSize = scaledSp(18f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Pv.textHi)
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         upper.addView(speed, LinearLayout.LayoutParams(0, -1, 0.35f))
         left.addView(upper, LinearLayout.LayoutParams(-1, 0, 0.52f))
@@ -786,8 +786,8 @@ class MainActivity : AppCompatActivity() {
             addView(TextView(this@MainActivity).apply {
                 text = "③  ─────────────●\n\n②  ────────────●\n\n①  ───────────●\n\n     Ready Line"
                 textSize = 17f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
+                typeface = Typeface.MONOSPACE
+                setTextColor(Pv.textHi)
                 gravity = Gravity.CENTER
             }, LinearLayout.LayoutParams(-1, -1))
         }
@@ -818,7 +818,7 @@ class MainActivity : AppCompatActivity() {
             table.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
         }
         table.addView(TextView(this).apply {
-            text = "※ 1클럽 = 6컵"; gravity = Gravity.CENTER; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); setPadding(0, dp(8), 0, 0)
+            text = "※ 1클럽 = 6컵"; gravity = Gravity.CENTER; textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Pv.textLo); setPadding(0, dp(8), 0, 0)
         })
         panels.addView(table, LinearLayout.LayoutParams(0, -1, 0.43f))
         root.addView(panels, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -833,17 +833,17 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
         }
         root.addView(TextView(this).apply {
-            text = "시작하기 전에"; textSize = scaledSp(22f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = "시작하기 전에"; textSize = scaledSp(22f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Pv.textHi); gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(-1, dp(58)))
         val pics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun diagram(textValue: String): TextView = TextView(this).apply {
-            text = textValue; gravity = Gravity.CENTER; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(55, 62, 68)); background = roundedBg(Color.rgb(218, 222, 231), 14f)
+            text = textValue; gravity = Gravity.CENTER; textSize = 15f; typeface = Typeface.MONOSPACE; setTextColor(Pv.textMid); background = pvRounded(Pv.surface, Pv.rMd, Pv.lineSoft)
         }
         pics.addView(diagram("카메라\n   │\n   ▼\n▰  매트  ⚪"), LinearLayout.LayoutParams(0, -1, 1f).apply { marginEnd = dp(6) })
         pics.addView(diagram("휴대폰 위치\n↘\n┌────────┐\n│  매트  │\n└────────┘"), LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = dp(6) })
         root.addView(pics, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(TextView(this).apply {
-            text = "충분히 밝은 곳에서 카메라와 매트를 정확히 맞춰주세요."; gravity = Gravity.CENTER; textSize = 11f; setTextColor(Color.LTGRAY); setPadding(0, dp(8), 0, dp(8))
+            text = "충분히 밝은 곳에서 카메라와 매트를 정확히 맞춰주세요."; gravity = Gravity.CENTER; textSize = 11f; setTextColor(Pv.textLo); setPadding(0, dp(10), 0, dp(10))
         })
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         buttons.addView(darkChoice("오늘 다시 보지 않기", false) { showMatPrep(game) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(6) })
@@ -861,16 +861,16 @@ class MainActivity : AppCompatActivity() {
         root.addView(buildEntranceHeader("매트 준비", "", null) { if (game) showGameEntrance() else showPracticeEntrance() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val preview = FrameLayout(this).apply {
-            background = roundedBg(Color.rgb(238, 240, 242), 12f, Color.rgb(210, 45, 49))
+            background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.line)
             addView(TextView(this@MainActivity).apply {
-                text = "카메라 프리뷰\n\n공과 마커 4개가 모두 보이게 맞춰주세요"; gravity = Gravity.CENTER; setTextColor(Color.rgb(60, 60, 65)); textSize = 14f; typeface = Typeface.DEFAULT_BOLD
+                text = "카메라 프리뷰\n\n공과 마커 4개가 모두 보이게 맞춰주세요"; gravity = Gravity.CENTER; setTextColor(Pv.textMid); textSize = 14f; typeface = Typeface.DEFAULT_BOLD
             }, FrameLayout.LayoutParams(-1, -1))
         }
         body.addView(preview, LinearLayout.LayoutParams(0, -1, 0.63f).apply { marginEnd = dp(8) })
         val guide = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         guide.addView(TextView(this@MainActivity).apply {
             text = "PuttVision\n┌────────────┐\n│ □        □ │\n│     ⚪      │\n│ □        □ │\n└────────────┘\n녹색 박스가 생겼나요?"
-            gravity = Gravity.CENTER; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(12, 74, 29)); background = roundedBg(Color.rgb(85, 205, 86), 12f)
+            gravity = Gravity.CENTER; textSize = 13f; typeface = Typeface.MONOSPACE; setTextColor(Pv.primary); background = pvRounded(Pv.primaryDim, Pv.rMd, Pv.primaryLine)
         }, LinearLayout.LayoutParams(-1, 0, 0.65f))
         guide.addView(cyanButton("측정 시작") { startConfiguredSession(game) }, LinearLayout.LayoutParams(-1, 0, 0.35f).apply { topMargin = dp(8) })
         body.addView(guide, LinearLayout.LayoutParams(0, -1, 0.37f))
