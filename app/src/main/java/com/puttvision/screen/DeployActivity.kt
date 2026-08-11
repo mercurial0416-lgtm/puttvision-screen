@@ -147,7 +147,7 @@ class DeployActivity : AppCompatActivity() {
             isFillViewport = true
             overScrollMode = ScrollView.OVER_SCROLL_IF_CONTENT_SCROLLS
             setBackgroundColor(Pv.ink)
-            addView(root, ScrollView.LayoutParams(-1, -2))
+            addView(root, android.widget.FrameLayout.LayoutParams(-1, -2))
         }
         setContentView(scroll)
     }
