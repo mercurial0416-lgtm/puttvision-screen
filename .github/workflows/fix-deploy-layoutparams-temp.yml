@@ -1,0 +1,34 @@
+name: Temporary DeployActivity compile fix
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ '.github/workflows/fix-deploy-layoutparams-temp.yml' ]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch invalid ScrollView LayoutParams and self-delete
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/puttvision/screen/DeployActivity.kt')
+          s = p.read_text()
+          old = 'addView(root, ScrollView.LayoutParams(-1, -2))'
+          new = 'addView(root, android.widget.FrameLayout.LayoutParams(-1, -2))'
+          if old not in s:
+              raise SystemExit('target line not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git rm .github/workflows/fix-deploy-layoutparams-temp.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/com/puttvision/screen/DeployActivity.kt
+          git commit -m 'Fix DeployActivity ScrollView LayoutParams compile error'
+          git push
