@@ -559,8 +559,7 @@ class MainActivity : AppCompatActivity() {
         }
         hero.addView(heroClub, LinearLayout.LayoutParams(0, -2, 0.45f))
         hero.addView(TextView(this).apply {
-            text = "TV 연결 후 연습장 또는 게임장으로 진입
-카메라/HFR/마커 자동 인식 기반"
+            text = "TV 연결 후 연습장 또는 게임장으로 진입\n카메라/HFR/마커 자동 인식 기반"
             setTextColor(Color.WHITE)
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
