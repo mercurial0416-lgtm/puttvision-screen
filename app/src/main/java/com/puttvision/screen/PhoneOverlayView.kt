@@ -16,41 +16,63 @@ class PhoneOverlayView(context: Context) : View(context) {
         super.onDraw(c)
 
         val d = resources.displayMetrics.density
-        val chipTop = 92f * d
-        val chipBottom = chipTop + 42f * d
+        val left = 12f * d
+        val top = 10f * d
 
-        p.color = Color.argb(188, 4, 12, 8)
-        c.drawRoundRect(16f * d, chipTop, width - 16f * d, chipBottom, 18f * d, 18f * d, p)
-        p.color = Color.rgb(220, 238, 227)
-        p.textSize = 15f * d
+        // Compact camera badge, matching the concept preview instead of a full-width banner.
+        p.color = Color.argb(205, 4, 13, 9)
+        c.drawRoundRect(left, top, left + 238f * d, top + 45f * d, 13f * d, 13f * d, p)
+        p.color = Color.rgb(132, 255, 167)
+        p.textSize = 11.5f * d
         p.typeface = Typeface.DEFAULT_BOLD
-        c.drawText("●  $status", 30f * d, chipTop + 27f * d, p)
+        c.drawText(if (calibrationImagePoints.size >= 4) "✓ CALIBRATED" else "● CALIBRATING", left + 10f * d, top + 17f * d, p)
+        p.color = Color.rgb(222, 233, 239)
+        p.textSize = 9.5f * d
         p.typeface = Typeface.DEFAULT
+        val shortStatus = if (status.length > 34) status.take(33) + "…" else status
+        c.drawText(shortStatus, left + 10f * d, top + 34f * d, p)
 
-        // Subtle center guide: useful during setup without covering the camera feed.
+        // Fine measurement grid like the original preview.
         p.style = Paint.Style.STROKE
-        p.strokeWidth = 1.2f * d
-        p.color = Color.argb(80, 150, 245, 190)
+        p.strokeWidth = 0.75f * d
+        p.color = Color.argb(52, 149, 245, 190)
+        val gridTop = 4f * d
+        val gridBottom = height - 4f * d
+        val gridLeft = 4f * d
+        val gridRight = width - 4f * d
+        for (i in 1 until 12) {
+            val x = gridLeft + (gridRight - gridLeft) * i / 12f
+            c.drawLine(x, gridTop, x, gridBottom, p)
+        }
+        for (i in 1 until 8) {
+            val y = gridTop + (gridBottom - gridTop) * i / 8f
+            c.drawLine(gridLeft, y, gridRight, y, p)
+        }
+
         val cx = width / 2f
-        c.drawLine(cx, chipBottom + 10f * d, cx, height * 0.72f, p)
-        c.drawCircle(cx, height * 0.50f, 18f * d, p)
+        p.strokeWidth = 1.2f * d
+        p.color = Color.argb(100, 160, 255, 202)
+        c.drawLine(cx, 0f, cx, height.toFloat(), p)
+        c.drawCircle(cx, height * 0.66f, 13f * d, p)
         p.style = Paint.Style.FILL
 
         calibrationImagePoints.mapNotNull { mapRawToView(it, lastOverlay?.frameInfo) }.forEachIndexed { i, pt ->
-            p.color = Color.rgb(255, 210, 65)
-            c.drawCircle(pt.x, pt.y, 12f, p)
-            p.color = Color.WHITE
-            p.textSize = 24f
-            c.drawText("${i + 1}", pt.x + 15f, pt.y - 9f, p)
+            p.color = Color.rgb(255, 216, 67)
+            c.drawCircle(pt.x, pt.y, 7f * d, p)
+            p.color = Color.rgb(12, 17, 18)
+            p.textSize = 7.5f * d
+            p.typeface = Typeface.DEFAULT_BOLD
+            c.drawText("${i + 1}", pt.x - 2.5f * d, pt.y + 2.8f * d, p)
         }
+        p.typeface = Typeface.DEFAULT
 
         lastOverlay?.let { ov ->
             ov.ballImage?.let { raw ->
                 mapRawToView(raw, ov.frameInfo)?.let { pt ->
                     p.style = Paint.Style.STROKE
-                    p.strokeWidth = 5f
-                    p.color = Color.MAGENTA
-                    c.drawCircle(pt.x, pt.y, 22f, p)
+                    p.strokeWidth = 2.5f * d
+                    p.color = Color.WHITE
+                    c.drawCircle(pt.x, pt.y, 10f * d, p)
                     p.style = Paint.Style.FILL
                 }
             }
@@ -59,14 +81,14 @@ class PhoneOverlayView(context: Context) : View(context) {
             val toe = ov.toeImage?.let { mapRawToView(it, ov.frameInfo) }
             if (heel != null) {
                 p.color = Color.rgb(255, 145, 40)
-                c.drawCircle(heel.x, heel.y, 16f, p)
+                c.drawCircle(heel.x, heel.y, 7f * d, p)
             }
             if (toe != null) {
-                p.color = Color.rgb(50, 140, 255)
-                c.drawCircle(toe.x, toe.y, 16f, p)
+                p.color = Color.rgb(63, 167, 255)
+                c.drawCircle(toe.x, toe.y, 7f * d, p)
             }
             if (heel != null && toe != null) {
-                p.strokeWidth = 5f
+                p.strokeWidth = 2f * d
                 p.color = Color.WHITE
                 c.drawLine(heel.x, heel.y, toe.x, toe.y, p)
             }

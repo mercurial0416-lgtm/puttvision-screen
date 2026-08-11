@@ -31,7 +31,7 @@
 
         <activity
             android:name=".MainActivity"
-            android:screenOrientation="portrait"
+            android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode"
             android:exported="true">
             <intent-filter>
