@@ -65,3 +65,5 @@ jobs:
           git diff --cached --check
           git commit -m "feat: commercial-grade PuttVision UI and interface"
           git push origin HEAD:commercial-ui-v3
+
+# retry after TV renderer type fix
