@@ -1,0 +1,479 @@
+from pathlib import Path
+
+
+def replace_once(s: str, old: str, new: str, label: str) -> str:
+    if old not in s:
+        raise SystemExit(f"missing target: {label}")
+    return s.replace(old, new, 1)
+
+
+p = Path("app/src/main/java/com/puttvision/screen/MainActivity.kt")
+s = p.read_text()
+
+s = replace_once(
+    s,
+    """    private var sessionActive = false
+    private var measurementSuspended = false
+    private var activeSessionIsGame = false""",
+    """    private var sessionActive = false
+    private var measurementSuspended = false
+    private var activeSessionIsGame = false
+    private var sessionStartedAtMs = 0L
+    private var lastCalibrationQualityScore = 0
+    private var lastCalibrationQualityGrade = \"--\"""",
+    "session quality fields",
+)
+
+old_cal = """                onCalibrated = { result ->
+                    runOnUiThread {
+                        homography =
+                            result.homography
+
+                        overlay.calibrationImagePoints =
+                            result.imagePoints
+
+                        overlay.status =
+                            \"AUTO CAL OK · AUTO READY\"
+
+                        metricText.text =
+                            \"자동캘 완료 · 폰/마커 안 움직이면 이후 손댈 거 없음\"
+
+                        overlay.invalidate()
+
+                        installNormalAnalyzer(
+                            result.homography
+                        )
+
+                        maybeAutoStartAfterCalibration()
+                    }
+                }"""
+new_cal = """                onCalibrated = { result ->
+                    runOnUiThread {
+                        val quality = CalibrationQuality.evaluate(result)
+                        lastCalibrationQualityScore = quality.score
+                        lastCalibrationQualityGrade = quality.grade
+                        overlay.calibrationImagePoints = result.imagePoints
+
+                        if (quality.blocked) {
+                            homography = null
+                            overlay.status = \"CAL ${quality.score} · ${quality.grade}\"
+                            shotPanelTitle.text = \"CALIBRATION\"
+                            shotPanelTitle.setTextColor(Pv.amber)
+                            metricText.text = \"${quality.score}점 · ${quality.hint}\"
+                            overlay.invalidate()
+                            return@runOnUiThread
+                        }
+
+                        homography = result.homography
+                        overlay.status = \"CAL ${quality.score} · ${quality.grade}\"
+                        shotPanelTitle.text = \"CAL ${quality.score} · ${quality.grade}\"
+                        shotPanelTitle.setTextColor(if (quality.score >= 80) Pv.primary else Pv.amber)
+                        metricText.text = quality.hint
+                        overlay.invalidate()
+
+                        installNormalAnalyzer(result.homography)
+                        maybeAutoStartAfterCalibration()
+                    }
+                }"""
+s = replace_once(s, old_cal, new_cal, "calibration quality callback")
+
+s = replace_once(
+    s,
+    """        activeSessionIsGame = game
+        sessionActive = true
+        measurementSuspended = false
+        practiceShotsTaken = 0""",
+    """        activeSessionIsGame = game
+        sessionActive = true
+        measurementSuspended = false
+        sessionStartedAtMs = System.currentTimeMillis()
+        practiceShotsTaken = 0""",
+    "session start timestamp",
+)
+
+s = replace_once(
+    s,
+    """        if (!sessionActive || measurementSuspended) {
+            replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
+            return
+        }
+        updateMetricCards(metrics)
+
+        engine.launch(""",
+    """        if (!sessionActive || measurementSuspended) {
+            replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
+            return
+        }
+
+        val confidence = metrics.confidence
+        if (confidence != null && confidence < 0.65) {
+            replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
+            val pct = (confidence * 100.0).toInt().coerceIn(0, 100)
+            overlay.status = \"MEASURE $pct% · RETRY\"
+            shotPanelTitle.text = \"LOW QUALITY\"
+            shotPanelTitle.setTextColor(Pv.amber)
+            metricText.text = \"측정 신뢰도 ${pct}% · 조명/마커/퍼터 위치를 확인하세요\"
+            overlay.invalidate()
+            setHfrStatus(\"재측정\", \"측정 신뢰도 ${pct}% · 자동 폐기\")
+            scheduleAutoRetry(850L)
+            return
+        }
+
+        confidence?.let {
+            val pct = (it * 100.0).toInt().coerceIn(0, 100)
+            shotPanelTitle.text = if (pct >= 85) \"MEASURE · HIGH $pct%\" else \"MEASURE · CHECK $pct%\"
+            shotPanelTitle.setTextColor(if (pct >= 80) Pv.primary else Pv.amber)
+        }
+
+        updateMetricCards(metrics)
+
+        engine.launch(""",
+    "low confidence shot gate",
+)
+
+s = replace_once(
+    s,
+    """        if (practiceShotsTaken >= practiceCount) {
+            cancelPendingAuto()
+            overlay.status = \"연습 완료 · ${practiceShotsTaken}/${practiceCount}\"
+            overlay.invalidate()
+        }""",
+    """        if (practiceShotsTaken >= practiceCount) {
+            cancelPendingAuto()
+            overlay.status = \"연습 완료 · ${practiceShotsTaken}/${practiceCount}\"
+            overlay.invalidate()
+            mainHandler.postDelayed({
+                if (sessionActive && !activeSessionIsGame && practiceShotsTaken >= practiceCount) {
+                    showSessionReport()
+                }
+            }, 1350L)
+        }""",
+    "practice completion report",
+)
+
+s = replace_once(
+    s,
+    """                        onSessionShotFinished()
+                        showFinalShotSummary(result)
+
+                        if (autoPlayEnabled && shouldContinueAutoAfterResult()) {""",
+    """                        onSessionShotFinished()
+                        showFinalShotSummary(result)
+
+                        if (activeSessionIsGame && engine.gameModes.status.completed) {
+                            mainHandler.postDelayed({
+                                if (sessionActive && activeSessionIsGame && engine.gameModes.status.completed) {
+                                    showSessionReport()
+                                }
+                            }, 1350L)
+                        }
+
+                        if (autoPlayEnabled && shouldContinueAutoAfterResult()) {""",
+    "game completion report",
+)
+
+report_methods = r'''
+    private fun currentSessionRecords(): List<ShotRecord> {
+        if (sessionStartedAtMs <= 0L) return emptyList()
+        return statsRepository.all().filter { it.timestampMs >= sessionStartedAtMs }
+    }
+
+    private fun applyAutoCoachPlan(plan: AutoCoachPlan) {
+        sessionActive = false
+        measurementSuspended = true
+        cancelPendingAuto()
+        stopSimulation()
+        stopHfrRecordingOnly()
+        practiceEntranceMode = plan.entranceMode
+        practicePatternIndex = plan.patternIndex
+        practiceDistanceM = plan.distanceM.coerceIn(2, 15)
+        practiceGreenPresetIndex = plan.greenPresetIndex.coerceIn(0, practiceGreenPresets.lastIndex)
+        practiceCount = plan.shotCount.coerceIn(5, 20)
+        showPracticeEntrance()
+    }
+
+    private fun showSessionReport() {
+        val records = currentSessionRecords()
+        val report = SessionCoach.build(records, practiceDistanceM)
+        suspendMeasurementForOverlay()
+
+        val compact = compactLandscape
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Pv.inkDeep)
+            setPadding(sdp(if (compact) 18 else 26), sdp(if (compact) 13 else 18), sdp(if (compact) 18 else 26), sdp(if (compact) 12 else 16))
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val title = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        title.addView(TextView(this).apply {
+            text = "세션 리포트"
+            setTextColor(Pv.textHi)
+            textSize = scaledSp(if (compact) 18f else 22f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        })
+        title.addView(TextView(this).apply {
+            text = "PUTTVISION PERFORMANCE · AUTO COACH"
+            setTextColor(Pv.primary)
+            textSize = scaledSp(if (compact) 6.6f else 7.6f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .12f
+            includeFontPadding = false
+        })
+        header.addView(title)
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        header.addView(pvButton("홈", PvButtonStyle.GHOST, textSp = if (compact) 7.5f else 8.5f, radiusDp = 100f) {
+            showHomeMenu()
+        }, LinearLayout.LayoutParams(sdp(if (compact) 72 else 84), sdp(if (compact) 32 else 36)))
+        root.addView(header)
+
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val scoreCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = pvRounded(Color.rgb(7, 12, 14), Pv.rXl, Pv.line)
+            setPadding(sdp(14), sdp(12), sdp(14), sdp(12))
+        }
+        scoreCard.addView(TextView(this).apply {
+            text = "SESSION SCORE"
+            setTextColor(Pv.textLo)
+            textSize = scaledSp(if (compact) 6.2f else 7.2f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .14f
+            includeFontPadding = false
+        })
+        scoreCard.addView(TextView(this).apply {
+            text = report.overallScore.toString()
+            setTextColor(if (report.overallScore >= 80) Pv.primary else if (report.overallScore >= 60) Pv.amber else Pv.danger)
+            textSize = scaledSp(if (compact) 42f else 54f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            includeFontPadding = false
+        })
+        scoreCard.addView(TextView(this).apply {
+            text = "${report.shots} SHOTS  ·  ${report.made} MADE"
+            setTextColor(Pv.textMid)
+            textSize = scaledSp(if (compact) 7f else 8f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        })
+        body.addView(scoreCard, LinearLayout.LayoutParams(0, -1, .24f).apply { marginEnd = sdp(if (compact) 10 else 14) })
+
+        val insight = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = pvRounded(Pv.surface, Pv.rXl, Pv.lineSoft)
+            setPadding(sdp(if (compact) 14 else 18), sdp(if (compact) 11 else 15), sdp(if (compact) 14 else 18), sdp(if (compact) 11 else 15))
+        }
+        insight.addView(TextView(this).apply {
+            text = "AUTO COACH"
+            setTextColor(Pv.primary)
+            textSize = scaledSp(if (compact) 6.3f else 7.3f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .14f
+            includeFontPadding = false
+        })
+        insight.addView(TextView(this).apply {
+            text = report.headline
+            setTextColor(Pv.textHi)
+            textSize = scaledSp(if (compact) 15f else 18f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            setPadding(0, sdp(3), 0, 0)
+        })
+        insight.addView(TextView(this).apply {
+            text = report.detail
+            setTextColor(Pv.textMid)
+            textSize = scaledSp(if (compact) 7.2f else 8.4f)
+            includeFontPadding = false
+            setPadding(0, sdp(5), 0, 0)
+        })
+
+        val metrics = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        fun reportMetric(label: String, value: String): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.lineSoft)
+            setPadding(sdp(if (compact) 8 else 10), sdp(6), sdp(if (compact) 8 else 10), sdp(6))
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                setTextColor(Pv.textLo)
+                textSize = scaledSp(if (compact) 5.5f else 6.3f)
+                typeface = Typeface.DEFAULT_BOLD
+                includeFontPadding = false
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = value
+                setTextColor(Pv.textHi)
+                textSize = scaledSp(if (compact) 10.5f else 12.5f)
+                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                includeFontPadding = false
+            })
+        }
+        val metricItems = listOf(
+            "MAKE" to "${"%.0f".format(report.makePct)}%",
+            "START" to "${"%+.2f".format(report.avgLaunchDeg)}°",
+            "CONSIST" to "±${"%.2f".format(report.launchStdDeg)}°",
+            "CUP ERROR" to (report.avgDistanceErrorCm?.let { "${"%.0f".format(it)}cm" } ?: "--"),
+            "MEASURE" to (report.avgConfidencePct?.let { "${"%.0f".format(it)}%" } ?: "NORMAL")
+        )
+        metricItems.forEachIndexed { index, item ->
+            metrics.addView(reportMetric(item.first, item.second), LinearLayout.LayoutParams(0, sdp(if (compact) 45 else 52), 1f).apply {
+                if (index > 0) marginStart = sdp(5)
+            })
+        }
+        insight.addView(metrics, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (compact) 10 else 13) })
+
+        val planCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = pvRounded(Color.rgb(9, 18, 14), Pv.rLg, Color.argb(120, 78, 209, 121))
+            setPadding(sdp(if (compact) 10 else 13), sdp(8), sdp(if (compact) 10 else 13), sdp(8))
+        }
+        val planText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        planText.addView(TextView(this).apply {
+            text = "NEXT TRAINING"
+            setTextColor(Pv.primary)
+            textSize = scaledSp(if (compact) 5.5f else 6.4f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .12f
+            includeFontPadding = false
+        })
+        planText.addView(TextView(this).apply {
+            text = report.plan.title
+            setTextColor(Pv.textHi)
+            textSize = scaledSp(if (compact) 9f else 10.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        })
+        planText.addView(TextView(this).apply {
+            text = report.plan.detail
+            setTextColor(Pv.textMid)
+            textSize = scaledSp(if (compact) 6.2f else 7.2f)
+            includeFontPadding = false
+        })
+        planCard.addView(planText, LinearLayout.LayoutParams(0, -2, 1f))
+        planCard.addView(pvButton("추천 훈련", PvButtonStyle.PRIMARY, textSp = if (compact) 7.5f else 8.5f, radiusDp = Pv.rMd) {
+            applyAutoCoachPlan(report.plan)
+        }, LinearLayout.LayoutParams(sdp(if (compact) 96 else 112), sdp(if (compact) 38 else 44)))
+        insight.addView(planCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (compact) 9 else 12) })
+
+        body.addView(insight, LinearLayout.LayoutParams(0, -1, .76f))
+        root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = sdp(if (compact) 10 else 14) })
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        actions.addView(pvButton("같은 조건 다시", PvButtonStyle.GHOST, textSp = if (compact) 7.8f else 9f, radiusDp = Pv.rLg) {
+            sessionActive = false
+            measurementSuspended = true
+            showPracticeEntrance()
+        }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginEnd = sdp(5) })
+        actions.addView(pvButton("추천 훈련 시작", PvButtonStyle.PRIMARY, textSp = if (compact) 8f else 9.2f, radiusDp = Pv.rLg) {
+            applyAutoCoachPlan(report.plan)
+        }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginStart = sdp(5) })
+        root.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (compact) 8 else 11) })
+
+        replaceMenuScreen(root) { showHomeMenu() }
+    }
+
+'''
+marker = "    private fun showSettingsDialog() {"
+if marker not in s:
+    raise SystemExit("missing report insertion marker")
+s = s.replace(marker, report_methods + marker, 1)
+
+s = replace_once(
+    s,
+    """    tools.addView(tool(\"NAVIGATION\", \"메인 메뉴\") { closeThen { showHomeMenu() } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool(\"ANALYTICS\", \"샷 기록 / STATS\") { closeThen { showStats(resumeAfter = wasActiveSession) } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })""",
+    """    tools.addView(tool(\"NAVIGATION\", \"메인 메뉴\") { closeThen { showHomeMenu() } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    if (sessionStartedAtMs > 0L) {
+        tools.addView(tool(\"SESSION\", \"현재 세션 리포트\") { closeThen { showSessionReport() } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    }
+    tools.addView(tool(\"ANALYTICS\", \"샷 기록 / STATS\") { closeThen { showStats(resumeAfter = wasActiveSession) } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })""",
+    "session report settings tool",
+)
+
+p.write_text(s)
+
+# Require three fresh stable frames after every calibration delivery.
+p = Path("app/src/main/java/com/puttvision/screen/AutoCalibrator.kt")
+s = p.read_text()
+old = """                            onCalibrated(
+                                CalibrationResult(
+                                    homography = h,
+                                    imagePoints =
+                                        resolved.imagePoints,
+                                    realPointsCm =
+                                        resolved.realPointsCm,
+                                    frameInfo =
+                                        FrameInfo(
+                                            image.width,
+                                            image.height,
+                                            image.imageInfo.rotationDegrees
+                                        ),
+                                    markerSource =
+                                        resolved.source
+                                )
+                            )"""
+s = replace_once(s, old, old + "\n                            stableHits = 0\n                            lastSignature = \"\"", "calibrator delivery reset")
+p.write_text(s)
+
+# Persist advanced measurement values while keeping old rows readable.
+p = Path("app/src/main/java/com/puttvision/screen/StatsRepository.kt")
+s = p.read_text()
+s = replace_once(
+    s,
+    """                r.stimpMeters,
+                r.sideSlopePct,
+                r.longSlopePct
+            ).joinToString(\"|\")""",
+    """                r.stimpMeters,
+                r.sideSlopePct,
+                r.longSlopePct,
+                m.headSpeedMps ?: \"\",
+                m.faceToPathDeg ?: \"\",
+                m.smash ?: \"\",
+                m.confidence ?: \"\",
+                m.backswingMs ?: \"\",
+                m.downswingMs ?: \"\",
+                m.backswingLengthCm ?: \"\",
+                m.peakHeadAccelerationMps2 ?: \"\",
+                m.rawBallSpeedMps ?: \"\",
+                m.estimatedMatDecelMps2 ?: \"\",
+                m.estimatedMatStimpM ?: \"\"
+            ).joinToString(\"|\")""",
+    "stats save quality fields",
+)
+s = replace_once(s, "headSpeedMps = null,", "headSpeedMps = p.getOrNull(17)?.toDoubleOrNull(),", "stats load head speed")
+s = replace_once(s, "faceToPathDeg = null,", "faceToPathDeg = p.getOrNull(18)?.toDoubleOrNull(),", "stats load face to path")
+s = replace_once(s, "smash = null,", "smash = p.getOrNull(19)?.toDoubleOrNull(),", "stats load smash")
+s = replace_once(
+    s,
+    """                    measuredAtNs = 0L,
+                    tempoRatio = p[6].toDoubleOrNull()
+                )""",
+    """                    measuredAtNs = 0L,
+                    tempoRatio = p[6].toDoubleOrNull(),
+                    backswingMs = p.getOrNull(21)?.toDoubleOrNull(),
+                    downswingMs = p.getOrNull(22)?.toDoubleOrNull(),
+                    backswingLengthCm = p.getOrNull(23)?.toDoubleOrNull(),
+                    peakHeadAccelerationMps2 = p.getOrNull(24)?.toDoubleOrNull(),
+                    rawBallSpeedMps = p.getOrNull(25)?.toDoubleOrNull(),
+                    estimatedMatDecelMps2 = p.getOrNull(26)?.toDoubleOrNull(),
+                    estimatedMatStimpM = p.getOrNull(27)?.toDoubleOrNull(),
+                    confidence = p.getOrNull(20)?.toDoubleOrNull()
+                )""",
+    "stats load advanced metrics",
+)
+p.write_text(s)
