@@ -1,0 +1,55 @@
+private fun drawBrandRail(c: Canvas) {
+    val w = width.toFloat()
+    val h = height.toFloat()
+    val game = engine.gameModes.status
+    val settings = engine.settings
+
+    val left = w * .032f
+    val top = h * .032f
+    val right = w * .968f
+    val bottom = h * .128f
+    rect.set(left, top, right, bottom)
+    p.color = Color.argb(205, 5, 9, 11)
+    c.drawRoundRect(rect, h * .017f, h * .017f, p)
+    p.style = Paint.Style.STROKE
+    p.strokeWidth = 1.1f
+    p.color = Color.argb(100, 58, 73, 78)
+    c.drawRoundRect(rect, h * .017f, h * .017f, p)
+    p.style = Paint.Style.FILL
+
+    val pad = w * .015f
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(17f, w * .013f)
+    p.color = Pv.textHi
+    c.drawText("PUTTVISION", left + pad, top + h * .039f, p)
+    p.textSize = max(9f, w * .0068f)
+    p.color = Pv.primary
+    c.drawText("SCREEN PUTTING", left + pad, top + h * .067f, p)
+
+    fun compactMetric(x: Float, label: String, value: String, accent: Int = Pv.textHi) {
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(8f, w * .0061f)
+        p.color = Pv.textLo
+        c.drawText(label, x, top + h * .027f, p)
+        p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        p.textSize = max(18f, w * .014f)
+        p.color = accent
+        c.drawText(value, x, top + h * .064f, p)
+    }
+
+    compactMetric(left + w * .205f, "DISTANCE", "${"%.1f".format(settings.holeDistanceM)}m", Pv.primary)
+    compactMetric(left + w * .335f, "GREEN", "${"%.1f".format(settings.stimpMeters)}")
+
+    p.textAlign = Paint.Align.RIGHT
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(9f, w * .0068f)
+    p.color = Pv.textLo
+    c.drawText("${game.mode.label}  ·  ${game.activePlayer}/${game.playerCount}", right - pad, top + h * .028f, p)
+    p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    p.textSize = max(18f, w * .014f)
+    p.color = Pv.textHi
+    val modeValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else game.gameScore
+    c.drawText(modeValue, right - pad, top + h * .065f, p)
+    p.textAlign = Paint.Align.LEFT
+    p.typeface = Typeface.DEFAULT
+}
