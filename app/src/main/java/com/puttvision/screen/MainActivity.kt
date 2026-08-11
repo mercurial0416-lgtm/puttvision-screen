@@ -531,7 +531,7 @@ class MainActivity : AppCompatActivity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            val icon = TextView(this).apply {
+            val icon = TextView(this@MainActivity).apply {
                 text = symbol
                 textSize = scaledSp(18f)
                 gravity = Gravity.CENTER
@@ -539,7 +539,7 @@ class MainActivity : AppCompatActivity() {
                 background = roundedBg(Color.rgb(84, 196, 228), 26f, Color.rgb(25, 31, 39))
             }
             addView(icon, LinearLayout.LayoutParams(sdp(46), sdp(46)))
-            addView(TextView(this).apply {
+            addView(TextView(this@MainActivity).apply {
                 text = label
                 textSize = scaledSp(9f)
                 typeface = Typeface.DEFAULT_BOLD
