@@ -27,8 +27,7 @@ class ImpactReplayView(context: Context) : View(context) {
                 loops++
 
                 if (loops >= 2) {
-                    visibility = GONE
-                    replay = null
+                    stopReplay(recycleFrames = true)
                     return
                 }
             }
@@ -41,10 +40,12 @@ class ImpactReplayView(context: Context) : View(context) {
     init {
         visibility = GONE
         setBackgroundColor(Color.TRANSPARENT)
+        isClickable = false
+        isFocusable = false
     }
 
     fun play(value: ImpactReplay, shot: ShotMetrics) {
-        handler.removeCallbacks(tick)
+        stopReplay(recycleFrames = true)
         replay = value
         metrics = shot
         frame = 0
@@ -52,6 +53,23 @@ class ImpactReplayView(context: Context) : View(context) {
         visibility = VISIBLE
         invalidate()
         handler.postDelayed(tick, 55L)
+    }
+
+
+    private fun stopReplay(recycleFrames: Boolean) {
+        handler.removeCallbacks(tick)
+        val old = replay
+        replay = null
+        metrics = null
+        frame = 0
+        loops = 0
+        visibility = GONE
+
+        if (recycleFrames) {
+            old?.frames?.distinctBy { System.identityHashCode(it) }?.forEach { bitmap ->
+                if (!bitmap.isRecycled) bitmap.recycle()
+            }
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -113,7 +131,7 @@ class ImpactReplayView(context: Context) : View(context) {
             val text =
                 "FACE ${m.faceAngleDeg?.let { "%+.2f°".format(it) } ?: "--"}   " +
                 "PATH ${m.pathAngleDeg?.let { "%+.2f°".format(it) } ?: "--"}   " +
-                "BALL ${"%.2fm/s".format(m.ballSpeedMps)}"
+                "BALL ${m.ballSpeedMps?.let { "%.2fm/s".format(it) } ?: "--"}"
 
             canvas.drawText(text, left + 38f, bottom - 28f, paint)
             paint.typeface = Typeface.DEFAULT
@@ -121,7 +139,8 @@ class ImpactReplayView(context: Context) : View(context) {
     }
 
     override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
+        stopReplay(recycleFrames = true)
         handler.removeCallbacksAndMessages(null)
+        super.onDetachedFromWindow()
     }
 }

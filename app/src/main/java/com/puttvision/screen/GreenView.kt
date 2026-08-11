@@ -11,6 +11,12 @@ class GreenView(
 ) : View(context) {
 
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    init {
+        isClickable = false
+        isFocusable = false
+        keepScreenOn = true
+    }
     private val rect = RectF()
 
     override fun onDraw(canvas: Canvas) {
@@ -239,10 +245,10 @@ class GreenView(
         c.drawRoundRect(rect, 16f, 16f, p)
         p.color = Pv.textMid
         p.textSize = max(13f, width * .010f)
-        c.drawText("PLAYER 1", rect.left + 15f, rect.top + 25f, p)
+        c.drawText("PLAYER ${game.activePlayer}/${game.playerCount}", rect.left + 15f, rect.top + 25f, p)
         p.typeface = Typeface.DEFAULT_BOLD
         p.textSize = max(20f, width * .015f)
-        val shotNo = if (game.totalHoles > 0) "SHOT ${game.hole}" else game.mode.label
+        val shotNo = if (game.totalHoles > 0) "HOLE ${game.hole} · ${game.gameScore}" else "${game.mode.label} · ${game.gameScore}"
         c.drawText(shotNo, rect.left + 15f, rect.top + 54f, p)
         p.typeface = Typeface.DEFAULT
 

@@ -6,8 +6,6 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
-import android.content.res.ColorStateList
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -154,6 +152,9 @@ fun Context.pvButton(
     minHeight = 0
     minimumHeight = 0
     stateListAnimator = null
+    isClickable = true
+    isFocusable = true
+    includeFontPadding = false
     setPadding(pvDp(12), pvDp(6), pvDp(12), pvDp(6))
     when (style) {
         PvButtonStyle.PRIMARY -> {
@@ -192,6 +193,9 @@ fun Context.pvChip(
     minHeight = 0
     minimumHeight = 0
     stateListAnimator = null
+    isClickable = true
+    isFocusable = true
+    includeFontPadding = false
     setPadding(pvDp(6), pvDp(6), pvDp(6), pvDp(6))
     if (selected) {
         setTextColor(Pv.primaryInk)
@@ -233,25 +237,40 @@ fun Context.pvIconControl(
 ): LinearLayout = LinearLayout(this).apply {
     orientation = LinearLayout.VERTICAL
     gravity = Gravity.CENTER
+    isClickable = true
+    isFocusable = true
+    minimumWidth = pvDp(48)
+    minimumHeight = pvDp(if (caption.isEmpty()) 48 else 58)
+    contentDescription = caption.ifBlank { glyph }
+
+    val iconSize = pvDp(46) // Keep Android's recommended ~48dp touch target even on small phones.
     val icon = TextView(this@pvIconControl).apply {
         text = glyph
         textSize = pvSp(16f)
         gravity = Gravity.CENTER
         typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
         setTextColor(Pv.textHi)
         background = pvRounded(Pv.surfaceHi, 100f, Pv.line)
+        isClickable = false
+        isFocusable = false
     }
-    addView(icon, LinearLayout.LayoutParams(pvSdp(42), pvSdp(42)))
+    addView(icon, LinearLayout.LayoutParams(iconSize, iconSize))
     if (caption.isNotEmpty()) {
         addView(TextView(this@pvIconControl).apply {
             text = caption
             textSize = pvSp(Pv.caption)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            maxLines = 1
             setTextColor(Pv.textMid)
             setPadding(0, pvDp(3), 0, 0)
+            isClickable = false
+            isFocusable = false
         })
     }
+    setPadding(pvDp(2), pvDp(2), pvDp(2), pvDp(2))
     setOnClickListener { onClick() }
 }
 
@@ -318,19 +337,32 @@ fun Context.pvDialog(
     header.addView(TextView(this).apply {
         text = title
         setTextColor(Pv.textHi)
-        textSize = Pv.title
+        textSize = pvSp(Pv.title)
         typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+        maxLines = 2
     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
     card.addView(header)
 
     card.addView(View(this).apply { setBackgroundColor(Pv.lineSoft) },
         LinearLayout.LayoutParams(-1, pvDp(1)).apply { topMargin = pvDp(12); bottomMargin = pvDp(2) })
 
-    val scroll = ScrollView(this).apply {
-        overScrollMode = View.OVER_SCROLL_NEVER
+    val maxScrollHeight = (resources.displayMetrics.heightPixels * 0.62f).toInt()
+    val scroll = object : ScrollView(this) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val capped = View.MeasureSpec.makeMeasureSpec(
+                min(View.MeasureSpec.getSize(heightMeasureSpec), maxScrollHeight),
+                View.MeasureSpec.AT_MOST
+            )
+            super.onMeasure(widthMeasureSpec, capped)
+        }
+    }.apply {
+        overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        isFillViewport = false
+        isVerticalScrollBarEnabled = true
         addView(content, ViewGroup.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
-    card.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = pvDp(4) })
+    card.addView(scroll, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = pvDp(4) })
 
     var dialogRef: AlertDialog? = null
     val actionsRow = LinearLayout(this).apply {
@@ -349,16 +381,27 @@ fun Context.pvDialog(
     }), LinearLayout.LayoutParams(0, pvDp(46), 1f))
     card.addView(actionsRow)
 
-    val outer = FrameLayout(this).apply {
-        setPadding(pvDp(20), pvDp(20), pvDp(20), pvDp(20))
-        val cardWidth = min(pvDp(maxWidthDp), (resources.displayMetrics.widthPixels * 0.92f).toInt())
+    val maxDialogHeight = (resources.displayMetrics.heightPixels * 0.92f).toInt()
+    val outer = object : FrameLayout(this) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val cappedHeight = View.MeasureSpec.makeMeasureSpec(
+                min(View.MeasureSpec.getSize(heightMeasureSpec), maxDialogHeight),
+                View.MeasureSpec.AT_MOST
+            )
+            super.onMeasure(widthMeasureSpec, cappedHeight)
+        }
+    }.apply {
+        setPadding(pvDp(12), pvDp(12), pvDp(12), pvDp(12))
+        val cardWidth = min(pvDp(maxWidthDp), (resources.displayMetrics.widthPixels * 0.94f).toInt())
         addView(card, FrameLayout.LayoutParams(cardWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             gravity = Gravity.CENTER
         })
     }
 
     val dialog = AlertDialog.Builder(this).setView(outer).create()
-    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+    dialog.setOnShowListener {
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+    }
     dialogRef = dialog
     return dialog
 }
@@ -386,9 +429,9 @@ fun Context.pvMessageDialog(
         pvDialog(
             title = title,
             content = body,
-            dismissLabel = negativeLabel,
-            onDismissTap = onNegative,
-            extraActions = listOf(positiveLabel to { onPositive?.invoke() })
+            dismissLabel = positiveLabel,
+            onDismissTap = onPositive,
+            extraActions = listOf(negativeLabel to { onNegative?.invoke() })
         )
     } else {
         pvDialog(

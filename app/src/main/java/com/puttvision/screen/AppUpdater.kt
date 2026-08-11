@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -8,11 +9,13 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
+import java.io.FilterInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class UpdateInfo(
     val versionCode: Int,
@@ -28,30 +31,43 @@ class AppUpdater(
 ) {
     private val executor = Executors.newSingleThreadExecutor()
     private val tokenStore = SecureTokenStore(activity)
+    private val prefs = activity.getSharedPreferences("puttvision_updater", Context.MODE_PRIVATE)
+    private val checkInFlight = AtomicBoolean(false)
+    private val downloadInFlight = AtomicBoolean(false)
+
+    private companion object {
+        const val KEY_PENDING_APK = "pending_apk_path"
+    }
 
     fun check(silent: Boolean = true) {
+        if (!checkInFlight.compareAndSet(false, true)) return
         executor.execute {
             try {
                 val info = fetchInfo()
-                val current = activity.packageManager
-                    .getPackageInfo(activity.packageName, 0).let {
-                        if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt()
-                        else @Suppress("DEPRECATION") it.versionCode
-                    }
+                val packageInfo = activity.packageManager.getPackageInfo(activity.packageName, 0)
+                val currentCode = if (Build.VERSION.SDK_INT >= 28) {
+                    packageInfo.longVersionCode.toInt()
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.versionCode
+                }
+                val currentName = packageInfo.versionName ?: currentCode.toString()
 
-                if (info.versionCode > current) {
-                    activity.runOnUiThread { showUpdateDialog(info) }
+                if (info.versionCode > currentCode) {
+                    onUi { showUpdateDialog(info) }
                 } else if (!silent) {
-                    activity.runOnUiThread {
-                        activity.pvMessageDialog("PuttVision", "최신 버전입니다. (v$current)").show()
+                    onUi {
+                        activity.pvMessageDialog("PuttVision", "최신 버전입니다. (v$currentName)").show()
                     }
                 }
             } catch (t: Throwable) {
                 if (!silent) {
-                    activity.runOnUiThread {
+                    onUi {
                         activity.pvMessageDialog("업데이트 확인 실패", t.message ?: "네트워크 오류").show()
                     }
                 }
+            } finally {
+                checkInFlight.set(false)
             }
         }
     }
@@ -62,7 +78,7 @@ class AppUpdater(
             try {
                 return fetchGitHubRelease(token)
             } catch (_: Throwable) {
-                // Keep the v0.5 public-manifest path as a bootstrap fallback.
+                // Keep the public manifest as a bootstrap fallback when GitHub auth/network fails.
             }
         }
         return fetchFallbackManifest()
@@ -80,7 +96,8 @@ class AppUpdater(
         val tag = release.getString("tag_name")
         val versionCode = tag.substringAfter("pv-", "").toIntOrNull()
             ?: error("Release tag 형식 오류: $tag")
-        val versionName = release.optString("name").ifBlank { tag }
+        val rawName = release.optString("name").ifBlank { tag }
+        val versionName = rawName.removePrefix("PuttVision ").removePrefix("v").ifBlank { tag }
 
         val assets = release.getJSONArray("assets")
         var apkApiUrl: String? = null
@@ -105,17 +122,25 @@ class AppUpdater(
             requestMethod = "GET"
             setRequestProperty("Cache-Control", "no-cache")
         }
-        val text = c.inputStream.bufferedReader().use { it.readText() }
-        val j = JSONObject(text)
-        return UpdateInfo(
-            j.getInt("versionCode"),
-            j.getString("versionName"),
-            j.getString("apkUrl"),
-            j.optString("sha256").takeIf { it.isNotBlank() }
-        )
+        try {
+            val code = c.responseCode
+            val text = (if (code in 200..299) c.inputStream else c.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) error("업데이트 서버 HTTP $code: ${text.take(180)}")
+            val j = JSONObject(text)
+            return UpdateInfo(
+                j.getInt("versionCode"),
+                j.getString("versionName").removePrefix("PuttVision ").removePrefix("v"),
+                j.getString("apkUrl"),
+                j.optString("sha256").takeIf { it.isNotBlank() }
+            )
+        } finally {
+            c.disconnect()
+        }
     }
 
     private fun showUpdateDialog(info: UpdateInfo) {
+        if (activity.isFinishing || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return
         activity.pvMessageDialog(
             title = "PuttVision ${info.versionName} 업데이트",
             message = "새 버전이 있습니다. 지금 업데이트할까요?",
@@ -126,6 +151,7 @@ class AppUpdater(
     }
 
     private fun downloadAndInstall(info: UpdateInfo) {
+        if (!downloadInFlight.compareAndSet(false, true)) return
         executor.execute {
             try {
                 val dir = File(activity.cacheDir, "updates").apply { mkdirs() }
@@ -134,16 +160,14 @@ class AppUpdater(
                 val input = if (!info.githubToken.isNullOrBlank() && info.apkUrl.startsWith("https://api.github.com/")) {
                     openGithubAsset(info.apkUrl, info.githubToken)
                 } else {
-                    val c = (URL(info.apkUrl).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 8000
-                        readTimeout = 45_000
-                    }
-                    c.inputStream
+                    openHttpStream(info.apkUrl)
                 }
 
                 input.use { source ->
                     apk.outputStream().use { output -> source.copyTo(output) }
                 }
+
+                require(apk.length() > 32 * 1024L) { "다운로드된 APK 파일이 비정상적으로 작습니다." }
 
                 info.sha256?.let { expected ->
                     val actual = sha256(apk)
@@ -152,22 +176,45 @@ class AppUpdater(
                     }
                 }
 
-                activity.runOnUiThread { install(apk) }
+                onUi { install(apk) }
             } catch (t: Throwable) {
-                activity.runOnUiThread {
+                onUi {
                     activity.pvMessageDialog("업데이트 실패", t.message ?: "다운로드 오류").show()
                 }
+            } finally {
+                downloadInFlight.set(false)
             }
         }
     }
 
+    private fun openHttpStream(url: String): InputStream {
+        val c = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8000
+            readTimeout = 45_000
+            requestMethod = "GET"
+            instanceFollowRedirects = true
+            setRequestProperty("Cache-Control", "no-cache")
+        }
+        val code = c.responseCode
+        if (code !in 200..299) {
+            val body = c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            c.disconnect()
+            error("APK 다운로드 실패: HTTP $code ${body.take(120)}")
+        }
+        return disconnectingStream(c)
+    }
+
     private fun githubJson(url: String, token: String): JSONObject {
         val c = githubConnection(url, token, "application/vnd.github+json")
-        val code = c.responseCode
-        val text = (if (code in 200..299) c.inputStream else c.errorStream)
-            ?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code !in 200..299) error("GitHub $code: ${text.take(180)}")
-        return JSONObject(text)
+        try {
+            val code = c.responseCode
+            val text = (if (code in 200..299) c.inputStream else c.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) error("GitHub $code: ${text.take(180)}")
+            return JSONObject(text)
+        } finally {
+            c.disconnect()
+        }
     }
 
     private fun fetchGithubAssetText(url: String, token: String): String =
@@ -178,25 +225,40 @@ class AppUpdater(
             instanceFollowRedirects = false
         }
         return when (val code = first.responseCode) {
-            in 200..299 -> first.inputStream
+            in 200..299 -> disconnectingStream(first)
             in 300..399 -> {
                 val location = first.getHeaderField("Location") ?: error("GitHub asset redirect 없음")
+                first.disconnect()
                 val redirected = (URL(location).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 8000
                     readTimeout = 45_000
                     instanceFollowRedirects = true
                 }
                 if (redirected.responseCode !in 200..299) {
-                    error("APK 다운로드 실패: HTTP ${redirected.responseCode}")
+                    val failed = redirected.responseCode
+                    redirected.disconnect()
+                    error("APK 다운로드 실패: HTTP $failed")
                 }
-                redirected.inputStream
+                disconnectingStream(redirected)
             }
             else -> {
                 val body = first.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                first.disconnect()
                 error("GitHub asset $code: ${body.take(180)}")
             }
         }
     }
+
+    private fun disconnectingStream(connection: HttpURLConnection): InputStream =
+        object : FilterInputStream(connection.inputStream) {
+            override fun close() {
+                try {
+                    super.close()
+                } finally {
+                    connection.disconnect()
+                }
+            }
+        }
 
     private fun githubConnection(url: String, token: String, accept: String): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
@@ -210,20 +272,45 @@ class AppUpdater(
         }
 
     private fun install(apk: File) {
+        if (!apk.exists()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !activity.packageManager.canRequestPackageInstalls()) {
+            prefs.edit().putString(KEY_PENDING_APK, apk.absolutePath).apply()
             val intent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:${activity.packageName}")
             )
-            activity.startActivity(intent)
             activity.pvMessageDialog(
-                "설치 권한 필요",
-                "PuttVision 업데이트를 위해 '이 출처 허용'을 켠 뒤 앱으로 돌아와 업데이트를 다시 눌러주세요."
+                title = "설치 권한 필요",
+                message = "'이 출처 허용'을 켠 뒤 PuttVision으로 돌아오면 설치 화면이 자동으로 이어집니다.",
+                positiveLabel = "설정 열기",
+                onPositive = { activity.startActivity(intent) },
+                negativeLabel = "취소",
+                onNegative = { prefs.edit().remove(KEY_PENDING_APK).apply() }
             ).show()
             return
         }
+        prefs.edit().remove(KEY_PENDING_APK).apply()
+        launchInstaller(apk)
+    }
 
+    /** Called from Activity.onResume after the unknown-sources permission screen returns. */
+    fun resumePendingInstallIfPossible() {
+        val path = prefs.getString(KEY_PENDING_APK, null) ?: return
+        val apk = File(path)
+        if (!apk.exists()) {
+            prefs.edit().remove(KEY_PENDING_APK).apply()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !activity.packageManager.canRequestPackageInstalls()) return
+
+        prefs.edit().remove(KEY_PENDING_APK).apply()
+        launchInstaller(apk)
+    }
+
+    private fun launchInstaller(apk: File) {
+        if (activity.isFinishing || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return
         val uri = FileProvider.getUriForFile(
             activity,
             "${activity.packageName}.fileprovider",
@@ -232,9 +319,11 @@ class AppUpdater(
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        activity.startActivity(intent)
+        runCatching { activity.startActivity(intent) }
+            .onFailure { error ->
+                onUi { activity.pvMessageDialog("설치 실행 실패", error.message ?: "APK 설치 화면을 열 수 없습니다.").show() }
+            }
     }
 
     private fun sha256(file: File): String {
@@ -248,5 +337,16 @@ class AppUpdater(
             }
         }
         return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun onUi(block: () -> Unit) {
+        if (activity.isFinishing || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return
+        activity.runOnUiThread {
+            if (!activity.isFinishing && (Build.VERSION.SDK_INT < 17 || !activity.isDestroyed)) block()
+        }
+    }
+
+    fun close() {
+        executor.shutdownNow()
     }
 }

@@ -3,10 +3,17 @@ package com.puttvision.screen
 import android.content.Context
 import android.graphics.*
 import android.view.View
+import kotlin.math.max
 import kotlin.math.min
 
 class PhoneOverlayView(context: Context) : View(context) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    init {
+        // Pure HUD layer: never consume camera-area touch events.
+        isClickable = false
+        isFocusable = false
+    }
 
     var status: String = "자동 캘리브레이션 대기"
     var calibrationImagePoints: List<PointF> = emptyList()
@@ -134,7 +141,11 @@ class PhoneOverlayView(context: Context) : View(context) {
             }
         }
 
-        val scale = min(width / rw, height / rh)
+        if (width <= 0 || height <= 0 || rw <= 0f || rh <= 0f) return null
+
+        // PreviewView uses FILL_CENTER, so the image is center-cropped. Using min() here
+        // treated it like FIT_CENTER and visibly shifted every marker/ball overlay.
+        val scale = max(width / rw, height / rh)
         val dx = (width - rw * scale) / 2f
         val dy = (height - rh * scale) / 2f
         return PointF(dx + rx * scale, dy + ry * scale)

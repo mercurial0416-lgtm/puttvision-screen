@@ -3,6 +3,7 @@ package com.puttvision.screen
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -145,5 +146,14 @@ class OneTapDeployController(
         activity.pvMessageDialog("GitHub 연결 오류", message).show()
     }
 
-    private fun onUi(block: () -> Unit) = activity.runOnUiThread(block)
+    fun close() {
+        executor.shutdownNow()
+    }
+
+    private fun onUi(block: () -> Unit) {
+        if (activity.isFinishing || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return
+        activity.runOnUiThread {
+            if (!activity.isFinishing && (Build.VERSION.SDK_INT < 17 || !activity.isDestroyed)) block()
+        }
+    }
 }

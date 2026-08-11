@@ -1,6 +1,8 @@
 package com.puttvision.screen
 
 import android.Manifest
+import android.app.AlertDialog
+import android.content.Context
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.Color
@@ -12,13 +14,14 @@ import android.os.Looper
 import android.util.Size
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
@@ -28,9 +31,12 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import java.io.File
+import java.time.LocalDate
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
 
@@ -60,10 +66,12 @@ class MainActivity : AppCompatActivity() {
 
     private var hfrHardwareAvailable = false
     private var hfrProbeComplete = false
+    private var cameraProviderOpening = false
 
     private var impactDetected = false
     private var impactPolling = false
     private var recordingStartedAtMs = 0L
+    private var hfrRecordingGeneration = 0
 
     private var autoPlayEnabled = true
     private var simulationTicking = false
@@ -89,9 +97,21 @@ class MainActivity : AppCompatActivity() {
     private var practiceCount = 10
     private var practiceDistanceM = 5
     private var practiceGreenSpeed = 2.8
+    private var practicePatternIndex = 0
+    private var practiceShotsTaken = 0
+    private var practicePatternShotIndex = 0
+    private val practiceRandom = Random(20260811)
+
     private var gamePlayers = 2
     private var gameModeIndex = 0
     private var gameDistanceM = 3
+
+    private var sessionActive = false
+    private var measurementSuspended = false
+    private var activeSessionIsGame = false
+    private var menuBackAction: (() -> Unit)? = null
+    private var settingsDialog: AlertDialog? = null
+    private val uiPrefs by lazy { getSharedPreferences("puttvision_ui", Context.MODE_PRIVATE) }
 
     private val compactLandscape: Boolean
         get() = resources.configuration.screenHeightDp <= 420
@@ -106,12 +126,14 @@ class MainActivity : AppCompatActivity() {
             if (granted) {
                 openProvider()
             } else {
-                toast("카메라 권한 없으면 측정 못함")
+                toast("카메라 권한이 필요합니다")
+                if (sessionActive) showHomeMenu()
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         cameraExecutor =
             Executors.newSingleThreadExecutor()
@@ -131,6 +153,20 @@ class MainActivity : AppCompatActivity() {
 
         buildUi()
 
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (menuOverlay.visibility == View.VISIBLE) {
+                        val back = menuBackAction
+                        if (back != null) back() else finish()
+                    } else {
+                        showHomeMenu()
+                    }
+                }
+            }
+        )
+
         impactDetector =
             PreviewImpactDetector(
                 previewView
@@ -142,9 +178,7 @@ class MainActivity : AppCompatActivity() {
                 engine
             ) { connected, msg ->
                 runOnUiThread {
-                    lastTvStatusMessage = msg
-                    tvStatus.text = if (connected) "● TV 연결" else "○ TV 미연결"
-                    tvStatus.setTextColor(if (connected) Pv.primary else Pv.textMid)
+                    setTvStatus(connected, msg)
                 }
             }
 
@@ -168,6 +202,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+    override fun onResume() {
+        super.onResume()
+        if (::appUpdater.isInitialized) {
+            appUpdater.resumePendingInstallIfPossible()
+        }
+    }
+
     private fun probeHfr() {
         cameraExecutor.execute {
             val caps =
@@ -186,19 +228,15 @@ class MainActivity : AppCompatActivity() {
 
                 hfrProbeComplete = true
 
-                lastHfrStatusMessage =
-                    when {
-                        preferred == null -> "HFR 미지원 · 일반 추적 모드"
-                        preferred.fps >= 240 -> "HFR ${preferred.fps}fps 가능 · 240fps 우선"
-                        else -> "HFR ${preferred.fps}fps 가능"
-                    }
-
-                // Header pills must stay short on landscape phones. Tap the pill for detail.
-                hfrStatus.text =
-                    when {
-                        preferred == null -> "HFR 미지원"
-                        else -> "HFR ${preferred.fps}fps"
-                    }
+                val detail = when {
+                    preferred == null -> "HFR 미지원 · 일반 추적 모드"
+                    preferred.fps >= 240 -> "HFR ${preferred.fps}fps 가능 · 240fps 우선"
+                    else -> "HFR ${preferred.fps}fps 가능"
+                }
+                setHfrStatus(
+                    short = if (preferred == null) "HFR 미지원" else "HFR ${preferred.fps}fps",
+                    detail = detail
+                )
 
                 maybeAutoStartAfterCalibration()
             }
@@ -263,6 +301,9 @@ class MainActivity : AppCompatActivity() {
             maxLines = 1
             background = pvRounded(Pv.surfaceLo, 100f, Pv.line)
             setPadding(pvDp(if (compact) 8 else 11), pvDp(if (compact) 5 else 6), pvDp(if (compact) 8 else 11), pvDp(if (compact) 5 else 6))
+            minHeight = pvDp(32)
+            isClickable = true
+            isFocusable = true
             setOnClickListener { toast(lastHfrStatusMessage) }
         }
         header.addView(hfrStatus, LinearLayout.LayoutParams(-2, -2).apply { marginStart = pvDp(headerGap) })
@@ -276,19 +317,24 @@ class MainActivity : AppCompatActivity() {
             maxLines = 1
             background = pvRounded(Pv.surfaceLo, 100f, Pv.line)
             setPadding(pvDp(if (compact) 8 else 10), pvDp(if (compact) 5 else 6), pvDp(if (compact) 8 else 10), pvDp(if (compact) 5 else 6))
+            minHeight = pvDp(32)
+            isClickable = true
+            isFocusable = true
             setOnClickListener { toast(lastTvStatusMessage) }
         }
         header.addView(tvStatus, LinearLayout.LayoutParams(-2, -2).apply { marginStart = pvDp(headerGap) })
 
         modeButton = pvButton(engine.gameModes.status.mode.label, PvButtonStyle.SECONDARY, textSp = if (compact) 9.4f else 10.5f, radiusDp = 100f) {
             if (engine.state?.running == true) {
-                toast("공 굴러가는 중엔 모드 변경 막아놨음")
+                toast("공이 굴러가는 동안에는 모드를 바꿀 수 없습니다")
+            } else if (sessionActive) {
+                // Do not mutate the game engine behind the active-session state. The old cycle
+                // button could turn a practice session into a game mode while practice counters
+                // and auto-next logic still thought it was practice.
+                pauseSessionForMenu()
+                if (activeSessionIsGame) showGameEntrance() else showPracticeEntrance()
             } else {
-                val mode = engine.gameModes.nextMode()
-                modeButton.text = mode.label
-                engine.resetSimulation()
-                metricText.text = "${mode.label} · READY"
-                updateSettingLabels()
+                showHomeMenu()
             }
         }
         header.addView(modeButton, LinearLayout.LayoutParams(pvDp(if (compact) 82 else 88), pvDp(if (compact) 31 else 34)).apply {
@@ -451,7 +497,16 @@ class MainActivity : AppCompatActivity() {
         shotSection.addView(settingSummary)
 
         contentRow.addView(shotSection, LinearLayout.LayoutParams(0, -1, if (compact) 1.05f else 0.9f))
-        dashboard.addView(contentRow, LinearLayout.LayoutParams(-1, pvDp(if (compact) 82 else 145)))
+
+        // Exact dashboard height is derived from the actual metric grid. Hard-coded 82/145dp
+        // values clipped the eyebrow + last metric row on short landscape phones.
+        val metricRows = (metricDefs.size + columns - 1) / columns
+        val eyebrowAllowance = pvDp(if (compact) 16 else 20)
+        val contentHeight = max(
+            pvDp(if (compact) 96 else 156),
+            metricRows * cardH + (metricRows - 1) * cardGap + eyebrowAllowance
+        )
+        dashboard.addView(contentRow, LinearLayout.LayoutParams(-1, contentHeight))
 
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -499,15 +554,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildSmartPuttMenu(): FrameLayout {
+        menuBackAction = null
         return FrameLayout(this).apply {
             setBackgroundColor(Pv.inkDeep)
+            isClickable = true
+            isFocusable = true
             addView(buildVideoHomeScreen(), FrameLayout.LayoutParams(-1, -1))
         }
     }
 
-    private fun replaceMenuScreen(view: View) {
+    private fun replaceMenuScreen(view: View, backAction: (() -> Unit)? = null) {
+        menuBackAction = backAction
         menuOverlay.removeAllViews()
         menuOverlay.addView(view, FrameLayout.LayoutParams(-1, -1))
+        menuOverlay.isClickable = true
         menuOverlay.visibility = View.VISIBLE
     }
 
@@ -524,6 +584,8 @@ class MainActivity : AppCompatActivity() {
             stateListAnimator = null
             setPadding(sdp(8), sdp(10), sdp(8), sdp(10))
             background = pvRounded(Pv.primary, Pv.rLg)
+            isClickable = true
+            isFocusable = true
             setOnClickListener { click() }
         }
 
@@ -534,37 +596,31 @@ class MainActivity : AppCompatActivity() {
         pvIconControl(symbol, label, click)
 
     private fun buildVideoHomeScreen(): View {
+        val compact = compactLandscape
         val root = FrameLayout(this).apply {
             setBackgroundColor(Pv.inkDeep)
         }
 
-        val top = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(12), dp(16), 0)
-        }
-        top.addView(roundMenuIcon("◎", "언어") { toast("한국어") })
-        top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        top.addView(roundMenuIcon("⚙", "환경") { showSettingsDialog() })
-        top.addView(roundMenuIcon("⇥", "종료") { finishAffinity() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
-        root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
-
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(24), dp(56), dp(24), dp(20))
+            setPadding(
+                sdp(if (compact) 16 else 24),
+                sdp(if (compact) 48 else 56),
+                sdp(if (compact) 16 else 24),
+                sdp(if (compact) 12 else 20)
+            )
         }
 
-        // Course visual: a lush green gradient panel that anchors the brand.
         val visual = FrameLayout(this).apply {
             background = pvVGradient(Color.rgb(104, 170, 84), Color.rgb(44, 94, 52), Pv.rXl)
         }
         visual.addView(TextView(this).apply {
             text = "⛳"
-            textSize = 92f
+            textSize = scaledSp(if (compact) 66f else 78f)
             gravity = Gravity.CENTER
         }, FrameLayout.LayoutParams(-1, -1))
-        body.addView(visual, LinearLayout.LayoutParams(0, -1, 0.42f).apply { marginEnd = dp(18) })
+        body.addView(visual, LinearLayout.LayoutParams(0, -1, 0.42f).apply { marginEnd = sdp(if (compact) 12 else 18) })
 
         val right = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -573,48 +629,68 @@ class MainActivity : AppCompatActivity() {
         val title = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         title.addView(TextView(this).apply {
             text = "Putt"
-            textSize = 46f
+            textSize = scaledSp(if (compact) 34f else 40f)
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Pv.primary)
         })
         title.addView(TextView(this).apply {
             text = "Vision"
-            textSize = 46f
+            textSize = scaledSp(if (compact) 34f else 40f)
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Pv.textHi)
         })
         right.addView(title)
         right.addView(TextView(this).apply {
             text = "SCREEN PUTTING SIMULATOR"
-            textSize = 10f
+            textSize = scaledSp(9f)
             typeface = Typeface.DEFAULT_BOLD
-            letterSpacing = 0.22f
+            letterSpacing = 0.18f
             setTextColor(Pv.textLo)
-            setPadding(dp(3), dp(2), 0, 0)
+            setPadding(sdp(3), sdp(2), 0, 0)
+            maxLines = 1
         })
 
         fun homeTile(titleText: String, accent: Int, click: () -> Unit): LinearLayout =
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 background = pvRounded(Pv.surfaceHi, Pv.rLg, Pv.line)
-                setPadding(dp(24), dp(14), dp(18), dp(14))
+                setPadding(sdp(if (compact) 16 else 22), sdp(10), sdp(14), sdp(10))
                 addView(TextView(this@MainActivity).apply {
                     text = titleText
-                    textSize = 23f
+                    textSize = scaledSp(if (compact) 17f else 20f)
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Pv.textHi)
                     gravity = Gravity.CENTER_VERTICAL
+                    maxLines = 1
                 }, LinearLayout.LayoutParams(-1, 0, 1f))
                 addView(View(this@MainActivity).apply {
                     background = pvRounded(accent, 100f)
-                }, LinearLayout.LayoutParams(dp(48), dp(4)).apply { topMargin = dp(8) })
+                }, LinearLayout.LayoutParams(sdp(44), sdp(4)).apply { topMargin = sdp(5) })
+                isClickable = true
+                isFocusable = true
                 setOnClickListener { click() }
             }
 
-        right.addView(homeTile("⛳  연습장", Pv.primary) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(20) })
-        right.addView(homeTile("♟  게임장", Pv.amber) { showGameEntrance() }, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(12) })
+        val tileH = sdp(if (compact) 62 else 72)
+        right.addView(homeTile("⛳  연습장", Pv.primary) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, tileH).apply { topMargin = sdp(if (compact) 12 else 18) })
+        right.addView(homeTile("♟  게임장", Pv.amber) { showGameEntrance() }, LinearLayout.LayoutParams(-1, tileH).apply { topMargin = sdp(if (compact) 8 else 10) })
         body.addView(right, LinearLayout.LayoutParams(0, -1, 0.58f))
+
+        // Add the full-screen body first. The old order placed it above the top controls
+        // in the FrameLayout and could steal taps around the lower edge of the icon row.
         root.addView(body, FrameLayout.LayoutParams(-1, -1))
+
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(sdp(if (compact) 10 else 16), sdp(if (compact) 6 else 10), sdp(if (compact) 10 else 16), 0)
+            elevation = pvDp(12).toFloat()
+        }
+        top.addView(roundMenuIcon("◎", "언어") { toast("현재 한국어") })
+        top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        top.addView(roundMenuIcon("⚙", "환경") { showSettingsDialog() })
+        top.addView(roundMenuIcon("⇥", "종료") { finishAffinity() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = sdp(8) })
+        root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
         return root
     }
 
@@ -660,7 +736,7 @@ class MainActivity : AppCompatActivity() {
         }
 
     private fun showPracticeEntrance() {
-        replaceMenuScreen(buildPracticeEntrance())
+        replaceMenuScreen(buildPracticeEntrance()) { showHomeMenu() }
     }
 
     private fun buildPracticeEntrance(): View {
@@ -669,7 +745,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Pv.inkDeep)
             setPadding(sdp(14), sdp(14), sdp(14), sdp(12))
         }
-        root.addView(buildEntranceHeader("연습장 입구", "Practice Mode Entrance", { showCupGuideScreen() }) { showHomeMenu() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
+        root.addView(buildEntranceHeader("연습장 입구", "Practice Mode Entrance", { showCupGuideScreen { showPracticeEntrance() } }) { showHomeMenu() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
 
         val content = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -679,7 +755,7 @@ class MainActivity : AppCompatActivity() {
         modePanel.addView(tinyCaption("모드"))
         val modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("거리", "컵", "그린").forEachIndexed { i, label ->
-            modeRow.addView(darkChoice(label, practiceEntranceMode == i) { practiceEntranceMode = i; showPracticeEntrance() }, LinearLayout.LayoutParams(0, sdp(48), 1f).apply { if (i > 0) marginStart = dp(3) })
+            modeRow.addView(darkChoice(label, practiceEntranceMode == i) { practiceEntranceMode = i; showPracticeEntrance() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i > 0) marginStart = dp(3) })
         }
         modePanel.addView(modeRow)
         upper.addView(modePanel, LinearLayout.LayoutParams(0, -1, 0.39f).apply { marginEnd = dp(5) })
@@ -692,7 +768,7 @@ class MainActivity : AppCompatActivity() {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (c in 0..1) {
                 val v = counts[r * 2 + c]
-                row.addView(darkChoice(v.toString(), practiceCount == v) { practiceCount = v; showPracticeEntrance() }, LinearLayout.LayoutParams(0, sdp(36), 1f).apply { if (c > 0) marginStart = dp(3) })
+                row.addView(darkChoice(v.toString(), practiceCount == v) { practiceCount = v; showPracticeEntrance() }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { if (c > 0) marginStart = dp(3) })
             }
             countGrid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = dp(3) })
         }
@@ -724,20 +800,51 @@ class MainActivity : AppCompatActivity() {
         left.addView(upper, LinearLayout.LayoutParams(-1, 0, 0.52f))
 
         val lower = sectionPanel()
-        lower.addView(tinyCaption(if (practiceEntranceMode == 1) "컵" else "거리"))
+        val lowerCaption = when (practiceEntranceMode) {
+            1 -> "컵 거리"
+            2 -> "그린 변화"
+            else -> "거리 변화"
+        }
+        lower.addView(tinyCaption(lowerCaption))
         val lowerRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        if (practiceEntranceMode == 1) {
-            listOf(3, 5, 7, 10).forEachIndexed { i, v ->
-                lowerRow.addView(darkChoice("${v}m", practiceDistanceM == v) { practiceDistanceM = v; showPracticeEntrance() }, LinearLayout.LayoutParams(0, sdp(48), 1f).apply { if (i > 0) marginStart = dp(4) })
+        when (practiceEntranceMode) {
+            1 -> {
+                listOf(3, 5, 7, 10).forEachIndexed { i, v ->
+                    lowerRow.addView(
+                        darkChoice("${v}m", practiceDistanceM == v) {
+                            practiceDistanceM = v
+                            showPracticeEntrance()
+                        },
+                        LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i > 0) marginStart = dp(4) }
+                    )
+                }
             }
-        } else {
-            listOf("고정", "랜덤", "증가", "감소").forEachIndexed { i, label ->
-                lowerRow.addView(darkChoice(label, i == 0) { toast("$label 모드") }, LinearLayout.LayoutParams(0, sdp(48), 1f).apply { if (i > 0) marginStart = dp(4) })
+            2 -> {
+                listOf("평지", "좌경사", "우경사", "랜덤").forEachIndexed { i, label ->
+                    lowerRow.addView(
+                        darkChoice(label, practicePatternIndex == i) {
+                            practicePatternIndex = i
+                            showPracticeEntrance()
+                        },
+                        LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i > 0) marginStart = dp(4) }
+                    )
+                }
+            }
+            else -> {
+                listOf("고정", "랜덤", "증가", "감소").forEachIndexed { i, label ->
+                    lowerRow.addView(
+                        darkChoice(label, practicePatternIndex == i) {
+                            practicePatternIndex = i
+                            showPracticeEntrance()
+                        },
+                        LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i > 0) marginStart = dp(4) }
+                    )
+                }
             }
         }
         lower.addView(lowerRow)
         val distanceLine = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        distanceLine.addView(TextView(this).apply { text = "2m"; setTextColor(Pv.textMid); textSize = 11f; typeface = Typeface.MONOSPACE })
+        distanceLine.addView(TextView(this).apply { text = "2m"; setTextColor(Pv.textMid); textSize = scaledSp(10f); typeface = Typeface.MONOSPACE })
         val dSeek = SeekBar(this).apply {
             max = 13
             progress = (practiceDistanceM - 2).coerceIn(0, 13)
@@ -747,19 +854,19 @@ class MainActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) { showPracticeEntrance() }
             })
         }
-        distanceLine.addView(dSeek, LinearLayout.LayoutParams(0, sdp(36), 1f).apply { marginStart = sdp(10); marginEnd = sdp(10) })
-        distanceLine.addView(TextView(this).apply { text = "15m"; setTextColor(Pv.textMid); textSize = 11f; typeface = Typeface.MONOSPACE })
+        distanceLine.addView(dSeek, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = sdp(10); marginEnd = sdp(10) })
+        distanceLine.addView(TextView(this).apply { text = "15m"; setTextColor(Pv.textMid); textSize = scaledSp(10f); typeface = Typeface.MONOSPACE })
         lower.addView(distanceLine)
         left.addView(lower, LinearLayout.LayoutParams(-1, 0, 0.48f).apply { topMargin = dp(6) })
 
         content.addView(left, LinearLayout.LayoutParams(0, -1, 0.81f).apply { marginEnd = sdp(10) })
-        content.addView(cyanButton("▶\n입장") { showPreStartGuide(false) }, LinearLayout.LayoutParams(0, -1, 0.19f))
+        content.addView(cyanButton("▶\n입장") { openPreStartOrMat(false) }, LinearLayout.LayoutParams(0, -1, 0.19f))
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
     }
 
     private fun showGameEntrance() {
-        replaceMenuScreen(buildGameEntrance())
+        replaceMenuScreen(buildGameEntrance()) { showHomeMenu() }
     }
 
     private fun buildGameEntrance(): View {
@@ -779,7 +886,7 @@ class MainActivity : AppCompatActivity() {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (c in 0..1) {
                 val v = r * 2 + c + 1
-                row.addView(darkChoice(v.toString(), gamePlayers == v) { gamePlayers = v; showGameEntrance() }, LinearLayout.LayoutParams(0, sdp(36), 1f).apply { if (c > 0) marginStart = dp(3) })
+                row.addView(darkChoice(v.toString(), gamePlayers == v) { gamePlayers = v; showGameEntrance() }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { if (c > 0) marginStart = dp(3) })
             }
             pGrid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = dp(3) })
         }
@@ -788,50 +895,85 @@ class MainActivity : AppCompatActivity() {
 
         val modes = sectionPanel(); modes.addView(tinyCaption("게임 방식"))
         val mRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("스트로크", "매치\n플레이", "빙고", "투어").forEachIndexed { i, label ->
+        listOf("9홀", "18홀", "거리\n맞추기", "랜덤\n경사").forEachIndexed { i, label ->
             mRow.addView(darkChoice(label, gameModeIndex == i) { gameModeIndex = i; showGameEntrance() }, LinearLayout.LayoutParams(0, sdp(54), 1f).apply { if (i > 0) marginStart = dp(3) })
         }
         modes.addView(mRow)
         upper.addView(modes, LinearLayout.LayoutParams(0, -1, 0.47f).apply { marginEnd = dp(5) })
 
         val speed = sectionPanel(); speed.addView(tinyCaption("그린스피드"))
-        speed.addView(TextView(this).apply {
-            text = "2.8\n약간빠름"; gravity = Gravity.CENTER; textSize = scaledSp(18f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Pv.textHi)
-        }, LinearLayout.LayoutParams(-1, 0, 1f))
+        val gameSpeedValue = TextView(this).apply {
+            text = "%.1f".format(practiceGreenSpeed)
+            gravity = Gravity.CENTER
+            textSize = scaledSp(18f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextColor(Pv.primary)
+        }
+        speed.addView(gameSpeedValue, LinearLayout.LayoutParams(-1, 0, 1f))
+        speed.addView(SeekBar(this).apply {
+            max = 5
+            progress = ((practiceGreenSpeed - 2.5) * 10).toInt().coerceIn(0, 5)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    practiceGreenSpeed = 2.5 + progress * 0.1
+                    gameSpeedValue.text = "%.1f".format(practiceGreenSpeed)
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        })
         upper.addView(speed, LinearLayout.LayoutParams(0, -1, 0.35f))
         left.addView(upper, LinearLayout.LayoutParams(-1, 0, 0.52f))
 
-        val lower = sectionPanel(); lower.addView(tinyCaption(if (gameModeIndex == 3) "노선" else "거리"))
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val labels = if (gameModeIndex == 3) listOf("수도권", "충청권", "영남권") else listOf("3m", "5m", "7m", "10m")
-        labels.forEachIndexed { i, label ->
-            row.addView(darkChoice(label, if (gameModeIndex == 3) i == 0 else gameDistanceM == label.removeSuffix("m").toInt()) {
-                if (gameModeIndex != 3) gameDistanceM = label.removeSuffix("m").toInt()
-                showGameEntrance()
-            }, LinearLayout.LayoutParams(0, sdp(54), 1f).apply { if (i > 0) marginStart = dp(6) })
+        val lower = sectionPanel()
+        if (gameModeIndex == 2) {
+            lower.addView(tinyCaption("목표 거리"))
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            listOf("3m", "5m", "7m", "10m").forEachIndexed { i, label ->
+                val distance = label.removeSuffix("m").toInt()
+                row.addView(darkChoice(label, gameDistanceM == distance) {
+                    gameDistanceM = distance
+                    showGameEntrance()
+                }, LinearLayout.LayoutParams(0, sdp(54), 1f).apply { if (i > 0) marginStart = dp(6) })
+            }
+            lower.addView(row)
+        } else {
+            lower.addView(tinyCaption("코스 설정"))
+            lower.addView(TextView(this).apply {
+                text = when (gameModeIndex) {
+                    0 -> "9홀 · 홀마다 거리/경사 자동 코스"
+                    1 -> "18홀 · 홀마다 거리/경사 자동 코스"
+                    else -> "매 샷 거리/좌우/종경사 자동 랜덤"
+                }
+                gravity = Gravity.CENTER
+                textSize = scaledSp(11f)
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Pv.textMid)
+                background = pvRounded(Pv.surfaceHi, Pv.rMd, Pv.lineSoft)
+                setPadding(sdp(8), sdp(8), sdp(8), sdp(8))
+            }, LinearLayout.LayoutParams(-1, 0, 1f))
         }
-        lower.addView(row)
         left.addView(lower, LinearLayout.LayoutParams(-1, 0, 0.48f).apply { topMargin = dp(6) })
 
         content.addView(left, LinearLayout.LayoutParams(0, -1, 0.81f).apply { marginEnd = sdp(10) })
-        content.addView(cyanButton("▶\n입장") { showPreStartGuide(true) }, LinearLayout.LayoutParams(0, -1, 0.19f))
+        content.addView(cyanButton("▶\n입장") { openPreStartOrMat(true) }, LinearLayout.LayoutParams(0, -1, 0.19f))
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
     }
 
-    private fun showCupGuideScreen() {
+    private fun showCupGuideScreen(backAction: () -> Unit = { showPracticeEntrance() }) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Pv.inkDeep)
             setPadding(sdp(18), sdp(14), sdp(18), sdp(12))
         }
-        root.addView(buildEntranceHeader("컵 가이드", "", null) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
+        root.addView(buildEntranceHeader("컵 가이드", "", null, backAction), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
         val panels = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val chart = sectionPanel().apply {
             gravity = Gravity.CENTER
             addView(TextView(this@MainActivity).apply {
                 text = "③  ─────────────●\n\n②  ────────────●\n\n①  ───────────●\n\n     Ready Line"
-                textSize = 17f
+                textSize = scaledSp(15f)
                 typeface = Typeface.MONOSPACE
                 setTextColor(Pv.textHi)
                 gravity = Gravity.CENTER
@@ -864,7 +1006,7 @@ class MainActivity : AppCompatActivity() {
             val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             rr.forEachIndexed { i, t ->
                 r.addView(TextView(this@MainActivity).apply {
-                    text = t; gravity = Gravity.CENTER; textSize = 11f; typeface = Typeface.DEFAULT_BOLD
+                    text = t; gravity = Gravity.CENTER; textSize = scaledSp(10f); typeface = Typeface.DEFAULT_BOLD
                     if (i > 0) {
                         setTextColor(quadrantInk[i - 1])
                         background = pvRounded(quadrantColors[i - 1], Pv.rSm)
@@ -876,11 +1018,23 @@ class MainActivity : AppCompatActivity() {
             table.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
         }
         table.addView(TextView(this).apply {
-            text = "※ 1클럽 = 6컵"; gravity = Gravity.CENTER; textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Pv.textLo); setPadding(0, dp(8), 0, 0)
+            text = "※ 1클럽 = 6컵"; gravity = Gravity.CENTER; textSize = scaledSp(11.5f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Pv.textLo); setPadding(0, dp(8), 0, 0)
         })
         panels.addView(table, LinearLayout.LayoutParams(0, -1, 0.43f))
         root.addView(panels, LinearLayout.LayoutParams(-1, 0, 1f))
-        replaceMenuScreen(root)
+        replaceMenuScreen(root, backAction)
+    }
+
+    private fun openPreStartOrMat(game: Boolean) {
+        if (uiPrefs.getString("skip_prestart_date", null) == LocalDate.now().toString()) {
+            showMatPrep(game)
+        } else {
+            showPreStartGuide(game)
+        }
+    }
+
+    private fun skipPreStartGuideToday() {
+        uiPrefs.edit().putString("skip_prestart_date", LocalDate.now().toString()).apply()
     }
 
     private fun showPreStartGuide(game: Boolean) {
@@ -895,19 +1049,22 @@ class MainActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(-1, dp(58)))
         val pics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun diagram(textValue: String): TextView = TextView(this).apply {
-            text = textValue; gravity = Gravity.CENTER; textSize = 15f; typeface = Typeface.MONOSPACE; setTextColor(Pv.textMid); background = pvRounded(Pv.surface, Pv.rMd, Pv.lineSoft)
+            text = textValue; gravity = Gravity.CENTER; textSize = scaledSp(13f); typeface = Typeface.MONOSPACE; setTextColor(Pv.textMid); background = pvRounded(Pv.surface, Pv.rMd, Pv.lineSoft)
         }
         pics.addView(diagram("카메라\n   │\n   ▼\n▰  매트  ⚪"), LinearLayout.LayoutParams(0, -1, 1f).apply { marginEnd = dp(6) })
         pics.addView(diagram("휴대폰 위치\n↘\n┌────────┐\n│  매트  │\n└────────┘"), LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = dp(6) })
         root.addView(pics, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(TextView(this).apply {
-            text = "충분히 밝은 곳에서 카메라와 매트를 정확히 맞춰주세요."; gravity = Gravity.CENTER; textSize = 11f; setTextColor(Pv.textLo); setPadding(0, dp(10), 0, dp(10))
+            text = "충분히 밝은 곳에서 카메라와 매트를 정확히 맞춰주세요."; gravity = Gravity.CENTER; textSize = scaledSp(10f); setTextColor(Pv.textLo); setPadding(0, sdp(8), 0, sdp(8))
         })
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        buttons.addView(darkChoice("오늘 다시 보지 않기", false) { showMatPrep(game) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(6) })
-        buttons.addView(cyanButton("시작하기 ▶") { showMatPrep(game) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(6) })
+        buttons.addView(darkChoice("오늘 다시 보지 않기", false) {
+            skipPreStartGuideToday()
+            showMatPrep(game)
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = sdp(6) })
+        buttons.addView(cyanButton("시작하기 ▶") { showMatPrep(game) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = sdp(6) })
         root.addView(buttons)
-        replaceMenuScreen(root)
+        replaceMenuScreen(root) { if (game) showGameEntrance() else showPracticeEntrance() }
     }
 
     private fun showMatPrep(game: Boolean) {
@@ -921,24 +1078,31 @@ class MainActivity : AppCompatActivity() {
         val preview = FrameLayout(this).apply {
             background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.line)
             addView(TextView(this@MainActivity).apply {
-                text = "카메라 프리뷰\n\n공과 마커 4개가 모두 보이게 맞춰주세요"; gravity = Gravity.CENTER; setTextColor(Pv.textMid); textSize = 14f; typeface = Typeface.DEFAULT_BOLD
+                text = "카메라 프리뷰\n\n공과 마커 4개가 모두 보이게 맞춰주세요"; gravity = Gravity.CENTER; setTextColor(Pv.textMid); textSize = scaledSp(12f); typeface = Typeface.DEFAULT_BOLD
             }, FrameLayout.LayoutParams(-1, -1))
         }
         body.addView(preview, LinearLayout.LayoutParams(0, -1, 0.63f).apply { marginEnd = dp(8) })
         val guide = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         guide.addView(TextView(this@MainActivity).apply {
             text = "PuttVision\n┌────────────┐\n│ □        □ │\n│     ⚪      │\n│ □        □ │\n└────────────┘\n녹색 박스가 생겼나요?"
-            gravity = Gravity.CENTER; textSize = 13f; typeface = Typeface.MONOSPACE; setTextColor(Pv.primary); background = pvRounded(Pv.primaryDim, Pv.rMd, Pv.primaryLine)
+            gravity = Gravity.CENTER; textSize = scaledSp(11.5f); typeface = Typeface.MONOSPACE; setTextColor(Pv.primary); background = pvRounded(Pv.primaryDim, Pv.rMd, Pv.primaryLine)
         }, LinearLayout.LayoutParams(-1, 0, 0.65f))
         guide.addView(cyanButton("측정 시작") { startConfiguredSession(game) }, LinearLayout.LayoutParams(-1, 0, 0.35f).apply { topMargin = dp(8) })
         body.addView(guide, LinearLayout.LayoutParams(0, -1, 0.37f))
         root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
-        replaceMenuScreen(root)
+        replaceMenuScreen(root) { if (game) showGameEntrance() else showPracticeEntrance() }
     }
 
     private fun startConfiguredSession(game: Boolean) {
+        activeSessionIsGame = game
+        sessionActive = true
+        measurementSuspended = false
+        practiceShotsTaken = 0
+        practicePatternShotIndex = 0
+
         engine.settings.holeDistanceM = if (game) gameDistanceM.toDouble() else practiceDistanceM.toDouble()
         engine.settings.stimpMeters = practiceGreenSpeed
+        engine.gameModes.configurePlayers(if (game) gamePlayers else 1)
         if (game) {
             val mode = when (gameModeIndex) {
                 0 -> PracticeMode.NINE_HOLE
@@ -950,17 +1114,131 @@ class MainActivity : AppCompatActivity() {
         } else {
             engine.gameModes.setMode(PracticeMode.PRACTICE)
         }
+
         modeButton.text = engine.gameModes.status.mode.label
         metricText.text = "${engine.gameModes.status.mode.label} · READY"
         updateSettingLabels()
+        menuBackAction = null
+        menuOverlay.isClickable = false
         menuOverlay.visibility = View.GONE
+
+        // Measurement/recording starts only after explicit entry. If camera permission/provider
+        // is not ready yet, request/initialize it instead of leaving a dead measurement screen.
+        if (!::provider.isInitialized) {
+            metricText.text = "카메라 준비 중 · 권한을 확인하세요"
+            val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (granted) openProvider() else permission.launch(Manifest.permission.CAMERA)
+            return
+        }
+        if (homography != null) {
+            mainHandler.post { armPrecision() }
+        } else {
+            beginAutoCalibration()
+        }
+    }
+
+    private fun suspendMeasurementForOverlay() {
+        measurementSuspended = true
+        cancelPendingAuto()
+        stopSimulation()
+        impactPolling = false
+        tracker.cancel()
+        stopHfrRecordingOnly()
+    }
+
+    private fun pauseSessionForMenu() {
+        sessionActive = false
+        suspendMeasurementForOverlay()
     }
 
     private fun showHomeMenu() {
-        replaceMenuScreen(buildVideoHomeScreen())
+        if (sessionActive) pauseSessionForMenu()
+        replaceMenuScreen(buildVideoHomeScreen(), null)
+    }
+
+    private fun applyPracticeTargetForNextShot() {
+        if (activeSessionIsGame || engine.gameModes.status.mode != PracticeMode.PRACTICE) return
+
+        engine.settings.stimpMeters = practiceGreenSpeed
+        val base = practiceDistanceM.toDouble()
+        when (practiceEntranceMode) {
+            0 -> {
+                engine.settings.sideSlopePct = 0.0
+                engine.settings.longSlopePct = 0.0
+                engine.settings.holeDistanceM = when (practicePatternIndex) {
+                    1 -> practiceRandom.nextInt(20, 151) / 10.0
+                    2 -> (base + practicePatternShotIndex).coerceIn(2.0, 15.0)
+                    3 -> (base - practicePatternShotIndex).coerceIn(2.0, 15.0)
+                    else -> base
+                }
+            }
+            1 -> {
+                engine.settings.holeDistanceM = base
+                engine.settings.sideSlopePct = 0.0
+                engine.settings.longSlopePct = 0.0
+            }
+            else -> {
+                engine.settings.holeDistanceM = base
+                when (practicePatternIndex) {
+                    1 -> {
+                        engine.settings.sideSlopePct = -2.0
+                        engine.settings.longSlopePct = 0.0
+                    }
+                    2 -> {
+                        engine.settings.sideSlopePct = 2.0
+                        engine.settings.longSlopePct = 0.0
+                    }
+                    3 -> {
+                        engine.settings.sideSlopePct = practiceRandom.nextDouble(-4.0, 4.0)
+                        engine.settings.longSlopePct = practiceRandom.nextDouble(-2.5, 2.5)
+                    }
+                    else -> {
+                        engine.settings.sideSlopePct = 0.0
+                        engine.settings.longSlopePct = 0.0
+                    }
+                }
+            }
+        }
+    }
+
+    private fun onSessionShotFinished() {
+        if (!sessionActive || activeSessionIsGame) return
+        practiceShotsTaken++
+        practicePatternShotIndex++
+        if (practiceShotsTaken >= practiceCount) {
+            cancelPendingAuto()
+            overlay.status = "연습 완료 · ${practiceShotsTaken}/${practiceCount}"
+            overlay.invalidate()
+        }
+    }
+
+    private fun shouldContinueAutoAfterResult(): Boolean {
+        if (!sessionActive) return false
+        return if (activeSessionIsGame) {
+            !engine.gameModes.status.completed
+        } else {
+            practiceShotsTaken < practiceCount
+        }
     }
 
     private fun showSettingsDialog() {
+        if (settingsDialog?.isShowing == true) return
+        if (engine.state?.running == true) {
+            toast("공이 멈춘 뒤 설정을 열어주세요")
+            return
+        }
+
+        val wasActiveSession = sessionActive
+        if (wasActiveSession) suspendMeasurementForOverlay()
+        var resumeOnDismiss = wasActiveSession
+
+        fun closeThen(resumeAfter: Boolean = false, block: () -> Unit) {
+            resumeOnDismiss = resumeAfter
+            settingsDialog?.dismiss()
+            settingsDialog = null
+            block()
+        }
+
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -1026,26 +1304,59 @@ class MainActivity : AppCompatActivity() {
         box.addView(pvEyebrow("도구 · TOOLS"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
 
         val utility = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        utility.addView(util("메뉴") { showHomeMenu() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
-        utility.addView(util("STATS") { showStats() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(2); marginEnd = dp(2) })
-        utility.addView(util("업데이트") { appUpdater.check(silent = false) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
+        utility.addView(util("메뉴") { closeThen { showHomeMenu() } }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
+        utility.addView(util("STATS") { closeThen { showStats(resumeAfter = wasActiveSession) } }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(2); marginEnd = dp(2) })
+        utility.addView(util("업데이트") {
+            closeThen {
+                // An updater dialog/installer must never leave a live camera session running behind it.
+                if (wasActiveSession) showHomeMenu()
+                appUpdater.check(silent = false)
+            }
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
         box.addView(utility, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = pvDp(8) })
 
         val utility2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         utility2.addView(util("TV 재연결") { displayController.refresh() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
-        utility2.addView(util("컵 가이드") { showCupGuideScreen() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
+        utility2.addView(util("컵 가이드") {
+            closeThen {
+                if (sessionActive) {
+                    suspendMeasurementForOverlay()
+                    showCupGuideScreen {
+                        menuBackAction = null
+                        menuOverlay.isClickable = false
+                        menuOverlay.visibility = View.GONE
+                        mainHandler.post { armPrecision() }
+                    }
+                } else {
+                    showCupGuideScreen { showHomeMenu() }
+                }
+            }
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
         box.addView(utility2, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = pvDp(8) })
 
         val deployRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         deployRow.addView(
             util("ZIP 배포") {
-                startActivity(Intent(this, DeployActivity::class.java))
+                closeThen {
+                    // DeployActivity is a separate screen. Exit the current measurement session
+                    // first so returning from deploy never exposes a suspended/dead HUD.
+                    if (wasActiveSession) showHomeMenu()
+                    startActivity(Intent(this, DeployActivity::class.java))
+                }
             },
             LinearLayout.LayoutParams(0, dp(44), 1f)
         )
         box.addView(deployRow)
 
-        pvDialog(title = "설정 / 환경", content = box, dismissLabel = "닫기").show()
+        val dialog = pvDialog(title = "설정 / 환경", content = box, dismissLabel = "닫기")
+        settingsDialog = dialog
+        dialog.setOnDismissListener {
+            if (settingsDialog === dialog) settingsDialog = null
+            if (resumeOnDismiss && sessionActive && menuOverlay.visibility != View.VISIBLE) {
+                mainHandler.post { armPrecision() }
+            }
+        }
+        dialog.show()
     }
 
     private fun updateMetricCards(m: ShotMetrics) {
@@ -1079,6 +1390,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    private fun setTvStatus(connected: Boolean, detail: String) {
+        lastTvStatusMessage = detail
+        if (!::tvStatus.isInitialized) return
+        tvStatus.text = if (connected) "● TV 연결" else "○ TV 미연결"
+        tvStatus.setTextColor(if (connected) Pv.primary else Pv.textMid)
+    }
+
+    private fun compactHfrText(detail: String): String {
+        val fps = Regex("(\\d{2,3})fps").find(detail)?.groupValues?.getOrNull(1)
+        return when {
+            detail.contains("RECORDING", ignoreCase = true) -> if (fps != null) "● ${fps}fps REC" else "● HFR REC"
+            detail.contains("분석") -> if (fps != null) "HFR ${fps}fps 분석" else "HFR 분석중"
+            detail.contains("실패") || detail.contains("ERROR", ignoreCase = true) -> "HFR 오류"
+            detail.contains("미지원") -> "HFR 미지원"
+            detail.contains("준비") || detail.contains("READY", ignoreCase = true) -> if (fps != null) "HFR ${fps}fps" else "HFR 준비"
+            detail.startsWith("✓") -> if (fps != null) "✓ ${fps}fps" else "✓ HFR"
+            else -> detail.take(18)
+        }
+    }
+
+    private fun setHfrStatus(short: String, detail: String = short) {
+        lastHfrStatusMessage = detail
+        if (!::hfrStatus.isInitialized) return
+        hfrStatus.text = short
+    }
 
     private fun updateAutoButton() {
         if (!::autoButton.isInitialized) {
@@ -1155,26 +1492,38 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openProvider() {
-        val future =
-            ProcessCameraProvider.getInstance(
-                this
-            )
-
+        if (cameraProviderOpening || ::provider.isInitialized) {
+            if (::provider.isInitialized) beginAutoCalibration()
+            return
+        }
+        cameraProviderOpening = true
+        val future = ProcessCameraProvider.getInstance(this)
         future.addListener(
             {
-                provider =
-                    future.get()
-
-                beginAutoCalibration()
+                cameraProviderOpening = false
+                runCatching { future.get() }
+                    .onSuccess { cameraProvider ->
+                        provider = cameraProvider
+                        beginAutoCalibration()
+                    }
+                    .onFailure { error ->
+                        toast("카메라 초기화 실패: ${error.message ?: "알 수 없는 오류"}")
+                        if (sessionActive) showHomeMenu()
+                    }
             },
-            ContextCompat.getMainExecutor(
-                this
-            )
+            ContextCompat.getMainExecutor(this)
         )
     }
 
     private fun beginAutoCalibration() {
         if (!::provider.isInitialized) {
+            val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                toast("카메라 준비 중")
+                openProvider()
+            } else {
+                permission.launch(Manifest.permission.CAMERA)
+            }
             return
         }
 
@@ -1286,14 +1635,14 @@ class MainActivity : AppCompatActivity() {
                 tracker = tracker,
                 onOverlay = { visual ->
                     runOnUiThread {
-                        overlay.lastOverlay =
-                            visual
-
+                        if (!sessionActive || measurementSuspended) return@runOnUiThread
+                        overlay.lastOverlay = visual
                         overlay.invalidate()
                     }
                 },
                 onShotReady = { metrics ->
                     runOnUiThread {
+                        if (!sessionActive || measurementSuspended) return@runOnUiThread
                         handleMeasuredShot(
                             metrics = metrics,
                             replay = null,
@@ -1311,6 +1660,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun maybeAutoStartAfterCalibration() {
         if (
+            !sessionActive ||
+            measurementSuspended ||
             !autoPlayEnabled ||
             homography == null ||
             !::provider.isInitialized
@@ -1326,6 +1677,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             if (
                 !autoPlayEnabled ||
+                measurementSuspended ||
                 generation != autoGeneration
             ) {
                 return
@@ -1339,6 +1691,7 @@ class MainActivity : AppCompatActivity() {
                     {
                         if (
                             autoPlayEnabled &&
+                            !measurementSuspended &&
                             generation == autoGeneration
                         ) {
                             armPrecision()
@@ -1364,6 +1717,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun armPrecision() {
+        if (!sessionActive) {
+            toast("먼저 연습장/게임장에 입장하세요")
+            return
+        }
+        if (!activeSessionIsGame && practiceShotsTaken >= practiceCount) {
+            toast("${practiceCount}구 연습 완료 · 메뉴에서 새 세션을 시작하세요")
+            return
+        }
         if (
             !::provider.isInitialized ||
             homography == null
@@ -1375,11 +1736,17 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        measurementSuspended = false
         stopSimulation()
 
         engine.gameModes
             .prepareNextIfNeeded()
 
+        if (activeSessionIsGame && gameModeIndex == 2) {
+            engine.settings.holeDistanceM = gameDistanceM.toDouble()
+            engine.settings.sideSlopePct = 0.0
+        }
+        applyPracticeTargetForNextShot()
         updateSettingLabels()
 
         engine.resetSimulation()
@@ -1442,12 +1809,8 @@ class MainActivity : AppCompatActivity() {
                     ),
                 status = { msg ->
                     runOnUiThread {
-                        hfrStatus.text =
-                            msg
-
-                        overlay.status =
-                            msg
-
+                        setHfrStatus(compactHfrText(msg), msg)
+                        overlay.status = msg
                         overlay.invalidate()
                     }
                 }
@@ -1462,16 +1825,14 @@ class MainActivity : AppCompatActivity() {
         if (session == null) {
             hfrHardwareAvailable = false
 
-            hfrStatus.text =
-                "HFR 바인딩 실패 · NORMAL fallback"
+            setHfrStatus("HFR 오류", "HFR 바인딩 실패 · NORMAL fallback")
 
             beginAutoCalibration()
 
             return
         }
 
-        hfrStatus.text =
-            "PRECISION ${session.fps}fps"
+        setHfrStatus("HFR ${session.fps}fps", "PRECISION ${session.fps}fps 준비")
 
         mainHandler.postDelayed(
             {
@@ -1482,6 +1843,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startHfrRecording() {
+        if (!sessionActive || measurementSuspended) return
         val controller =
             hfrController ?: return
 
@@ -1495,10 +1857,15 @@ class MainActivity : AppCompatActivity() {
         impactPolling = false
 
         impactDetector.reset()
+        val recordingGeneration = ++hfrRecordingGeneration
 
         controller.start(
             onStart = { _, fps ->
                 runOnUiThread {
+                    if (recordingGeneration != hfrRecordingGeneration || !sessionActive || measurementSuspended) {
+                        controller.stop()
+                        return@runOnUiThread
+                    }
                     recordingStartedAtMs =
                         System.currentTimeMillis()
 
@@ -1516,14 +1883,22 @@ class MainActivity : AppCompatActivity() {
             },
             onFinalize = { file, fps, error ->
                 runOnUiThread {
+                    if (recordingGeneration != hfrRecordingGeneration) {
+                        runCatching { file?.delete() }
+                        return@runOnUiThread
+                    }
                     impactPolling = false
+
+                    if (!sessionActive || measurementSuspended) {
+                        runCatching { file?.delete() }
+                        return@runOnUiThread
+                    }
 
                     if (
                         error != null ||
                         file == null
                     ) {
-                        hfrStatus.text =
-                            "HFR 저장 실패"
+                        setHfrStatus("HFR 오류", "HFR 저장 실패")
 
                         metricText.text =
                             error?.message
@@ -1577,6 +1952,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pollImpact() {
+        if (!sessionActive || measurementSuspended) return
         val controller =
             hfrController ?: return
 
@@ -1651,8 +2027,7 @@ class MainActivity : AppCompatActivity() {
                     requestedFps = fps,
                     onProgress = { progress ->
                         runOnUiThread {
-                            hfrStatus.text =
-                                progress
+                            setHfrStatus(compactHfrText(progress), progress)
                         }
                     }
                 )
@@ -1671,6 +2046,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
             runOnUiThread {
+                if (!sessionActive || measurementSuspended) {
+                    replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
+                    runCatching { file.delete() }
+                    return@runOnUiThread
+                }
                 if (result == null) {
                     overlay.status =
                         "HFR 분석 실패 · QR/공/헤드마커 확인"
@@ -1678,8 +2058,7 @@ class MainActivity : AppCompatActivity() {
                     metricText.text =
                         "영상에 QR4개 + 흰 공 + 주황/파랑 헤드마커가 보여야 함."
 
-                    hfrStatus.text =
-                        "PRECISION 분석 실패"
+                    setHfrStatus("HFR 분석 실패", "PRECISION 분석 실패")
 
                     overlay.invalidate()
 
@@ -1695,8 +2074,10 @@ class MainActivity : AppCompatActivity() {
                             "PRECISION ${result.fps}fps"
                     )
 
-                    hfrStatus.text =
+                    setHfrStatus(
+                        "✓ ${result.fps}fps",
                         "✓ ${result.fps}fps · ${result.analyzedFrames} frames · F${result.impactFrame}"
+                    )
                 }
 
                 try {
@@ -1712,6 +2093,10 @@ class MainActivity : AppCompatActivity() {
         replay: ImpactReplay?,
         source: String
     ) {
+        if (!sessionActive || measurementSuspended) {
+            replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
+            return
+        }
         updateMetricCards(metrics)
 
         engine.launch(
@@ -1799,14 +2184,10 @@ class MainActivity : AppCompatActivity() {
                     if (result != null) {
                         simulationTicking = false
 
-                        showFinalShotSummary(
-                            result
-                        )
+                        onSessionShotFinished()
+                        showFinalShotSummary(result)
 
-                        if (
-                            autoPlayEnabled &&
-                            !engine.gameModes.status.completed
-                        ) {
+                        if (autoPlayEnabled && shouldContinueAutoAfterResult()) {
                             scheduleAutoNext()
                         }
 
@@ -1868,9 +2249,17 @@ class MainActivity : AppCompatActivity() {
                 append(
                     " · GAME ${game.gameScore}"
                 )
+                if (activeSessionIsGame && game.playerCount > 1) {
+                    append(" · P${game.activePlayer}/${game.playerCount}")
+                }
 
                 if (game.completed) {
                     append(" · COMPLETE")
+                }
+
+                if (!activeSessionIsGame) {
+                    append(" · ${practiceShotsTaken}/${practiceCount}구")
+                    if (practiceShotsTaken >= practiceCount) append(" · COMPLETE")
                 }
 
                 coach?.let {
@@ -1882,6 +2271,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scheduleAutoNext() {
+        if (!sessionActive || measurementSuspended) return
         val generation =
             ++autoGeneration
 
@@ -1889,6 +2279,7 @@ class MainActivity : AppCompatActivity() {
             {
                 if (
                     autoPlayEnabled &&
+                    !measurementSuspended &&
                     generation ==
                     autoGeneration
                 ) {
@@ -1902,7 +2293,7 @@ class MainActivity : AppCompatActivity() {
     private fun scheduleAutoRetry(
         delayMs: Long
     ) {
-        if (!autoPlayEnabled) {
+        if (!sessionActive || measurementSuspended || !autoPlayEnabled) {
             return
         }
 
@@ -1913,6 +2304,7 @@ class MainActivity : AppCompatActivity() {
             {
                 if (
                     autoPlayEnabled &&
+                    !measurementSuspended &&
                     generation ==
                     autoGeneration
                 ) {
@@ -1928,6 +2320,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopHfrRecordingOnly() {
+        hfrRecordingGeneration++
         impactPolling = false
 
         hfrController?.close()
@@ -1940,7 +2333,7 @@ class MainActivity : AppCompatActivity() {
         lastSimulationNs = 0L
     }
 
-    private fun showStats() {
+    private fun showStats(resumeAfter: Boolean = false) {
         val summary = statsRepository.summary()
         val recent = statsRepository.recent(10)
 
@@ -1992,7 +2385,7 @@ class MainActivity : AppCompatActivity() {
             box.addView(chipRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
         }
 
-        pvDialog(
+        val dialog = pvDialog(
             title = "STATS",
             content = box,
             dismissLabel = "닫기",
@@ -2001,7 +2394,13 @@ class MainActivity : AppCompatActivity() {
                 engine.seedHistory(emptyList())
                 toast("기록 초기화함")
             })
-        ).show()
+        )
+        dialog.setOnDismissListener {
+            if (resumeAfter && sessionActive && menuOverlay.visibility != View.VISIBLE) {
+                mainHandler.post { armPrecision() }
+            }
+        }
+        dialog.show()
     }
 
     private fun formatMetrics(
@@ -2068,8 +2467,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-
         autoPlayEnabled = false
         cancelPendingAuto()
 
@@ -2080,13 +2477,18 @@ class MainActivity : AppCompatActivity() {
             null
         )
 
-        hfrController?.close()
-        hfrController = null
+        stopHfrRecordingOnly()
 
-        displayController.stop()
+        settingsDialog?.dismiss()
+        settingsDialog = null
+
+        if (::displayController.isInitialized) displayController.stop()
 
         calibrator?.close()
+        calibrator = null
 
-        cameraExecutor.shutdown()
+        if (::appUpdater.isInitialized) appUpdater.close()
+        if (::cameraExecutor.isInitialized) cameraExecutor.shutdownNow()
+        super.onDestroy()
     }
 }

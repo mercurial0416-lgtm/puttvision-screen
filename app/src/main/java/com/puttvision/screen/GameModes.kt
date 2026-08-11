@@ -23,7 +23,10 @@ data class GameStatus(
     var shots: Int = 0,
     var made: Int = 0,
     var lastPoints: Int = 0,
-    var completed: Boolean = false
+    var completed: Boolean = false,
+    var playerCount: Int = 1,
+    var activePlayer: Int = 1,
+    var playerScores: List<Int> = listOf(0)
 )
 
 class GameModeEngine(
@@ -32,6 +35,19 @@ class GameModeEngine(
     val status = GameStatus()
     private val random = Random(20260811)
     private var pendingPrepare = false
+    private var scores = IntArray(1)
+    private var streaks = IntArray(1)
+    private var bestStreaks = IntArray(1)
+
+    fun configurePlayers(count: Int) {
+        val safe = count.coerceIn(1, 4)
+        status.playerCount = safe
+        scores = IntArray(safe)
+        streaks = IntArray(safe)
+        bestStreaks = IntArray(safe)
+        status.activePlayer = 1
+        syncActivePlayerState()
+    }
 
     fun nextMode(): PracticeMode {
         val values = PracticeMode.entries
@@ -45,10 +61,16 @@ class GameModeEngine(
         status.hole = 1
         status.gameScore = 0
         status.streak = 0
+        status.bestStreak = 0
         status.shots = 0
         status.made = 0
         status.lastPoints = 0
         status.completed = false
+        status.activePlayer = 1
+        scores = IntArray(status.playerCount.coerceIn(1, 4))
+        streaks = IntArray(scores.size)
+        bestStreaks = IntArray(scores.size)
+        status.playerScores = scores.toList()
 
         status.totalHoles = when (mode) {
             PracticeMode.NINE_HOLE -> 9
@@ -59,18 +81,29 @@ class GameModeEngine(
         prepareHole()
     }
 
+    /**
+     * Advances turns only when the next shot is actually armed. This leaves the just-finished
+     * player's name/score visible on the result screen instead of jumping to the next player early.
+     */
     fun prepareNextIfNeeded() {
-        if (!pendingPrepare) return
+        if (!pendingPrepare || status.completed) return
+        pendingPrepare = false
 
-        if (
-            status.mode == PracticeMode.NINE_HOLE ||
-            status.mode == PracticeMode.EIGHTEEN_HOLE
-        ) {
-            if (status.hole < status.totalHoles) {
-                status.hole++
-            }
+        if (status.activePlayer < status.playerCount) {
+            status.activePlayer++
+            syncActivePlayerState()
+            // Pressure difficulty depends on each player's own streak; other modes keep the same
+            // hole/target for all players so multiplayer is fair.
+            if (status.mode == PracticeMode.PRESSURE) prepareHole()
+            return
         }
 
+        status.activePlayer = 1
+        syncActivePlayerState()
+
+        if (status.mode == PracticeMode.NINE_HOLE || status.mode == PracticeMode.EIGHTEEN_HOLE) {
+            if (status.hole < status.totalHoles) status.hole++
+        }
         prepareHole()
     }
 
@@ -119,66 +152,74 @@ class GameModeEngine(
         status.shots++
         if (result.holed) status.made++
 
-        when (status.mode) {
-            PracticeMode.PRACTICE -> {
-                status.lastPoints = if (result.holed) 100 else {
-                    (100 - result.distanceToCupM * 80.0).roundToInt().coerceIn(0, 99)
-                }
+        val playerIndex = (status.activePlayer - 1).coerceIn(0, scores.lastIndex)
+        status.lastPoints = when (status.mode) {
+            PracticeMode.PRACTICE -> if (result.holed) 100 else {
+                (100 - result.distanceToCupM * 80.0).roundToInt().coerceIn(0, 99)
             }
 
-            PracticeMode.DISTANCE -> {
-                status.lastPoints =
-                    (100 - result.distanceToCupM * 100.0).roundToInt().coerceIn(0, 100)
-                status.gameScore += status.lastPoints
-                pendingPrepare = true
-            }
+            PracticeMode.DISTANCE ->
+                (100 - result.distanceToCupM * 100.0).roundToInt().coerceIn(0, 100)
 
             PracticeMode.NINE_HOLE,
-            PracticeMode.EIGHTEEN_HOLE -> {
-                status.lastPoints = if (result.holed) 100 else {
-                    (100 - result.distanceToCupM * 70.0).roundToInt().coerceIn(0, 95)
-                }
-                status.gameScore += status.lastPoints
-
-                if (status.hole < status.totalHoles) {
-                    pendingPrepare = true
-                } else {
-                    status.completed = true
-                }
+            PracticeMode.EIGHTEEN_HOLE -> if (result.holed) 100 else {
+                (100 - result.distanceToCupM * 70.0).roundToInt().coerceIn(0, 95)
             }
 
             PracticeMode.STREAK -> {
                 if (result.holed) {
-                    status.streak++
-                    status.bestStreak = maxOf(status.bestStreak, status.streak)
-                    status.lastPoints = 100 + status.streak * 10
+                    streaks[playerIndex]++
+                    bestStreaks[playerIndex] = maxOf(bestStreaks[playerIndex], streaks[playerIndex])
+                    100 + streaks[playerIndex] * 10
                 } else {
-                    status.lastPoints = status.streak * 10
-                    status.streak = 0
+                    val points = streaks[playerIndex] * 10
+                    streaks[playerIndex] = 0
+                    points
                 }
-                status.gameScore += status.lastPoints
             }
 
             PracticeMode.PRESSURE -> {
                 if (result.holed) {
-                    status.streak++
-                    status.bestStreak = maxOf(status.bestStreak, status.streak)
-                    status.lastPoints = 100 + status.streak * 20
+                    streaks[playerIndex]++
+                    bestStreaks[playerIndex] = maxOf(bestStreaks[playerIndex], streaks[playerIndex])
+                    100 + streaks[playerIndex] * 20
                 } else {
-                    status.lastPoints = 0
-                    status.streak = 0
+                    streaks[playerIndex] = 0
+                    0
                 }
-                status.gameScore += status.lastPoints
-                pendingPrepare = true
             }
 
-            PracticeMode.RANDOM_SLOPE -> {
-                status.lastPoints = if (result.holed) 150 else {
-                    (120 - result.distanceToCupM * 80.0).roundToInt().coerceIn(0, 120)
-                }
-                status.gameScore += status.lastPoints
-                pendingPrepare = true
+            PracticeMode.RANDOM_SLOPE -> if (result.holed) 150 else {
+                (120 - result.distanceToCupM * 80.0).roundToInt().coerceIn(0, 120)
             }
         }
+
+        if (status.mode != PracticeMode.PRACTICE) {
+            scores[playerIndex] += status.lastPoints
+        }
+        status.gameScore = scores[playerIndex]
+        status.streak = streaks[playerIndex]
+        status.bestStreak = bestStreaks.maxOrNull() ?: 0
+        status.playerScores = scores.toList()
+
+        when (status.mode) {
+            PracticeMode.PRACTICE -> Unit
+            PracticeMode.NINE_HOLE,
+            PracticeMode.EIGHTEEN_HOLE -> {
+                val lastPlayer = status.activePlayer >= status.playerCount
+                val lastHole = status.hole >= status.totalHoles
+                if (lastPlayer && lastHole) status.completed = true else pendingPrepare = true
+            }
+            else -> pendingPrepare = true
+        }
+    }
+
+    private fun syncActivePlayerState() {
+        val i = (status.activePlayer - 1).coerceIn(0, scores.lastIndex)
+        status.gameScore = scores[i]
+        status.streak = streaks[i]
+        status.bestStreak = bestStreaks.maxOrNull() ?: 0
+        status.playerScores = scores.toList()
+        status.lastPoints = 0
     }
 }

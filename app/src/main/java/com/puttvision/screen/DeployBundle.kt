@@ -68,6 +68,8 @@ object DeployBundleReader {
         }
 
         if (files.isEmpty()) error("배포할 파일이 없습니다.")
+        val duplicate = files.groupBy { it.path }.entries.firstOrNull { it.value.size > 1 }?.key
+        if (duplicate != null) error("ZIP에 중복 파일 경로가 있습니다: $duplicate")
 
         val deletes = buildList {
             val array = manifest?.optJSONArray("delete")
@@ -79,10 +81,15 @@ object DeployBundleReader {
             }
         }
 
+        val uniqueDeletes = deletes.distinct()
+        val filePaths = files.mapTo(hashSetOf()) { it.path }
+        val conflict = uniqueDeletes.firstOrNull { it in filePaths }
+        if (conflict != null) error("같은 경로를 업로드와 삭제에 동시에 지정할 수 없습니다: $conflict")
+
         val message = manifest?.optString("message")?.takeIf { it.isNotBlank() }
             ?: "PuttVision one-tap deploy"
 
-        return DeployBundle(files, deletes.distinct(), message.take(180))
+        return DeployBundle(files, uniqueDeletes, message.take(180))
     }
 
     private fun normalize(path: String): String {

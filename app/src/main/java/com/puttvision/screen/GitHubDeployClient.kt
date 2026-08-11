@@ -149,19 +149,25 @@ class GitHubDeployClient(
             if (body != null) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             }
         }
 
-        val code = connection.responseCode
-        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-        val text = if (stream != null) BufferedReader(InputStreamReader(stream)).use { it.readText() } else ""
+        return try {
+            if (body != null) {
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val text = if (stream != null) BufferedReader(InputStreamReader(stream)).use { it.readText() } else ""
 
-        if (code !in 200..299) {
-            val message = runCatching { JSONObject(text).optString("message") }.getOrNull()
-            error("GitHub $code: ${message?.takeIf { it.isNotBlank() } ?: text.take(180)}")
+            if (code !in 200..299) {
+                val message = runCatching { JSONObject(text).optString("message") }.getOrNull()
+                error("GitHub $code: ${message?.takeIf { it.isNotBlank() } ?: text.take(180)}")
+            }
+
+            if (text.isBlank()) JSONObject() else JSONObject(text)
+        } finally {
+            connection.disconnect()
         }
-
-        return if (text.isBlank()) JSONObject() else JSONObject(text)
     }
 }

@@ -55,12 +55,14 @@ object ImpactReplayExtractor {
                     val displayFrame =
                         if (bmp.width > maxWidth) {
                             val scale = maxWidth.toFloat() / bmp.width
-                            Bitmap.createScaledBitmap(
+                            val scaled = Bitmap.createScaledBitmap(
                                 bmp,
                                 maxWidth,
-                                (bmp.height * scale).toInt(),
+                                (bmp.height * scale).toInt().coerceAtLeast(1),
                                 false
                             )
+                            if (scaled !== bmp && !bmp.isRecycled) bmp.recycle()
+                            scaled
                         } else bmp
 
                     if (i <= impactFrame) localImpact = frames.size
@@ -70,8 +72,10 @@ object ImpactReplayExtractor {
                 i += stride
             }
 
-            if (frames.size < 4) null
-            else ImpactReplay(
+            if (frames.size < 4) {
+                frames.forEach { if (!it.isRecycled) it.recycle() }
+                null
+            } else ImpactReplay(
                 frames = frames,
                 fps = captureFps,
                 impactIndex = localImpact.coerceIn(0, frames.lastIndex)

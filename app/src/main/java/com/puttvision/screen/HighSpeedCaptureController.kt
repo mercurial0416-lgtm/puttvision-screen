@@ -120,8 +120,9 @@ class HighSpeedCaptureController(
         if (recording != null) return
         val rec = recorder ?: return
 
+        val fpsAtStart = selectedFps
         val dir = File(context.cacheDir, "puttvision_hfr").apply { mkdirs() }
-        val file = File(dir, "shot_${System.currentTimeMillis()}_${selectedFps}fps.mp4")
+        val file = File(dir, "shot_${System.currentTimeMillis()}_${fpsAtStart}fps.mp4")
         activeFile = file
 
         val output = FileOutputOptions.Builder(file).build()
@@ -130,8 +131,8 @@ class HighSpeedCaptureController(
             .start(callbackExecutor) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
-                        status("● ${selectedFps}fps RECORDING")
-                        onStart(file, selectedFps)
+                        status("● ${fpsAtStart}fps RECORDING")
+                        onStart(file, fpsAtStart)
                     }
 
                     is VideoRecordEvent.Finalize -> {
@@ -141,10 +142,9 @@ class HighSpeedCaptureController(
                             )
                         } else null
 
-                        val f = activeFile
-                        activeFile = null
+                        if (activeFile == file) activeFile = null
                         recording = null
-                        onFinalize(f, selectedFps, error)
+                        onFinalize(file.takeIf { it.exists() }, fpsAtStart, error)
                     }
                 }
             }
@@ -155,8 +155,22 @@ class HighSpeedCaptureController(
     }
 
     fun close() {
-        try { recording?.stop() } catch (_: Throwable) {}
-        recording = null
-        activeFile = null
+        val current = recording
+        if (current != null) {
+            // Finalize is asynchronous. Keep activeFile/recording state intact until the callback
+            // so the owner can delete the real temp file instead of receiving a false null file.
+            try {
+                current.stop()
+            } catch (_: Throwable) {
+                recording = null
+                activeFile?.let { runCatching { it.delete() } }
+                activeFile = null
+            }
+        } else {
+            activeFile?.let { runCatching { it.delete() } }
+            activeFile = null
+        }
+        recorder = null
+        videoCapture = null
     }
 }

@@ -10,6 +10,7 @@ import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -75,7 +76,7 @@ class DeployActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(pvSdp(28), pvSdp(24), pvSdp(28), pvSdp(24))
+            setPadding(pvSdp(18), pvSdp(14), pvSdp(18), pvSdp(14))
             setBackgroundColor(Pv.ink)
         }
 
@@ -103,9 +104,10 @@ class DeployActivity : AppCompatActivity() {
 
         status = TextView(this).apply {
             text = if (SecureTokenStore(this@DeployActivity).hasToken()) "GitHub 연결됨 · ZIP 선택 대기" else "최초 1회 GitHub 연결 필요"
-            textSize = 15f
+            textSize = pvSp(13.5f)
             setTextColor(Pv.primary)
             gravity = Gravity.CENTER
+            maxLines = 3
             setPadding(0, pvSdp(16), 0, pvSdp(16))
         }
         panel.addView(status, LinearLayout.LayoutParams(-1, -2))
@@ -114,20 +116,15 @@ class DeployActivity : AppCompatActivity() {
         panel.addView(deployButton, LinearLayout.LayoutParams(-1, pvSdp(52)))
 
         val utilities = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        utilities.addView(pvButton("GitHub 연결", PvButtonStyle.SECONDARY) { controller.showTokenSetup() }, LinearLayout.LayoutParams(0, pvSdp(46), 1f))
-        utilities.addView(pvButton("업데이트 확인", PvButtonStyle.SECONDARY) { updater.check(silent = false) }, LinearLayout.LayoutParams(0, pvSdp(46), 1f).apply { marginStart = pvSdp(8) })
-        utilities.addView(pvButton("직전 배포 롤백", PvButtonStyle.GHOST) {
-                val message = TextView(this@DeployActivity).apply {
-                    text = "현재 main 내용을 직전 ZIP 배포 직전 상태로 복구 커밋합니다. 계속할까요?"
-                    textSize = Pv.body
-                    setTextColor(Pv.textMid)
-                    setLineSpacing(pvDp(3).toFloat(), 1f)
-                }
-                pvDialog(
+        utilities.addView(pvButton("GitHub 연결", PvButtonStyle.SECONDARY, textSp = 9.5f, scaled = true) { controller.showTokenSetup() }, LinearLayout.LayoutParams(0, pvSdp(46), 1f))
+        utilities.addView(pvButton("업데이트 확인", PvButtonStyle.SECONDARY, textSp = 9.5f, scaled = true) { updater.check(silent = false) }, LinearLayout.LayoutParams(0, pvSdp(46), 1f).apply { marginStart = pvSdp(8) })
+        utilities.addView(pvButton("직전 배포 롤백", PvButtonStyle.GHOST, textSp = 9.5f, scaled = true) {
+                pvMessageDialog(
                     title = "직전 배포로 롤백",
-                    content = message,
-                    dismissLabel = "취소",
-                    extraActions = listOf("롤백" to { controller.rollback() })
+                    message = "현재 main 내용을 직전 ZIP 배포 직전 상태로 복구 커밋합니다. 계속할까요?",
+                    positiveLabel = "롤백",
+                    onPositive = { controller.rollback() },
+                    negativeLabel = "취소"
                 ).show()
         }, LinearLayout.LayoutParams(0, pvSdp(46), 1f).apply { marginStart = pvSdp(8) })
         panel.addView(utilities, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvSdp(10) })
@@ -146,7 +143,25 @@ class DeployActivity : AppCompatActivity() {
 
         root.addView(panel, LinearLayout.LayoutParams(-1, -2))
 
-        setContentView(root)
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = ScrollView.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setBackgroundColor(Pv.ink)
+            addView(root, ScrollView.LayoutParams(-1, -2))
+        }
+        setContentView(scroll)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::updater.isInitialized) updater.resumePendingInstallIfPossible()
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        if (::controller.isInitialized) controller.close()
+        if (::updater.isInitialized) updater.close()
+        super.onDestroy()
     }
 
     private fun consumeSharedOrPick() {
