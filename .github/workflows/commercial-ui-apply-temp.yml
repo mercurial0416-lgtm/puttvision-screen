@@ -1,0 +1,67 @@
+name: Apply commercial UI temp
+
+on:
+  push:
+    branches: [ commercial-ui-v3 ]
+    paths: [ '.github/workflows/commercial-ui-apply-temp.yml' ]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply commercial MainActivity UI
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/puttvision/screen/MainActivity.kt')
+          source = path.read_text()
+
+          def replace_between(src, start_marker, next_marker, replacement_path):
+              start = src.index(start_marker)
+              end = src.index(next_marker, start)
+              replacement = Path(replacement_path).read_text().rstrip()
+              return src[:start] + replacement + '\n\n    ' + src[end:]
+
+          source = replace_between(source, 'private fun buildUi() {', 'private fun buildSmartPuttMenu', '.commercial-ui/buildUi.txt')
+          source = replace_between(source, 'private fun buildVideoHomeScreen(): View {', 'private fun sectionPanel', '.commercial-ui/home.txt')
+          source = replace_between(source, 'private fun buildPracticeEntrance(): View {', 'private fun showGameEntrance', '.commercial-ui/practice.txt')
+          source = replace_between(source, 'private fun buildGameEntrance(): View {', 'private fun showCupGuideScreen', '.commercial-ui/game.txt')
+          source = replace_between(source, 'private fun showPreStartGuide(game: Boolean) {', 'private fun showMatPrep', '.commercial-ui/prestart.txt')
+          source = replace_between(source, 'private fun showMatPrep(game: Boolean) {', 'private fun startConfiguredSession', '.commercial-ui/matprep.txt')
+          source = replace_between(source, 'private fun showSettingsDialog() {', 'private fun updateMetricCards', '.commercial-ui/settings.txt')
+          path.write_text(source)
+          PY
+
+      - name: Compile commercial UI
+        run: gradle assembleDebug
+
+      - name: Commit verified commercial UI
+        shell: bash
+        run: |
+          git clean -fdX
+          rm -rf .commercial-ui
+          rm -f .github/workflows/commercial-ui-apply-temp.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: commercial-grade PuttVision UI and interface"
+          git push origin HEAD:commercial-ui-v3
