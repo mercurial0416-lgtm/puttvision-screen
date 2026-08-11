@@ -30,6 +30,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('app/src/main/java/com/puttvision/screen/MainActivity.kt')
           s = p.read_text()
 
@@ -51,41 +52,16 @@ jobs:
                   raise SystemExit(f'missing polish target: {old[:80]}')
               s = s.replace(old, new, 1)
 
-          old = '''        metricText.text =
-            buildString {
-                append(
-                    formatMetrics(
-                        metrics
-                    )
-                )
-
-                preScore?.let {
-                    append(
-                        "\\nPerfect ${it.total}"
-                    )
-                }
-
-                coach?.let {
-                    append(
-                        " · ${it.headline}"
-                    )
-                }
-
-                metrics.estimatedMatStimpM?.let {
-                    append(
-                        "\\nMAT AUTO-CAL ${"%.2f".format(it)}m"
-                    )
-                }
-            }'''
-          new = '''        metricText.text =
+          anchor = '        overlay.status =\n            "$source · TV SHOT"\n\n'
+          a = s.index(anchor) + len(anchor)
+          b = s.index('\n\n        overlay.invalidate()', a)
+          status_block = '''        metricText.text =
             buildString {
                 append("샷 측정 완료")
                 preScore?.let { append(" · SCORE ${it.total}") }
                 coach?.let { append(" · ${it.headline}") }
             }'''
-          if old not in s:
-              raise SystemExit('measured-shot status block not found')
-          s = s.replace(old, new, 1)
+          s = s[:a] + status_block + s[b:]
           p.write_text(s)
           PY
 
