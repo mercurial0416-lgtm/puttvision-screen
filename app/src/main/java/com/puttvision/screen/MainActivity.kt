@@ -484,7 +484,11 @@ class MainActivity : AppCompatActivity() {
     }
     controls.addView(pvButton("측정 준비", PvButtonStyle.PRIMARY, textSp = if (compact) 7f else 8.2f, radiusDp = Pv.rLg) { armPrecision() }, LinearLayout.LayoutParams(0, -1, 1.15f))
     controls.addView(pvButton("보정", PvButtonStyle.GHOST, textSp = if (compact) 6.2f else 7.2f, radiusDp = Pv.rLg) { beginAutoCalibration() }, LinearLayout.LayoutParams(0, -1, .66f).apply { marginStart = pvDp(5) })
-    controls.addView(pvButton("분석", PvButtonStyle.GHOST, textSp = if (compact) 6.2f else 7.2f, radiusDp = Pv.rLg) { showStats(resumeAfter = sessionActive) }, LinearLayout.LayoutParams(0, -1, .66f).apply { marginStart = pvDp(5) })
+    controls.addView(pvButton("분석", PvButtonStyle.GHOST, textSp = if (compact) 6.2f else 7.2f, radiusDp = Pv.rLg) {
+        val resume = sessionActive
+        if (resume) suspendMeasurementForOverlay()
+        showStats(resumeAfter = resume)
+    }, LinearLayout.LayoutParams(0, -1, .66f).apply { marginStart = pvDp(5) })
     dock.addView(controls, LinearLayout.LayoutParams(0, pvDp(if (compact) 42 else 48), 1.20f).apply { marginStart = pvDp(if (compact) 8 else 12) })
 
     // Keep legacy targets initialized without exposing developer-style telemetry.
@@ -1684,7 +1688,7 @@ class MainActivity : AppCompatActivity() {
             engine.gameModes.setMode(PracticeMode.PRACTICE)
         }
 
-        modeButton.text = engine.gameModes.status.mode.label
+        modeButton.text = "메뉴"
         metricText.text = "${engine.gameModes.status.mode.label} · READY"
         updateSettingLabels()
         menuBackAction = null
@@ -1986,9 +1990,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateMetricCards(m: ShotMetrics) {
         fun set(key: String, value: String) { metricCards[key]?.text = value }
-        set("ball", m.ballSpeedMps?.let { "%.2f m/s".format(it) } ?: "--")
-        set("launch", "%+.2f°".format(m.launchAngleDeg))
-        set("head", m.headSpeedMps?.let { "%.2f m/s".format(it) } ?: "--")
+        set("ball", m.ballSpeedMps?.let { "%.2f".format(it) } ?: "--")
+        set("launch", "%+.2f".format(m.launchAngleDeg))
+        set("head", m.headSpeedMps?.let { "%.2f".format(it) } ?: "--")
         set("face", m.faceAngleDeg?.let { "%+.2f°".format(it) } ?: "--")
         set("path", m.pathAngleDeg?.let { "%+.2f°".format(it) } ?: "--")
         set("f2p", m.faceToPathDeg?.let { "%+.2f°".format(it) } ?: "--")
@@ -2495,10 +2499,10 @@ class MainActivity : AppCompatActivity() {
                         System.currentTimeMillis()
 
                     overlay.status =
-                        "● ${fps}fps AUTO READY · 퍼팅하셈"
+                        "● ${fps}fps READY · 퍼팅하세요"
 
                     metricText.text =
-                        "공/퍼터 자동감지 · 임팩트 후 자동 종료/분석"
+                        "공과 퍼터를 감지했습니다 · 퍼팅하세요"
 
                     overlay.invalidate()
 
@@ -2560,10 +2564,10 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     overlay.status =
-                        "HFR ${fps}fps 정밀분석"
+                        "샷 분석 중"
 
                     metricText.text =
-                        "임팩트/템포/매트마찰/리플레이 계산중..."
+                        "임팩트와 스트로크를 분석하고 있습니다"
 
                     overlay.invalidate()
 
@@ -2678,10 +2682,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (result == null) {
                     overlay.status =
-                        "HFR 분석 실패 · QR/공/헤드마커 확인"
+                        "분석 실패 · 카메라 정렬을 확인하세요"
 
                     metricText.text =
-                        "영상에 QR4개 + 흰 공 + 주황/파랑 헤드마커가 보여야 함."
+                        "마커와 공, 퍼터가 화면 안에 모두 보이는지 확인하세요."
 
                     setHfrStatus("HFR 분석 실패", "PRECISION 분석 실패")
 
@@ -2747,31 +2751,11 @@ class MainActivity : AppCompatActivity() {
             "$source · TV SHOT"
 
         metricText.text =
-            buildString {
-                append(
-                    formatMetrics(
-                        metrics
-                    )
-                )
-
-                preScore?.let {
-                    append(
-                        "\nPerfect ${it.total}"
-                    )
-                }
-
-                coach?.let {
-                    append(
-                        " · ${it.headline}"
-                    )
-                }
-
-                metrics.estimatedMatStimpM?.let {
-                    append(
-                        "\nMAT AUTO-CAL ${"%.2f".format(it)}m"
-                    )
-                }
-            }
+  buildString {
+      append("샷 측정 완료")
+      preScore?.let { append(" · SCORE ${it.total}") }
+      coach?.let { append(" · ${it.headline}") }
+  }
 
         overlay.invalidate()
     }
