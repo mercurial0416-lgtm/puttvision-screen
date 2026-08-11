@@ -223,189 +223,188 @@ class GreenView(
     }
 
     private fun drawAimReadout(c: Canvas, read: GreenRead) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val left = w * .695f
-        val right = w * .968f
-        val top = h * .185f
-        val bottom = h * .315f
+    // During the roll the green and actual trail are the interface. Do not cover them.
+    if (engine.state?.running == true || engine.lastResult != null) return
 
-        rect.set(left, top, right, bottom)
-        p.color = Color.argb(228, 6, 10, 13)
-        c.drawRoundRect(rect, h * .018f, h * .018f, p)
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = 1.2f
-        p.color = Color.argb(145, 67, 91, 78)
-        c.drawRoundRect(rect, h * .018f, h * .018f, p)
-        p.style = Paint.Style.FILL
+    val w = width.toFloat()
+    val h = height.toFloat()
+    val right = w * .963f
+    val top = h * .185f
+    val widthBox = w * .245f
+    val left = right - widthBox
+    val bottom = top + h * .112f
 
-        val pad = w * .014f
+    rect.set(left, top, right, bottom)
+    p.color = Color.argb(216, 5, 9, 11)
+    c.drawRoundRect(rect, h * .016f, h * .016f, p)
+    p.style = Paint.Style.STROKE
+    p.strokeWidth = 1.1f
+    p.color = Color.argb(115, 72, 96, 80)
+    c.drawRoundRect(rect, h * .016f, h * .016f, p)
+    p.style = Paint.Style.FILL
+
+    val pad = w * .013f
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(9f, w * .0068f)
+    p.color = Pv.primary
+    c.drawText("GREEN READ", left + pad, top + h * .026f, p)
+
+    val main = if (read.aimSideLabel == "센터") {
+        "센터"
+    } else {
+        "${read.aimSideLabel}  ${"%.1f".format(read.cupCount)}컵"
+    }
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    p.textSize = max(24f, w * .018f)
+    p.color = Pv.textHi
+    c.drawText(main, left + pad, top + h * .068f, p)
+
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(9f, w * .0068f)
+    p.color = Pv.textMid
+    val head = if (read.aimSideLabel == "센터") "헤드 0.0개" else "헤드 ${"%.1f".format(read.putterHeadCount)}개"
+    c.drawText("$head  ·  ${read.paceHint}", left + pad, bottom - h * .014f, p)
+}
+
+        private fun drawBrandRail(c: Canvas) {
+    val w = width.toFloat()
+    val h = height.toFloat()
+    val game = engine.gameModes.status
+    val settings = engine.settings
+
+    val left = w * .032f
+    val top = h * .032f
+    val right = w * .968f
+    val bottom = h * .128f
+    rect.set(left, top, right, bottom)
+    p.color = Color.argb(205, 5, 9, 11)
+    c.drawRoundRect(rect, h * .017f, h * .017f, p)
+    p.style = Paint.Style.STROKE
+    p.strokeWidth = 1.1f
+    p.color = Color.argb(100, 58, 73, 78)
+    c.drawRoundRect(rect, h * .017f, h * .017f, p)
+    p.style = Paint.Style.FILL
+
+    val pad = w * .015f
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(17f, w * .013f)
+    p.color = Pv.textHi
+    c.drawText("PUTTVISION", left + pad, top + h * .039f, p)
+    p.textSize = max(9f, w * .0068f)
+    p.color = Pv.primary
+    c.drawText("SCREEN PUTTING", left + pad, top + h * .067f, p)
+
+    fun compactMetric(x: Float, label: String, value: String, accent: Int = Pv.textHi) {
         p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(10f, w * .0078f)
-        p.color = Pv.primary
-        c.drawText("추천 에임 · GREEN READ", left + pad, top + h * .029f, p)
-
-        val main = if (read.aimSideLabel == "센터") {
-            "센터 조준"
-        } else {
-            "${read.aimSideLabel}  ${"%.1f".format(read.cupCount)}컵"
-        }
-        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        p.textSize = max(24f, w * .019f)
-        p.color = Pv.textHi
-        c.drawText(main, left + pad, top + h * .071f, p)
-
-        p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(10f, w * .0075f)
-        p.color = Pv.textMid
-        val head = if (read.aimSideLabel == "센터") "퍼터헤드 0.0개" else "퍼터헤드 ${"%.1f".format(read.putterHeadCount)}개"
-        c.drawText("$head  ·  ${read.paceHint}", left + pad, top + h * .102f, p)
-
-        p.typeface = Typeface.MONOSPACE
-        p.textSize = max(8f, w * .0064f)
+        p.textSize = max(8f, w * .0061f)
         p.color = Pv.textLo
-        val breakText = "경사 ${if (read.effectiveSideSlopePct >= 0) "+" else ""}${"%.1f".format(read.effectiveSideSlopePct)}%  ·  종경사 ${if (read.effectiveLongSlopePct >= 0) "+" else ""}${"%.1f".format(read.effectiveLongSlopePct)}%"
-        c.drawText(breakText, left + pad, bottom - h * .012f, p)
+        c.drawText(label, x, top + h * .027f, p)
+        p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        p.textSize = max(18f, w * .014f)
+        p.color = accent
+        c.drawText(value, x, top + h * .064f, p)
     }
 
-    private fun drawBrandRail(c: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val game = engine.gameModes.status
-        val settings = engine.settings
+    compactMetric(left + w * .205f, "DISTANCE", "${"%.1f".format(settings.holeDistanceM)}m", Pv.primary)
+    compactMetric(left + w * .335f, "GREEN", "${"%.1f".format(settings.stimpMeters)}")
 
-        val left = w * .032f
-        val top = h * .032f
-        val right = w * .968f
-        val bottom = h * .155f
-        rect.set(left, top, right, bottom)
-        p.color = Color.argb(220, 7, 11, 14)
-        c.drawRoundRect(rect, h * .020f, h * .020f, p)
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = 1.2f
-        p.color = Color.argb(140, 55, 68, 77)
-        c.drawRoundRect(rect, h * .020f, h * .020f, p)
-        p.style = Paint.Style.FILL
+    p.textAlign = Paint.Align.RIGHT
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(9f, w * .0068f)
+    p.color = Pv.textLo
+    c.drawText("${game.mode.label}  ·  ${game.activePlayer}/${game.playerCount}", right - pad, top + h * .028f, p)
+    p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    p.textSize = max(18f, w * .014f)
+    p.color = Pv.textHi
+    val modeValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else game.gameScore.toString()
+    c.drawText(modeValue, right - pad, top + h * .065f, p)
+    p.textAlign = Paint.Align.LEFT
+    p.typeface = Typeface.DEFAULT
+}
 
-        val padX = w * .016f
-        val labelY = top + h * .033f
-        val valueY = top + h * .083f
+        private fun drawShotTelemetry(c: Canvas) {
+    val shot = engine.currentShot ?: return
+    val w = width.toFloat()
+    val h = height.toFloat()
+    val left = w * .032f
+    val bottom = h * .955f
+    val top = h * .855f
+    val right = w * .555f
 
+    rect.set(left, top, right, bottom)
+    p.color = Color.argb(205, 5, 9, 11)
+    c.drawRoundRect(rect, h * .016f, h * .016f, p)
+
+    val items = listOf(
+        Triple("BALL", "%.2f".format(shot.ballSpeedMps), "m/s"),
+        Triple("START", "%+.2f".format(shot.launchAngleDeg), "°"),
+        Triple("HEAD", shot.headSpeedMps?.let { "%.2f".format(it) } ?: "--", "m/s")
+    )
+    val pad = w * .014f
+    val colW = (right - left - pad * 2f) / items.size
+    items.forEachIndexed { i, item ->
+        val x = left + pad + colW * i
         p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(19f, w * .015f)
-        p.color = Pv.textHi
-        c.drawText("PUTTVISION", left + padX, labelY + h * .013f, p)
-        p.textSize = max(11f, w * .0085f)
-        p.color = Pv.primary
-        c.drawText("SCREEN", left + padX, valueY + h * .010f, p)
-
-        fun metric(x: Float, label: String, value: String, accent: Int = Pv.textHi) {
-            p.typeface = Typeface.DEFAULT_BOLD
-            p.textSize = max(10f, w * .0078f)
-            p.color = Pv.textLo
-            c.drawText(label, x, labelY, p)
-            p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            p.textSize = max(23f, w * .018f)
-            p.color = accent
-            c.drawText(value, x, valueY, p)
-        }
-
-        metric(left + w * .185f, "TARGET", "${"%.1f".format(settings.holeDistanceM)} m", Pv.primary)
-        metric(left + w * .335f, "GREEN", "${"%.1f".format(settings.stimpMeters)}")
-        metric(left + w * .455f, "BREAK", if (settings.sideSlopePct >= 0) "R ${"%.1f".format(abs(settings.sideSlopePct))}%" else "L ${"%.1f".format(abs(settings.sideSlopePct))}%")
-        metric(left + w * .595f, "GRADE", if (settings.longSlopePct >= 0) "+${"%.1f".format(settings.longSlopePct)}%" else "${"%.1f".format(settings.longSlopePct)}%")
-
-        p.textAlign = Paint.Align.RIGHT
-        p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(11f, w * .0085f)
+        p.textSize = max(8f, w * .0061f)
         p.color = Pv.textLo
-        c.drawText("${game.mode.label.uppercase()}  ·  PLAYER ${game.activePlayer}/${game.playerCount}", right - padX, labelY, p)
+        c.drawText(item.first, x, top + h * .028f, p)
         p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        p.textSize = max(22f, w * .017f)
-        p.color = Pv.textHi
-        val rightValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else "${game.gameScore}"
-        c.drawText(rightValue, right - padX, valueY, p)
-        p.textAlign = Paint.Align.LEFT
-        p.typeface = Typeface.DEFAULT
-    }
-
-    private fun drawShotTelemetry(c: Canvas) {
-        val shot = engine.currentShot ?: return
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val left = w * .032f
-        val bottom = h * .955f
-        val top = h * .825f
-        val right = w * .61f
-
-        rect.set(left, top, right, bottom)
-        p.color = Color.argb(214, 7, 11, 14)
-        c.drawRoundRect(rect, h * .018f, h * .018f, p)
-
-        val pad = w * .014f
-        val columns = listOf(
-            Triple("BALL SPEED", shot.ballSpeedMps?.let { "%.2f".format(it) } ?: "--", "m/s"),
-            Triple("HEAD SPEED", shot.headSpeedMps?.let { "%.2f".format(it) } ?: "--", "m/s"),
-            Triple("FACE", shot.faceAngleDeg?.let { "%+.2f".format(it) } ?: "--", "°"),
-            Triple("PATH", shot.pathAngleDeg?.let { "%+.2f".format(it) } ?: "--", "°")
-        )
-        val colW = (right - left - pad * 2f) / columns.size
-        columns.forEachIndexed { index, item ->
-            val x = left + pad + colW * index
-            p.color = Pv.textLo
-            p.typeface = Typeface.DEFAULT_BOLD
-            p.textSize = max(9f, w * .0072f)
-            c.drawText(item.first, x, top + h * .036f, p)
-            p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            p.textSize = max(23f, w * .018f)
-            p.color = if (index == 0) Pv.primary else Pv.textHi
-            c.drawText(item.second, x, top + h * .087f, p)
-            p.typeface = Typeface.DEFAULT_BOLD
-            p.textSize = max(9f, w * .0068f)
-            p.color = Pv.textLo
-            c.drawText(item.third, x + colW * .63f, top + h * .087f, p)
-        }
-    }
-
-    private fun drawResult(c: Canvas) {
-        val result = engine.lastResult ?: return
-        val score = engine.strokeScore
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val left = w * .665f
-        val right = w * .968f
-        val top = h * .745f
-        val bottom = h * .955f
-
-        rect.set(left, top, right, bottom)
-        p.color = Color.argb(232, 7, 11, 14)
-        c.drawRoundRect(rect, h * .020f, h * .020f, p)
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = 1.4f
-        p.color = if (result.holed) Color.argb(170, 246, 190, 74) else Color.argb(135, 78, 209, 121)
-        c.drawRoundRect(rect, h * .020f, h * .020f, p)
-        p.style = Paint.Style.FILL
-
-        val x = left + w * .018f
+        p.textSize = max(23f, w * .018f)
+        p.color = if (i == 0) Pv.primary else Pv.textHi
+        c.drawText(item.second, x, top + h * .072f, p)
         p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(11f, w * .0085f)
-        p.color = if (result.holed) Pv.amber else Pv.primary
-        c.drawText(if (result.holed) "HOLED" else "SHOT RESULT", x, top + h * .042f, p)
-
-        p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        p.textSize = max(38f, w * .030f)
-        p.color = Pv.textHi
-        val main = if (result.holed) "IN" else "${"%.2f".format(result.distanceToCupM)} m"
-        c.drawText(main, x, top + h * .112f, p)
-
-        p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(13f, w * .010f)
-        val side = when {
-            result.finishX > .03 -> "RIGHT"
-            result.finishX < -.03 -> "LEFT"
-            else -> "CENTER"
-        }
-        p.color = Pv.textMid
-        c.drawText("$side  ·  ${score?.let { "SCORE ${it.total}" } ?: "ANALYZING"}", x, top + h * .158f, p)
+        p.textSize = max(8f, w * .006f)
+        p.color = Pv.textLo
+        c.drawText(item.third, x + colW * .61f, top + h * .071f, p)
     }
+}
+
+        private fun drawResult(c: Canvas) {
+    val result = engine.lastResult ?: return
+    val score = engine.strokeScore
+    val w = width.toFloat()
+    val h = height.toFloat()
+    val left = w * .685f
+    val right = w * .968f
+    val top = h * .785f
+    val bottom = h * .955f
+
+    rect.set(left, top, right, bottom)
+    p.color = Color.argb(228, 5, 9, 11)
+    c.drawRoundRect(rect, h * .020f, h * .020f, p)
+    p.style = Paint.Style.STROKE
+    p.strokeWidth = 1.3f
+    p.color = if (result.holed) Color.argb(175, 246, 190, 74) else Color.argb(130, 78, 209, 121)
+    c.drawRoundRect(rect, h * .020f, h * .020f, p)
+    p.style = Paint.Style.FILL
+
+    val x = left + w * .017f
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(10f, w * .0075f)
+    p.color = if (result.holed) Pv.amber else Pv.primary
+    c.drawText(if (result.holed) "HOLED" else "RESULT", x, top + h * .034f, p)
+
+    p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    p.textSize = max(34f, w * .027f)
+    p.color = Pv.textHi
+    val main = if (result.holed) "IN" else "${"%.0f".format(result.distanceToCupM * 100.0)} cm"
+    c.drawText(main, x, top + h * .093f, p)
+
+    val side = when {
+        result.finishX > .03 -> "오른쪽"
+        result.finishX < -.03 -> "왼쪽"
+        else -> "센터"
+    }
+    p.typeface = Typeface.DEFAULT_BOLD
+    p.textSize = max(10f, w * .0075f)
+    p.color = Pv.textMid
+    c.drawText("$side  ·  ${score?.let { "SCORE ${it.total}" } ?: "분석 중"}", x, top + h * .128f, p)
+
+    val read = GreenReadAdvisor.read(engine.settings)
+    p.typeface = Typeface.DEFAULT
+    p.textSize = max(9f, w * .0068f)
+    p.color = Pv.textLo
+    val readText = if (read.aimSideLabel == "센터") "추천 에임 센터" else "추천 ${read.aimSideLabel} ${"%.1f".format(read.cupCount)}컵"
+    c.drawText(readText, x, bottom - h * .014f, p)
+}
 }
