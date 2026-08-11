@@ -1,0 +1,361 @@
+private fun showPracticeEntrance() {
+        replaceMenuScreen(buildPracticeEntrance()) { showHomeMenu() }
+    }
+
+    private fun showPracticeGreenPicker() {
+        replaceMenuScreen(buildPracticeGreenPicker()) { showPracticeEntrance() }
+    }
+
+    private fun buildPracticeEntrance(): View {
+        val compact = compactLandscape
+        val selectedGreen = practiceGreenPresets[practiceGreenPresetIndex]
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Pv.inkDeep)
+            setPadding(sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14), sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14))
+        }
+
+        root.addView(
+            buildEntranceHeader("연습 세션", "PRACTICE LAB", { showCupGuideScreen { showPracticeEntrance() } }) { showHomeMenu() },
+            LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(if (compact) 8 else 12) }
+        )
+
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val visual = FrameLayout(this).apply {
+            background = pvRounded(Color.rgb(8, 12, 14), Pv.rXl, Pv.lineSoft)
+            clipToOutline = true
+            if (practiceEntranceMode == 2) {
+                addView(PracticeGreenPreviewView(this@MainActivity).apply {
+                    styleIndex = selectedGreen.previewStyle
+                }, FrameLayout.LayoutParams(-1, -1))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showPracticeGreenPicker() }
+            } else {
+                addView(CommercialModeVisualView(this@MainActivity, false), FrameLayout.LayoutParams(-1, -1))
+            }
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.BOTTOM
+                setPadding(sdp(if (compact) 14 else 18), sdp(12), sdp(if (compact) 14 else 18), sdp(if (compact) 12 else 16))
+                addView(TextView(this@MainActivity).apply {
+                    text = when (practiceEntranceMode) {
+                        1 -> "CUP CONTROL"
+                        2 -> "GREEN READING"
+                        else -> "DISTANCE CONTROL"
+                    }
+                    setTextColor(Pv.primary)
+                    textSize = scaledSp(if (compact) 7f else 8f)
+                    typeface = Typeface.DEFAULT_BOLD
+                    letterSpacing = .14f
+                    includeFontPadding = false
+                })
+                addView(TextView(this@MainActivity).apply {
+                    text = when (practiceEntranceMode) {
+                        1 -> "같은 스트로크로\n컵 거리 감각을 맞춥니다."
+                        2 -> "${selectedGreen.title}\n눌러서 그린을 변경하세요."
+                        else -> "거리별 볼 스피드와\n스트로크 크기를 잡습니다."
+                    }
+                    setTextColor(Pv.textHi)
+                    textSize = scaledSp(if (compact) 15.5f else 18.5f)
+                    typeface = Typeface.DEFAULT_BOLD
+                    includeFontPadding = false
+                    setLineSpacing(sdp(1).toFloat(), 1f)
+                })
+                if (practiceEntranceMode == 2) {
+                    addView(TextView(this@MainActivity).apply {
+                        text = "${selectedGreen.subtitle}  ·  BREAK ${if (selectedGreen.sideSlopePct >= 0) "+" else ""}${"%.1f".format(selectedGreen.sideSlopePct)}%  ·  GRADE ${if (selectedGreen.longSlopePct >= 0) "+" else ""}${"%.1f".format(selectedGreen.longSlopePct)}%"
+                        setTextColor(Pv.textMid)
+                        textSize = scaledSp(if (compact) 6.2f else 7.2f)
+                        typeface = Typeface.MONOSPACE
+                        includeFontPadding = false
+                        setPadding(0, sdp(5), 0, 0)
+                    })
+                }
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+        body.addView(visual, LinearLayout.LayoutParams(0, -1, .42f).apply { marginEnd = sdp(if (compact) 10 else 14) })
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = pvRounded(Pv.surface, Pv.rXl, Pv.lineSoft)
+            setPadding(sdp(if (compact) 13 else 17), sdp(if (compact) 10 else 13), sdp(if (compact) 13 else 17), sdp(if (compact) 10 else 13))
+        }
+
+        fun sectionLabel(textValue: String): TextView = TextView(this).apply {
+            text = textValue
+            setTextColor(Pv.textLo)
+            textSize = scaledSp(if (compact) 6.2f else 7.2f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .12f
+            includeFontPadding = false
+        }
+
+        panel.addView(sectionLabel("TRAINING TYPE"))
+        val modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("거리", "컵", "그린").forEachIndexed { i, label ->
+            modeRow.addView(
+                darkChoice(label, practiceEntranceMode == i) {
+                    practiceEntranceMode = i
+                    practicePatternIndex = 0
+                    showPracticeEntrance()
+                },
+                LinearLayout.LayoutParams(0, sdp(if (compact) 38 else 44), 1f).apply { if (i > 0) marginStart = sdp(5) }
+            )
+        }
+        panel.addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(6) })
+
+        val middle = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        left.addView(sectionLabel("TARGET DISTANCE"))
+        val distanceValue = TextView(this).apply {
+            text = "${practiceDistanceM} m"
+            setTextColor(Pv.textHi)
+            textSize = scaledSp(if (compact) 21f else 25f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            includeFontPadding = false
+            setPadding(0, sdp(3), 0, 0)
+        }
+        left.addView(distanceValue)
+        val distanceSeek = SeekBar(this).apply {
+            max = 13
+            progress = (practiceDistanceM - 2).coerceIn(0, 13)
+            progressTintList = ColorStateList.valueOf(Pv.primary)
+            progressBackgroundTintList = ColorStateList.valueOf(Pv.line)
+            thumbTintList = ColorStateList.valueOf(Pv.primary)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    practiceDistanceM = progress + 2
+                    distanceValue.text = "${practiceDistanceM} m"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        left.addView(distanceSeek)
+        middle.addView(left, LinearLayout.LayoutParams(0, -1, 1f).apply { marginEnd = sdp(if (compact) 10 else 14) })
+
+        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        right.addView(sectionLabel("GREEN SPEED  ·  2.4 — 3.6"))
+        val speedValue = TextView(this).apply {
+            text = "%.1f".format(practiceGreenSpeed)
+            setTextColor(Pv.primary)
+            textSize = scaledSp(if (compact) 21f else 25f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            includeFontPadding = false
+            setPadding(0, sdp(3), 0, 0)
+        }
+        right.addView(speedValue)
+        val speedSeek = SeekBar(this).apply {
+            max = 12
+            progress = ((practiceGreenSpeed - 2.4) * 10).toInt().coerceIn(0, 12)
+            progressTintList = ColorStateList.valueOf(Pv.primary)
+            progressBackgroundTintList = ColorStateList.valueOf(Pv.line)
+            thumbTintList = ColorStateList.valueOf(Pv.primary)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    practiceGreenSpeed = 2.4 + progress * .1
+                    speedValue.text = "%.1f".format(practiceGreenSpeed)
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        right.addView(speedSeek)
+        middle.addView(right, LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = sdp(if (compact) 10 else 14) })
+
+        panel.addView(middle, LinearLayout.LayoutParams(-1, 0, .31f).apply { topMargin = sdp(if (compact) 7 else 10) })
+
+        if (practiceEntranceMode == 2) {
+            panel.addView(sectionLabel("GREEN PROFILE"))
+            val greenSelect = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = pvRounded(Pv.surfaceLo, Pv.rLg, Pv.lineSoft)
+                setPadding(sdp(if (compact) 8 else 10), sdp(6), sdp(if (compact) 9 else 12), sdp(6))
+                addView(PracticeGreenPreviewView(this@MainActivity).apply {
+                    styleIndex = selectedGreen.previewStyle
+                }, LinearLayout.LayoutParams(sdp(if (compact) 72 else 88), -1))
+                val copy = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(sdp(9), 0, 0, 0)
+                    addView(TextView(this@MainActivity).apply {
+                        text = selectedGreen.title
+                        setTextColor(Pv.textHi)
+                        textSize = scaledSp(if (compact) 9f else 10.5f)
+                        typeface = Typeface.DEFAULT_BOLD
+                        includeFontPadding = false
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        text = selectedGreen.subtitle
+                        setTextColor(Pv.textMid)
+                        textSize = scaledSp(if (compact) 6.3f else 7.3f)
+                        typeface = Typeface.MONOSPACE
+                        includeFontPadding = false
+                    })
+                }
+                addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(TextView(this@MainActivity).apply {
+                    text = "그린 선택  ›"
+                    setTextColor(Pv.primary)
+                    textSize = scaledSp(if (compact) 8f else 9f)
+                    typeface = Typeface.DEFAULT_BOLD
+                    includeFontPadding = false
+                })
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showPracticeGreenPicker() }
+            }
+            panel.addView(greenSelect, LinearLayout.LayoutParams(-1, 0, .19f).apply { topMargin = sdp(5) })
+        }
+
+        panel.addView(sectionLabel(if (practiceEntranceMode == 1) "CUP PRESET" else "DISTANCE PATTERN"))
+        val patternRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val patterns = if (practiceEntranceMode == 1) listOf("3m", "5m", "7m", "10m") else listOf("고정", "랜덤", "증가", "감소")
+        patterns.forEachIndexed { i, label ->
+            patternRow.addView(
+                darkChoice(label, if (practiceEntranceMode == 1) practiceDistanceM == label.removeSuffix("m").toInt() else practicePatternIndex == i) {
+                    if (practiceEntranceMode == 1) practiceDistanceM = label.removeSuffix("m").toInt() else practicePatternIndex = i
+                    showPracticeEntrance()
+                },
+                LinearLayout.LayoutParams(0, sdp(if (compact) 34 else 40), 1f).apply { if (i > 0) marginStart = sdp(5) }
+            )
+        }
+        panel.addView(patternRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(5) })
+
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val countWrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        countWrap.addView(sectionLabel("SHOTS"))
+        val countRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(5, 10, 15, 20).forEachIndexed { i, value ->
+            countRow.addView(darkChoice(value.toString(), practiceCount == value) {
+                practiceCount = value
+                showPracticeEntrance()
+            }, LinearLayout.LayoutParams(0, sdp(if (compact) 33 else 39), 1f).apply { if (i > 0) marginStart = sdp(4) })
+        }
+        countWrap.addView(countRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(4) })
+        bottom.addView(countWrap, LinearLayout.LayoutParams(0, -1, 1.35f).apply { marginEnd = sdp(if (compact) 10 else 14) })
+
+        val start = pvButton("연습 시작  →", PvButtonStyle.PRIMARY, textSp = if (compact) 10f else 11.5f, radiusDp = Pv.rLg) {
+            openPreStartOrMat(false)
+        }
+        bottom.addView(start, LinearLayout.LayoutParams(0, sdp(if (compact) 54 else 64), .75f))
+        panel.addView(bottom, LinearLayout.LayoutParams(-1, 0, if (practiceEntranceMode == 2) .22f else .30f).apply { topMargin = sdp(if (compact) 6 else 9) })
+
+        body.addView(panel, LinearLayout.LayoutParams(0, -1, .58f))
+        root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
+        return root
+    }
+
+    private fun buildPracticeGreenPicker(): View {
+        val compact = compactLandscape
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Pv.inkDeep)
+            setPadding(sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14), sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14))
+        }
+        root.addView(
+            buildEntranceHeader("그린 선택", "GREEN LIBRARY", null) { showPracticeEntrance() },
+            LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(if (compact) 8 else 12) }
+        )
+
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val selected = practiceGreenPresets[practiceGreenPresetIndex]
+
+        val info = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = pvRounded(Pv.surface, Pv.rXl, Pv.lineSoft)
+            setPadding(sdp(if (compact) 12 else 16), sdp(if (compact) 10 else 14), sdp(if (compact) 12 else 16), sdp(if (compact) 10 else 14))
+            addView(PracticeGreenPreviewView(this@MainActivity).apply {
+                styleIndex = selected.previewStyle
+            }, LinearLayout.LayoutParams(-1, 0, .60f))
+            addView(TextView(this@MainActivity).apply {
+                text = "퍼팅을 연습할\n그린을 선택하세요"
+                setTextColor(Pv.textHi)
+                textSize = scaledSp(if (compact) 15f else 18f)
+                typeface = Typeface.DEFAULT_BOLD
+                includeFontPadding = false
+                setPadding(0, sdp(10), 0, 0)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "현재 · ${selected.title}\n${selected.subtitle}  ·  BREAK ${if (selected.sideSlopePct >= 0) "+" else ""}${"%.1f".format(selected.sideSlopePct)}%  ·  GRADE ${if (selected.longSlopePct >= 0) "+" else ""}${"%.1f".format(selected.longSlopePct)}%"
+                setTextColor(Pv.textMid)
+                textSize = scaledSp(if (compact) 6.6f else 7.8f)
+                typeface = Typeface.MONOSPACE
+                includeFontPadding = false
+                setPadding(0, sdp(7), 0, 0)
+            })
+        }
+        body.addView(info, LinearLayout.LayoutParams(0, -1, .25f).apply { marginEnd = sdp(if (compact) 8 else 12) })
+
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        practiceGreenPresets.chunked(3).forEachIndexed { rowIndex, rowItems ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            rowItems.forEachIndexed { colIndex, preset ->
+                val presetIndex = practiceGreenPresets.indexOf(preset)
+                val active = presetIndex == practiceGreenPresetIndex
+                val card = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = pvRounded(if (active) Color.rgb(29, 58, 42) else Pv.surfaceHi, Pv.rLg, if (active) Pv.primary else Pv.lineSoft)
+                    setPadding(sdp(if (compact) 8 else 10), sdp(if (compact) 6 else 8), sdp(if (compact) 8 else 10), sdp(if (compact) 6 else 8))
+                    val header = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(TextView(this@MainActivity).apply {
+                            text = preset.title
+                            setTextColor(if (active) Pv.primary else Pv.textHi)
+                            textSize = scaledSp(if (compact) 7.5f else 9f)
+                            typeface = Typeface.DEFAULT_BOLD
+                            includeFontPadding = false
+                        }, LinearLayout.LayoutParams(0, -2, 1f))
+                        addView(TextView(this@MainActivity).apply {
+                            text = preset.subtitle
+                            setTextColor(Pv.textMid)
+                            textSize = scaledSp(if (compact) 6f else 7f)
+                            typeface = Typeface.MONOSPACE
+                            includeFontPadding = false
+                        })
+                    }
+                    addView(header)
+                    addView(PracticeGreenPreviewView(this@MainActivity).apply {
+                        styleIndex = preset.previewStyle
+                    }, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = sdp(5) })
+                    addView(TextView(this@MainActivity).apply {
+                        text = "BREAK ${if (preset.sideSlopePct >= 0) "+" else ""}${"%.1f".format(preset.sideSlopePct)}%   ·   GRADE ${if (preset.longSlopePct >= 0) "+" else ""}${"%.1f".format(preset.longSlopePct)}%"
+                        setTextColor(Pv.textLo)
+                        textSize = scaledSp(if (compact) 5.4f else 6.4f)
+                        typeface = Typeface.MONOSPACE
+                        includeFontPadding = false
+                        gravity = Gravity.CENTER_HORIZONTAL
+                        setPadding(0, sdp(4), 0, 0)
+                    })
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        practiceGreenPresetIndex = presetIndex
+                        showPracticeEntrance()
+                    }
+                }
+                row.addView(card, LinearLayout.LayoutParams(0, -1, 1f).apply { if (colIndex > 0) marginStart = sdp(if (compact) 6 else 8) })
+            }
+            grid.addView(row, LinearLayout.LayoutParams(-1, 0, 1f).apply { if (rowIndex > 0) topMargin = sdp(if (compact) 6 else 8) })
+        }
+        body.addView(grid, LinearLayout.LayoutParams(0, -1, .75f))
+        root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
+        return root
+    }
+
