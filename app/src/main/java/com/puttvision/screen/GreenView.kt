@@ -27,15 +27,15 @@ class GreenView(
 
         p.shader = LinearGradient(
             0f, 0f, 0f, horizon,
-            Color.rgb(57, 145, 230),
-            Color.rgb(174, 218, 248),
+            Color.rgb(18, 43, 58),
+            Color.rgb(81, 126, 137),
             Shader.TileMode.CLAMP
         )
         c.drawRect(0f, 0f, width.toFloat(), horizon, p)
         p.shader = null
 
         // Soft cloud bands for a photo-like screen-golf backdrop.
-        p.color = Color.argb(115, 255, 255, 255)
+        p.color = Color.argb(38, 236, 241, 247)
         for (i in 0 until 8) {
             val cx = width * (0.08f + i * 0.14f)
             val cy = horizon * (0.20f + (i % 3) * 0.13f)
@@ -200,24 +200,30 @@ class GreenView(
         widths.forEachIndexed { i, frac ->
             val w = totalW * frac - gap
             rect.set(x, top, x + w, top + h)
-            p.color = Color.argb(205, 13, 29, 38)
+            p.color = Color.argb(238, 13, 17, 22)
             c.drawRoundRect(rect, 16f, 16f, p)
-            p.color = Color.rgb(221, 229, 235)
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 1.5f
+            p.color = Pv.line
+            c.drawRoundRect(rect, 16f, 16f, p)
+            p.style = Paint.Style.FILL
+            p.color = Pv.textMid
             p.textSize = max(13f, width * .010f)
             p.typeface = Typeface.DEFAULT
             c.drawText(labels[i], x + 16f, top + h * .32f, p)
-            p.color = Color.WHITE
+            p.color = if (i == 0) Pv.primary else Pv.textHi
             p.textSize = max(25f, width * .022f)
             p.typeface = Typeface.DEFAULT_BOLD
             c.drawText(values[i], x + 16f, top + h * .73f, p)
             x += w + gap
         }
 
-        p.color = Color.rgb(8, 27, 36)
+        p.color = Pv.textHi
         p.typeface = Typeface.DEFAULT_BOLD
         p.textAlign = Paint.Align.RIGHT
         p.textSize = max(23f, width * .019f)
-        c.drawText("PuttVision", width * .965f, top + h * .38f, p)
+        c.drawText("PUTTVISION", width * .965f, top + h * .38f, p)
+        p.color = Pv.primary
         c.drawText("SCREEN", width * .965f, top + h * .66f, p)
         p.textAlign = Paint.Align.LEFT
         p.typeface = Typeface.DEFAULT
@@ -229,9 +235,9 @@ class GreenView(
 
         // Bottom-left player/shot card.
         rect.set(width * .035f, height * .79f, width * .16f, height * .91f)
-        p.color = Color.argb(200, 17, 34, 15)
+        p.color = Color.argb(232, 13, 17, 22)
         c.drawRoundRect(rect, 16f, 16f, p)
-        p.color = Color.WHITE
+        p.color = Pv.textMid
         p.textSize = max(13f, width * .010f)
         c.drawText("PLAYER 1", rect.left + 15f, rect.top + 25f, p)
         p.typeface = Typeface.DEFAULT_BOLD
@@ -242,9 +248,9 @@ class GreenView(
 
         if (result != null) {
             rect.set(width * .79f, height * .70f, width * .965f, height * .91f)
-            p.color = Color.argb(210, 35, 52, 4)
+            p.color = Color.argb(238, 13, 17, 22)
             c.drawRoundRect(rect, 18f, 18f, p)
-            p.color = Color.WHITE
+            p.color = Pv.textMid
             p.textSize = max(14f, width * .011f)
             c.drawText(if (result.holed) "RESULT" else "컵까지", rect.left + 18f, rect.top + 28f, p)
             p.typeface = Typeface.DEFAULT_BOLD
@@ -252,7 +258,7 @@ class GreenView(
             val main = if (result.holed) "HOLE IN" else "${"%.2f".format(result.distanceToCupM)} m"
             c.drawText(main, rect.left + 18f, rect.top + 72f, p)
             p.textSize = max(17f, width * .013f)
-            p.color = if (result.holed) Color.rgb(255, 224, 74) else Color.rgb(255, 152, 42)
+            p.color = if (result.holed) Pv.amber else Pv.primary
             val side = when {
                 result.finishX > 0.03 -> "RIGHT"
                 result.finishX < -0.03 -> "LEFT"

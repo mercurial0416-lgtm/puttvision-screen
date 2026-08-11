@@ -65,8 +65,14 @@ class ImpactReplayView(context: Context) : View(context) {
         val right = width * 0.955f
         val bottom = height * 0.53f
 
-        paint.color = Color.argb(225, 0, 0, 0)
+        paint.color = Color.argb(242, 9, 12, 16)
         canvas.drawRoundRect(left, top, right, bottom, 26f, 26f, paint)
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        paint.color = Pv.line
+        canvas.drawRoundRect(left, top, right, bottom, 26f, 26f, paint)
+        paint.style = Paint.Style.FILL
 
         val inner = RectF(left + 12f, top + 12f, right - 12f, bottom - 12f)
 
@@ -84,24 +90,25 @@ class ImpactReplayView(context: Context) : View(context) {
 
         canvas.drawBitmap(bmp, null, target, paint)
 
-        paint.color = Color.argb(185, 0, 0, 0)
+        paint.color = Color.argb(220, 13, 17, 22)
         canvas.drawRoundRect(left + 20f, top + 20f, right - 20f, top + 92f, 18f, 18f, paint)
 
         paint.textSize = max(25f, width * 0.026f)
         paint.typeface = Typeface.DEFAULT_BOLD
 
         if (frame == r.impactIndex) {
-            paint.color = Color.rgb(255, 214, 64)
+            paint.color = Pv.amber
             canvas.drawText("IMPACT", left + 40f, top + 65f, paint)
         } else {
-            paint.color = Color.WHITE
+            paint.color = Pv.textHi
             canvas.drawText("240FPS IMPACT REPLAY", left + 40f, top + 65f, paint)
         }
 
         paint.typeface = Typeface.DEFAULT
 
         metrics?.let { m ->
-            paint.color = Color.WHITE
+            paint.color = Pv.textHi
+            paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             paint.textSize = max(20f, width * 0.021f)
             val text =
                 "FACE ${m.faceAngleDeg?.let { "%+.2f°".format(it) } ?: "--"}   " +
@@ -109,6 +116,7 @@ class ImpactReplayView(context: Context) : View(context) {
                 "BALL ${"%.2fm/s".format(m.ballSpeedMps)}"
 
             canvas.drawText(text, left + 38f, bottom - 28f, paint)
+            paint.typeface = Typeface.DEFAULT
         }
     }
 
