@@ -2,7 +2,6 @@ package com.puttvision.screen
 
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -76,77 +75,71 @@ class DeployActivity : AppCompatActivity() {
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(28, 54, 28, 32)
-            setBackgroundColor(Color.rgb(5, 14, 9))
+            gravity = Gravity.CENTER
+            setPadding(pvSdp(28), pvSdp(24), pvSdp(28), pvSdp(24))
+            setBackgroundColor(Pv.ink)
         }
 
-        root.addView(TextView(this).apply {
-            text = "PuttVision Deploy"
-            textSize = 28f
-            setTextColor(Color.WHITE)
+        val panel = pvPanel(radiusDp = Pv.rXl, padDp = 22).apply { gravity = Gravity.CENTER_HORIZONTAL }
+        panel.addView(pvEyebrow("PUTTVISION · RELEASE CONSOLE"))
+        panel.addView(TextView(this).apply {
+            text = "Deploy Center"
+            textSize = pvSp(28f)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Pv.textHi)
         })
-        root.addView(TextView(this).apply {
-            text = "ZIP 하나 고르면 → private GitHub main 반영 → Actions 빌드 → 앱 업데이트"
-            textSize = 14f
-            setTextColor(Color.LTGRAY)
-            setPadding(0, 8, 0, 30)
+        panel.addView(TextView(this).apply {
+            text = "ZIP 선택  →  PRIVATE MAIN  →  SIGNED BUILD  →  UPDATE"
+            textSize = pvSp(Pv.body)
+            setTextColor(Pv.textMid)
+            gravity = Gravity.CENTER
+            setPadding(0, pvSdp(6), 0, pvSdp(22))
         })
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             progress = 0
         }
-        root.addView(progress, LinearLayout.LayoutParams(-1, 24))
+        panel.addView(progress, LinearLayout.LayoutParams(-1, pvSdp(8)))
 
         status = TextView(this).apply {
             text = if (SecureTokenStore(this@DeployActivity).hasToken()) "GitHub 연결됨 · ZIP 선택 대기" else "최초 1회 GitHub 연결 필요"
             textSize = 15f
-            setTextColor(Color.rgb(137, 247, 176))
-            setPadding(0, 18, 0, 18)
+            setTextColor(Pv.primary)
+            gravity = Gravity.CENTER
+            setPadding(0, pvSdp(16), 0, pvSdp(16))
         }
-        root.addView(status, LinearLayout.LayoutParams(-1, -2))
+        panel.addView(status, LinearLayout.LayoutParams(-1, -2))
 
-        deployButton = Button(this).apply {
-            text = "ZIP 선택 → 배포"
-            textSize = 17f
-            setOnClickListener { controller.start() }
-        }
-        root.addView(deployButton, LinearLayout.LayoutParams(-1, -2))
+        deployButton = pvButton("ZIP 선택 → 배포", PvButtonStyle.PRIMARY, textSp = 15f, scaled = true) { controller.start() }
+        panel.addView(deployButton, LinearLayout.LayoutParams(-1, pvSdp(52)))
 
-        root.addView(Button(this).apply {
-            text = "GitHub 연결 / 토큰 재설정"
-            setOnClickListener { controller.showTokenSetup() }
-        }, LinearLayout.LayoutParams(-1, -2))
-
-        root.addView(Button(this).apply {
-            text = "업데이트 확인"
-            setOnClickListener { updater.check(silent = false) }
-        }, LinearLayout.LayoutParams(-1, -2))
-
-        root.addView(Button(this).apply {
-            text = "직전 배포 롤백"
-            setOnClickListener {
+        val utilities = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        utilities.addView(pvButton("GitHub 연결", PvButtonStyle.SECONDARY) { controller.showTokenSetup() }, LinearLayout.LayoutParams(0, pvSdp(46), 1f))
+        utilities.addView(pvButton("업데이트 확인", PvButtonStyle.SECONDARY) { updater.check(silent = false) }, LinearLayout.LayoutParams(0, pvSdp(46), 1f).apply { marginStart = pvSdp(8) })
+        utilities.addView(pvButton("직전 배포 롤백", PvButtonStyle.GHOST) {
                 AlertDialog.Builder(this@DeployActivity)
                     .setTitle("직전 배포로 롤백")
                     .setMessage("현재 main 내용을 직전 ZIP 배포 직전 상태로 복구 커밋합니다. 계속할까요?")
                     .setNegativeButton("취소", null)
                     .setPositiveButton("롤백") { _, _ -> controller.rollback() }
                     .show()
-            }
-        }, LinearLayout.LayoutParams(-1, -2))
+        }, LinearLayout.LayoutParams(0, pvSdp(46), 1f).apply { marginStart = pvSdp(8) })
+        panel.addView(utilities, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvSdp(10) })
 
-        root.addView(Button(this).apply {
-            text = "퍼팅 화면 열기"
-            setOnClickListener { startActivity(Intent(this@DeployActivity, MainActivity::class.java)) }
-        }, LinearLayout.LayoutParams(-1, -2))
+        panel.addView(pvButton("퍼팅 화면 열기  →", PvButtonStyle.AMBER) {
+            startActivity(Intent(this@DeployActivity, MainActivity::class.java))
+        }, LinearLayout.LayoutParams(-1, pvSdp(46)).apply { topMargin = pvSdp(10) })
 
-        root.addView(TextView(this).apply {
+        panel.addView(TextView(this).apply {
             text = "팁: 다운로드한 ZIP에서 공유 → PuttVision Deploy를 고르면 파일 선택도 생략됨."
             textSize = 12f
-            setTextColor(Color.GRAY)
-            setPadding(0, 26, 0, 0)
+            setTextColor(Pv.textLo)
+            gravity = Gravity.CENTER
+            setPadding(0, pvSdp(18), 0, 0)
         })
+
+        root.addView(panel, LinearLayout.LayoutParams(-1, -2))
 
         setContentView(root)
     }

@@ -907,12 +907,13 @@ class MainActivity : AppCompatActivity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(12), dp(18), dp(12))
+            setBackgroundColor(Pv.surface)
         }
         scroll.addView(box)
 
         fun title(text: String): TextView = TextView(this).apply {
             this.text = text
-            setTextColor(Color.rgb(225, 232, 238))
+            setTextColor(Pv.textHi)
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, dp(8), 0, dp(2))
@@ -920,17 +921,13 @@ class MainActivity : AppCompatActivity() {
         fun seek(maxV: Int, progressV: Int, onChange: (Int) -> Unit): SeekBar = SeekBar(this).apply {
             max = maxV
             progress = progressV
-            progressTintList = ColorStateList.valueOf(Color.rgb(111, 89, 232))
-            thumbTintList = ColorStateList.valueOf(Color.rgb(138, 118, 255))
+            progressTintList = ColorStateList.valueOf(Pv.primary)
+            progressBackgroundTintList = ColorStateList.valueOf(Pv.line)
+            thumbTintList = ColorStateList.valueOf(Pv.primary)
             setOnSeekBarChangeListener(simpleSeek(onChange))
         }
-        fun util(label: String, click: () -> Unit): Button = Button(this).apply {
-            text = label
-            isAllCaps = false
-            setTextColor(Color.WHITE)
-            backgroundTintList = ColorStateList.valueOf(Color.rgb(32, 42, 51))
-            setOnClickListener { click() }
-        }
+        fun util(label: String, click: () -> Unit): Button =
+            pvButton(label, PvButtonStyle.SECONDARY, textSp = Pv.label, onClick = click)
 
         val speed = title("그린 스피드  ${"%.1f".format(engine.settings.stimpMeters)}m")
         box.addView(speed)

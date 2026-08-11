@@ -46,6 +46,7 @@ object Pv {
     // ---- Accents ---------------------------------------------------------
     val primary = Color.rgb(78, 209, 121)    // fairway green (single signature)
     val primaryDim = Color.rgb(23, 49, 33)   // green-tinted fill
+    val primaryLine = Color.rgb(45, 112, 67) // borders / guides on green-tinted surfaces
     val primaryInk = Color.rgb(5, 19, 10)    // text/icons on primary
     val amber = Color.rgb(246, 190, 74)      // signal / scores / warnings
     val amberInk = Color.rgb(26, 19, 4)      // text on amber

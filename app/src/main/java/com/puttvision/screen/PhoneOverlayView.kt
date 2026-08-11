@@ -19,14 +19,15 @@ class PhoneOverlayView(context: Context) : View(context) {
         val left = 12f * d
         val top = 10f * d
 
-        // Compact camera badge, matching the concept preview instead of a full-width banner.
-        p.color = Color.argb(205, 4, 13, 9)
-        c.drawRoundRect(left, top, left + 238f * d, top + 45f * d, 13f * d, 13f * d, p)
-        p.color = Color.rgb(132, 255, 167)
+        // Compact instrument badge; clamp it on narrow preview panes.
+        val badgeRight = min(width - left, left + 238f * d)
+        p.color = Color.argb(232, 9, 12, 16)
+        c.drawRoundRect(left, top, badgeRight, top + 45f * d, 13f * d, 13f * d, p)
+        p.color = Pv.primary
         p.textSize = 11.5f * d
         p.typeface = Typeface.DEFAULT_BOLD
         c.drawText(if (calibrationImagePoints.size >= 4) "✓ CALIBRATED" else "● CALIBRATING", left + 10f * d, top + 17f * d, p)
-        p.color = Color.rgb(222, 233, 239)
+        p.color = Pv.textHi
         p.textSize = 9.5f * d
         p.typeface = Typeface.DEFAULT
         val shortStatus = if (status.length > 34) status.take(33) + "…" else status
@@ -35,7 +36,7 @@ class PhoneOverlayView(context: Context) : View(context) {
         // Fine measurement grid like the original preview.
         p.style = Paint.Style.STROKE
         p.strokeWidth = 0.75f * d
-        p.color = Color.argb(52, 149, 245, 190)
+        p.color = Color.argb(45, 78, 209, 121)
         val gridTop = 4f * d
         val gridBottom = height - 4f * d
         val gridLeft = 4f * d
@@ -51,7 +52,7 @@ class PhoneOverlayView(context: Context) : View(context) {
 
         val cx = width / 2f
         p.strokeWidth = 1.2f * d
-        p.color = Color.argb(100, 160, 255, 202)
+        p.color = Color.argb(115, 78, 209, 121)
         c.drawLine(cx, 0f, cx, height.toFloat(), p)
         c.drawCircle(cx, height * 0.66f, 13f * d, p)
         p.style = Paint.Style.FILL
