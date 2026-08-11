@@ -1,0 +1,111 @@
+private fun showPreStartGuide(game: Boolean) {
+    val compact = compactLandscape
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundColor(Pv.inkDeep)
+        setPadding(sdp(if (compact) 18 else 26), sdp(if (compact) 13 else 18), sdp(if (compact) 18 else 26), sdp(if (compact) 12 else 16))
+    }
+
+    val header = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    val copy = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    copy.addView(TextView(this@MainActivity).apply {
+        text = "세션 준비"
+        setTextColor(Pv.textHi)
+        textSize = scaledSp(if (compact) 18f else 22f)
+        typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+    })
+    copy.addView(TextView(this@MainActivity).apply {
+        text = "SETUP CHECK  ·  10초면 끝납니다"
+        setTextColor(Pv.textLo)
+        textSize = scaledSp(if (compact) 6.8f else 7.8f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .12f
+        includeFontPadding = false
+    })
+    header.addView(copy)
+    header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+    header.addView(pvButton("← 뒤로", PvButtonStyle.GHOST, textSp = if (compact) 7.5f else 8.5f, radiusDp = 100f) {
+        if (game) showGameEntrance() else showPracticeEntrance()
+    }, LinearLayout.LayoutParams(sdp(if (compact) 76 else 88), sdp(if (compact) 32 else 36)))
+    root.addView(header)
+
+    val body = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    val diagram = FrameLayout(this).apply {
+        background = pvRounded(Pv.surface, Pv.rXl, Pv.lineSoft)
+        setPadding(sdp(if (compact) 10 else 14), sdp(if (compact) 10 else 14), sdp(if (compact) 10 else 14), sdp(if (compact) 10 else 14))
+        addView(CommercialSetupDiagramView(this@MainActivity), FrameLayout.LayoutParams(-1, -1))
+    }
+    body.addView(diagram, LinearLayout.LayoutParams(0, -1, .55f).apply { marginEnd = sdp(if (compact) 12 else 18) })
+
+    val checklist = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    checklist.addView(TextView(this).apply {
+        text = "측정 전에 이것만 확인하세요"
+        setTextColor(Pv.textHi)
+        textSize = scaledSp(if (compact) 15f else 18f)
+        typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+    })
+
+    fun check(number: String, title: String, sub: String): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = pvRounded(Pv.surface, Pv.rLg, Pv.lineSoft)
+        setPadding(sdp(if (compact) 10 else 13), sdp(if (compact) 7 else 9), sdp(if (compact) 10 else 13), sdp(if (compact) 7 else 9))
+        addView(TextView(this@MainActivity).apply {
+            text = number
+            setTextColor(Pv.primaryInk)
+            setBackgroundColor(Pv.primary)
+            textSize = scaledSp(if (compact) 8f else 9f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        }, LinearLayout.LayoutParams(sdp(if (compact) 28 else 32), sdp(if (compact) 28 else 32)))
+        val c = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(sdp(9), 0, 0, 0) }
+        c.addView(TextView(this@MainActivity).apply {
+            text = title
+            setTextColor(Pv.textHi)
+            textSize = scaledSp(if (compact) 9f else 10f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        })
+        c.addView(TextView(this@MainActivity).apply {
+            text = sub
+            setTextColor(Pv.textMid)
+            textSize = scaledSp(if (compact) 6.8f else 7.8f)
+            includeFontPadding = false
+            maxLines = 1
+        })
+        addView(c, LinearLayout.LayoutParams(0, -2, 1f))
+    }
+
+    checklist.addView(check("01", "마커 4개가 모두 보이게", "프레임 모서리에서 마커가 잘리지 않게 맞춥니다."), LinearLayout.LayoutParams(-1, sdp(if (compact) 53 else 61)).apply { topMargin = sdp(if (compact) 10 else 14) })
+    checklist.addView(check("02", "공과 퍼터가 충분히 밝게", "역광보다 실내 조명을 켜는 편이 인식이 안정적입니다."), LinearLayout.LayoutParams(-1, sdp(if (compact) 53 else 61)).apply { topMargin = sdp(7) })
+    checklist.addView(check("03", "폰은 세션 중 움직이지 않게", "자동 캘리브레이션 후 위치가 바뀌면 다시 CAL을 실행합니다."), LinearLayout.LayoutParams(-1, sdp(if (compact) 53 else 61)).apply { topMargin = sdp(7) })
+
+    val actions = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    actions.addView(pvButton("오늘 다시 보지 않기", PvButtonStyle.GHOST, textSp = if (compact) 7.6f else 8.8f, radiusDp = Pv.rLg) {
+        skipPreStartGuideToday()
+        showMatPrep(game)
+    }, LinearLayout.LayoutParams(0, sdp(if (compact) 42 else 48), 1f).apply { marginEnd = sdp(5) })
+    actions.addView(pvButton("다음  →", PvButtonStyle.PRIMARY, textSp = if (compact) 8.5f else 9.8f, radiusDp = Pv.rLg) {
+        showMatPrep(game)
+    }, LinearLayout.LayoutParams(0, sdp(if (compact) 42 else 48), 1f).apply { marginStart = sdp(5) })
+    checklist.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (compact) 10 else 14) })
+
+    body.addView(checklist, LinearLayout.LayoutParams(0, -1, .45f))
+    root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = sdp(if (compact) 10 else 14) })
+    replaceMenuScreen(root) { if (game) showGameEntrance() else showPracticeEntrance() }
+}
