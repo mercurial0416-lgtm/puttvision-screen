@@ -25,6 +25,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      # V5 verification retry after fixing the TV rail string type.
       - name: Apply V5 interface
         shell: bash
         run: |
