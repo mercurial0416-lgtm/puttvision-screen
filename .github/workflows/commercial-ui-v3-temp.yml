@@ -39,7 +39,6 @@ jobs:
               b = src.index(next_marker, a)
               return src[:a] + replacement.rstrip() + '\n\n    ' + src[b:]
 
-          # Immersive full-screen system chrome.
           if 'import androidx.core.view.WindowCompat' not in s:
               s = s.replace(
                   'import androidx.core.content.ContextCompat\n',
@@ -53,38 +52,17 @@ jobs:
               '    override fun onResume() {\n        super.onResume()\n',
               '    override fun onResume() {\n        super.onResume()\n        applyImmersiveMode()\n'
           )
-          immersive = '''    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) applyImmersiveMode()
-    }
-
-    private fun applyImmersiveMode() {
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            }
-        }
-    }
-
-'''
           if 'private fun applyImmersiveMode()' not in s:
+              immersive = Path('.ui-v3/immersive.txt').read_text()
               s = s.replace('    private fun probeHfr() {', immersive + '    private fun probeHfr() {')
 
-          # Correct uphill semantics: + longitudinal slope is downhill toward cup.
           s = s.replace('PracticeGreenPreset("오르막 스트레이트", "1.2m / 45in", 0.0, 2.2, 3)', 'PracticeGreenPreset("오르막 스트레이트", "1.2m / 45in", 0.0, -2.2, 3)')
           s = s.replace('PracticeGreenPreset("오르막 브레이크", "1.2m / 45in", 2.8, 1.1, 4)', 'PracticeGreenPreset("오르막 브레이크", "1.2m / 45in", 2.8, -1.1, 4)')
 
-          # Core commercial shells.
           s = replace_between(s, 'private fun buildUi() {', 'private fun buildSmartPuttMenu', Path('.ui-v3/buildUi.txt').read_text())
           s = replace_between(s, 'private fun buildVideoHomeScreen(): View {', 'private fun sectionPanel', Path('.ui-v3/home.txt').read_text())
           s = replace_between(s, 'private fun buildEntranceHeader', 'private fun showPracticeEntrance', Path('.ui-v3/header.txt').read_text())
 
-          # Make selected green terrain persist into the actual simulation.
           s = s.replace(
               '        engine.settings.stimpMeters = practiceGreenSpeed\n        engine.gameModes.configurePlayers(if (game) gamePlayers else 1)',
               '        engine.settings.stimpMeters = practiceGreenSpeed\n        engine.settings.terrainProfileId = if (!game && practiceEntranceMode == 2) practiceGreenPresets[practiceGreenPresetIndex].previewStyle else -1\n        engine.gameModes.configurePlayers(if (game) gamePlayers else 1)'
@@ -104,7 +82,6 @@ jobs:
 
           p.write_text(s)
 
-          # The mode-art canvas should be visual, not repeat headings that the real UI already renders.
           ui = Path('app/src/main/java/com/puttvision/screen/CommercialUiViews.kt')
           u = ui.read_text()
           class_pos = u.index('class CommercialModeVisualView')
