@@ -1,0 +1,33 @@
+private fun buildEntranceHeader(title: String, english: String, guide: (() -> Unit)? = null, back: () -> Unit): LinearLayout =
+    LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+
+        val copy = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@MainActivity).apply {
+                text = title
+                textSize = scaledSp(if (compactLandscape) 15.5f else 18f)
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Pv.textHi)
+                includeFontPadding = false
+            })
+            if (english.isNotBlank()) {
+                addView(TextView(this@MainActivity).apply {
+                    text = english
+                    textSize = scaledSp(if (compactLandscape) 5.9f else 6.9f)
+                    setTextColor(Pv.textLo)
+                    typeface = Typeface.DEFAULT_BOLD
+                    letterSpacing = .14f
+                    includeFontPadding = false
+                    setPadding(0, sdp(2), 0, 0)
+                })
+            }
+        }
+        addView(copy)
+        addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
+        if (guide != null) {
+            addView(pvButton("가이드", PvButtonStyle.GHOST, textSp = if (compactLandscape) 6.8f else 7.8f, scaled = true, radiusDp = 100f) { guide() }, LinearLayout.LayoutParams(sdp(if (compactLandscape) 58 else 68), sdp(if (compactLandscape) 31 else 35)).apply { marginEnd = sdp(6) })
+        }
+        addView(pvButton("뒤로", PvButtonStyle.GHOST, textSp = if (compactLandscape) 6.8f else 7.8f, scaled = true, radiusDp = 100f) { back() }, LinearLayout.LayoutParams(sdp(if (compactLandscape) 54 else 64), sdp(if (compactLandscape) 31 else 35)))
+    }
