@@ -32,6 +32,7 @@ import androidx.core.content.ContextCompat
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.min
 
 class MainActivity : AppCompatActivity() {
 
@@ -496,12 +497,14 @@ class MainActivity : AppCompatActivity() {
         Button(this).apply {
             text = label
             isAllCaps = false
-            textSize = 16f
+            textSize = scaledSp(14f)
             typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             minHeight = 0
             minimumHeight = 0
-            backgroundTintList = ColorStateList.valueOf(Color.rgb(55, 201, 241))
+            setPadding(sdp(8), sdp(10), sdp(8), sdp(10))
+            background = roundedBg(Color.rgb(84, 196, 228), 20f)
             setOnClickListener { click() }
         }
 
@@ -509,13 +512,17 @@ class MainActivity : AppCompatActivity() {
         Button(this).apply {
             text = label
             isAllCaps = false
-            textSize = 11.5f
+            textSize = scaledSp(10.5f)
             typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
             minHeight = 0
             minimumHeight = 0
+            setPadding(sdp(6), sdp(8), sdp(6), sdp(8))
+            setSingleLine(false)
             setTextColor(Color.WHITE)
-            backgroundTintList = ColorStateList.valueOf(
-                if (selected) Color.rgb(54, 199, 238) else Color.rgb(82, 85, 105)
+            background = roundedBg(
+                if (selected) Color.rgb(84, 196, 228) else Color.rgb(93, 97, 118),
+                16f
             )
             setOnClickListener { click() }
         }
@@ -524,17 +531,17 @@ class MainActivity : AppCompatActivity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            val icon = TextView(this@MainActivity).apply {
+            val icon = TextView(this).apply {
                 text = symbol
-                textSize = 21f
+                textSize = scaledSp(18f)
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
-                background = roundedBg(Color.rgb(53, 199, 239), 28f, Color.rgb(25, 31, 39))
+                background = roundedBg(Color.rgb(84, 196, 228), 26f, Color.rgb(25, 31, 39))
             }
-            addView(icon, LinearLayout.LayoutParams(dp(52), dp(52)))
-            addView(TextView(this@MainActivity).apply {
+            addView(icon, LinearLayout.LayoutParams(sdp(46), sdp(46)))
+            addView(TextView(this).apply {
                 text = label
-                textSize = 10f
+                textSize = scaledSp(9f)
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
@@ -622,16 +629,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun sectionPanel(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        background = roundedBg(Color.rgb(42, 46, 57), 14f)
-        setPadding(dp(8), dp(7), dp(8), dp(7))
+        background = roundedBg(Color.rgb(40, 44, 56), 20f)
+        setPadding(sdp(12), sdp(10), sdp(12), sdp(10))
     }
 
     private fun tinyCaption(textValue: String): TextView = TextView(this).apply {
         text = textValue
-        textSize = 8f
+        textSize = scaledSp(9f)
         setTextColor(Color.rgb(208, 214, 222))
         typeface = Typeface.DEFAULT_BOLD
-        setPadding(dp(2), 0, 0, dp(3))
+        setPadding(sdp(2), 0, 0, sdp(6))
     }
 
     private fun buildEntranceHeader(title: String, english: String, guide: (() -> Unit)? = null, back: () -> Unit): LinearLayout =
@@ -640,15 +647,15 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             addView(TextView(this@MainActivity).apply {
                 text = title
-                textSize = 26f
+                textSize = scaledSp(18f)
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
             })
             addView(TextView(this@MainActivity).apply {
                 text = english
-                textSize = 11f
-                setTextColor(Color.rgb(120, 123, 132))
-                setPadding(dp(5), dp(8), 0, 0)
+                textSize = scaledSp(9f)
+                setTextColor(Color.rgb(145, 149, 160))
+                setPadding(sdp(6), sdp(6), 0, 0)
             })
             addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
             if (guide != null) {
@@ -665,9 +672,9 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(14), dp(7), dp(14), dp(10))
+            setPadding(sdp(14), sdp(14), sdp(14), sdp(12))
         }
-        root.addView(buildEntranceHeader("연습장 입구", "Practice Mode Entrance", { showCupGuideScreen() }) { showHomeMenu() }, LinearLayout.LayoutParams(-1, dp(62)))
+        root.addView(buildEntranceHeader("연습장 입구", "Practice Mode Entrance", { showCupGuideScreen() }) { showHomeMenu() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
 
         val content = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -677,7 +684,7 @@ class MainActivity : AppCompatActivity() {
         modePanel.addView(tinyCaption("모드"))
         val modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("거리", "컵", "그린").forEachIndexed { i, label ->
-            modeRow.addView(darkChoice(label, practiceEntranceMode == i) { practiceEntranceMode = i; showPracticeEntrance() }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { if (i > 0) marginStart = dp(3) })
+            modeRow.addView(darkChoice(label, practiceEntranceMode == i) { practiceEntranceMode = i; showPracticeEntrance() }, LinearLayout.LayoutParams(0, sdp(48), 1f).apply { if (i > 0) marginStart = dp(3) })
         }
         modePanel.addView(modeRow)
         upper.addView(modePanel, LinearLayout.LayoutParams(0, -1, 0.39f).apply { marginEnd = dp(5) })
@@ -690,7 +697,7 @@ class MainActivity : AppCompatActivity() {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (c in 0..1) {
                 val v = counts[r * 2 + c]
-                row.addView(darkChoice(v.toString(), practiceCount == v) { practiceCount = v; showPracticeEntrance() }, LinearLayout.LayoutParams(0, dp(28), 1f).apply { if (c > 0) marginStart = dp(3) })
+                row.addView(darkChoice(v.toString(), practiceCount == v) { practiceCount = v; showPracticeEntrance() }, LinearLayout.LayoutParams(0, sdp(36), 1f).apply { if (c > 0) marginStart = dp(3) })
             }
             countGrid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = dp(3) })
         }
@@ -701,7 +708,7 @@ class MainActivity : AppCompatActivity() {
         speedPanel.addView(tinyCaption("그린스피드"))
         speedPanel.addView(TextView(this).apply {
             text = "%.1f".format(practiceGreenSpeed)
-            textSize = 22f
+            textSize = scaledSp(24f)
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -726,11 +733,11 @@ class MainActivity : AppCompatActivity() {
         val lowerRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         if (practiceEntranceMode == 1) {
             listOf(3, 5, 7, 10).forEachIndexed { i, v ->
-                lowerRow.addView(darkChoice("${v}m", practiceDistanceM == v) { practiceDistanceM = v; showPracticeEntrance() }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { if (i > 0) marginStart = dp(4) })
+                lowerRow.addView(darkChoice("${v}m", practiceDistanceM == v) { practiceDistanceM = v; showPracticeEntrance() }, LinearLayout.LayoutParams(0, sdp(48), 1f).apply { if (i > 0) marginStart = dp(4) })
             }
         } else {
             listOf("고정", "랜덤", "증가", "감소").forEachIndexed { i, label ->
-                lowerRow.addView(darkChoice(label, i == 0) { toast("$label 모드") }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { if (i > 0) marginStart = dp(4) })
+                lowerRow.addView(darkChoice(label, i == 0) { toast("$label 모드") }, LinearLayout.LayoutParams(0, sdp(48), 1f).apply { if (i > 0) marginStart = dp(4) })
             }
         }
         lower.addView(lowerRow)
@@ -745,13 +752,13 @@ class MainActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(seekBar: SeekBar?) { showPracticeEntrance() }
             })
         }
-        distanceLine.addView(dSeek, LinearLayout.LayoutParams(0, dp(34), 1f))
+        distanceLine.addView(dSeek, LinearLayout.LayoutParams(0, sdp(36), 1f).apply { marginStart = sdp(10); marginEnd = sdp(10) })
         distanceLine.addView(TextView(this).apply { text = "15m"; setTextColor(Color.WHITE); textSize = 11f })
         lower.addView(distanceLine)
         left.addView(lower, LinearLayout.LayoutParams(-1, 0, 0.48f).apply { topMargin = dp(6) })
 
-        content.addView(left, LinearLayout.LayoutParams(0, -1, 0.83f).apply { marginEnd = dp(8) })
-        content.addView(cyanButton("▶\n입장") { showPreStartGuide(false) }, LinearLayout.LayoutParams(0, -1, 0.17f))
+        content.addView(left, LinearLayout.LayoutParams(0, -1, 0.81f).apply { marginEnd = sdp(10) })
+        content.addView(cyanButton("▶\n입장") { showPreStartGuide(false) }, LinearLayout.LayoutParams(0, -1, 0.19f))
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
     }
@@ -764,9 +771,9 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(14), dp(7), dp(14), dp(10))
+            setPadding(sdp(14), sdp(14), sdp(14), sdp(12))
         }
-        root.addView(buildEntranceHeader("게임장 입구", "Game Zone Entrance", null) { showHomeMenu() }, LinearLayout.LayoutParams(-1, dp(62)))
+        root.addView(buildEntranceHeader("게임장 입구", "Game Zone Entrance", null) { showHomeMenu() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
         val content = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
@@ -777,7 +784,7 @@ class MainActivity : AppCompatActivity() {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (c in 0..1) {
                 val v = r * 2 + c + 1
-                row.addView(darkChoice(v.toString(), gamePlayers == v) { gamePlayers = v; showGameEntrance() }, LinearLayout.LayoutParams(0, dp(29), 1f).apply { if (c > 0) marginStart = dp(3) })
+                row.addView(darkChoice(v.toString(), gamePlayers == v) { gamePlayers = v; showGameEntrance() }, LinearLayout.LayoutParams(0, sdp(36), 1f).apply { if (c > 0) marginStart = dp(3) })
             }
             pGrid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = dp(3) })
         }
@@ -787,14 +794,14 @@ class MainActivity : AppCompatActivity() {
         val modes = sectionPanel(); modes.addView(tinyCaption("게임 방식"))
         val mRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("스트로크", "매치\n플레이", "빙고", "투어").forEachIndexed { i, label ->
-            mRow.addView(darkChoice(label, gameModeIndex == i) { gameModeIndex = i; showGameEntrance() }, LinearLayout.LayoutParams(0, dp(56), 1f).apply { if (i > 0) marginStart = dp(3) })
+            mRow.addView(darkChoice(label, gameModeIndex == i) { gameModeIndex = i; showGameEntrance() }, LinearLayout.LayoutParams(0, sdp(54), 1f).apply { if (i > 0) marginStart = dp(3) })
         }
         modes.addView(mRow)
         upper.addView(modes, LinearLayout.LayoutParams(0, -1, 0.47f).apply { marginEnd = dp(5) })
 
         val speed = sectionPanel(); speed.addView(tinyCaption("그린스피드"))
         speed.addView(TextView(this).apply {
-            text = "2.8\n약간빠름"; gravity = Gravity.CENTER; textSize = 18f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
+            text = "2.8\n약간빠름"; gravity = Gravity.CENTER; textSize = scaledSp(18f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE)
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         upper.addView(speed, LinearLayout.LayoutParams(0, -1, 0.35f))
         left.addView(upper, LinearLayout.LayoutParams(-1, 0, 0.52f))
@@ -806,13 +813,13 @@ class MainActivity : AppCompatActivity() {
             row.addView(darkChoice(label, if (gameModeIndex == 3) i == 0 else gameDistanceM == label.removeSuffix("m").toInt()) {
                 if (gameModeIndex != 3) gameDistanceM = label.removeSuffix("m").toInt()
                 showGameEntrance()
-            }, LinearLayout.LayoutParams(0, dp(62), 1f).apply { if (i > 0) marginStart = dp(6) })
+            }, LinearLayout.LayoutParams(0, sdp(54), 1f).apply { if (i > 0) marginStart = dp(6) })
         }
         lower.addView(row)
         left.addView(lower, LinearLayout.LayoutParams(-1, 0, 0.48f).apply { topMargin = dp(6) })
 
-        content.addView(left, LinearLayout.LayoutParams(0, -1, 0.83f).apply { marginEnd = dp(8) })
-        content.addView(cyanButton("▶\n입장") { showPreStartGuide(true) }, LinearLayout.LayoutParams(0, -1, 0.17f))
+        content.addView(left, LinearLayout.LayoutParams(0, -1, 0.81f).apply { marginEnd = sdp(10) })
+        content.addView(cyanButton("▶\n입장") { showPreStartGuide(true) }, LinearLayout.LayoutParams(0, -1, 0.19f))
         root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
     }
@@ -821,9 +828,9 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(18), dp(9), dp(18), dp(12))
+            setPadding(sdp(18), sdp(14), sdp(18), sdp(12))
         }
-        root.addView(buildEntranceHeader("컵 가이드", "", null) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, dp(62)))
+        root.addView(buildEntranceHeader("컵 가이드", "", null) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
         val panels = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val chart = sectionPanel().apply {
             gravity = Gravity.CENTER
@@ -873,11 +880,11 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(24), dp(10), dp(24), dp(12))
+            setPadding(sdp(24), sdp(18), sdp(24), sdp(14))
             gravity = Gravity.CENTER_HORIZONTAL
         }
         root.addView(TextView(this).apply {
-            text = "시작하기 전에"; textSize = 25f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = "시작하기 전에"; textSize = scaledSp(22f); typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.WHITE); gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(-1, dp(58)))
         val pics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun diagram(textValue: String): TextView = TextView(this).apply {
@@ -900,9 +907,9 @@ class MainActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(14), dp(7), dp(14), dp(10))
+            setPadding(sdp(14), sdp(14), sdp(14), sdp(12))
         }
-        root.addView(buildEntranceHeader("매트 준비", "", null) { if (game) showGameEntrance() else showPracticeEntrance() }, LinearLayout.LayoutParams(-1, dp(58)))
+        root.addView(buildEntranceHeader("매트 준비", "", null) { if (game) showGameEntrance() else showPracticeEntrance() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
         val body = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val preview = FrameLayout(this).apply {
             background = roundedBg(Color.rgb(238, 240, 242), 12f, Color.rgb(210, 45, 49))
@@ -1050,6 +1057,22 @@ class MainActivity : AppCompatActivity() {
         set("smash", m.smash?.let { "%.2f".format(it) } ?: "--")
         set("tempo", m.tempoRatio?.let { "%.2f:1".format(it) } ?: "--")
     }
+
+    private fun uiScale(): Float {
+        val dm = resources.displayMetrics
+        val shortestDp = min(dm.widthPixels / dm.density, dm.heightPixels / dm.density)
+        return when {
+            shortestDp < 360f -> 0.82f
+            shortestDp < 420f -> 0.90f
+            shortestDp < 520f -> 0.96f
+            else -> 1.0f
+        }
+    }
+
+    private fun scaledSp(value: Float): Float = value * uiScale()
+
+    private fun sdp(value: Int): Int =
+        (value * uiScale() * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density + 0.5f).toInt()
