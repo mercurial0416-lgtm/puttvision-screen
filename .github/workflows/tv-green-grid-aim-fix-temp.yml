@@ -1,0 +1,89 @@
+name: Apply TV grid and green read fix temp
+
+on:
+  push:
+    branches: [ tv-green-grid-aim-v4 ]
+    paths: [ '.github/workflows/tv-green-grid-aim-fix-temp.yml' ]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Apply 24-green library and TV readout
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('app/src/main/java/com/puttvision/screen/MainActivity.kt')
+          s = p.read_text()
+          if 'import android.widget.ScrollView' not in s:
+              s = s.replace('import android.widget.SeekBar\n', 'import android.widget.SeekBar\nimport android.widget.ScrollView\n')
+
+          presets = Path('.tv-v4/presets.txt').read_text().rstrip()
+          pattern = r'    private val practiceGreenPresets = listOf\(.*?\n    \)\n\n    private val permission ='
+          s, count = re.subn(pattern, '    ' + presets + '\n\n    private val permission =', s, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit('practiceGreenPresets replacement failed')
+
+          picker = Path('.tv-v4/greenPicker.txt').read_text().rstrip().replace('ScrollView.LayoutParams', 'FrameLayout.LayoutParams')
+          a = s.index('    private fun buildPracticeGreenPicker(): View {')
+          b = s.index('    private fun showGameEntrance()', a)
+          s = s[:a] + '    ' + picker + '\n\n' + s[b:]
+          p.write_text(s)
+
+          g = Path('app/src/main/java/com/puttvision/screen/GreenView.kt')
+          u = g.read_text()
+          grid_start = '        p.style = Paint.Style.STROKE\n        p.strokeWidth = max(1f, w * .00055f)\n        for (i in 1..11) {'
+          grid_end = '        p.style = Paint.Style.FILL\n\n        val read = GreenReadAdvisor.read(settings)'
+          a = u.index(grid_start)
+          b = u.index(grid_end, a)
+          grid = '        ' + Path('.tv-v4/grid.txt').read_text().rstrip()
+          u = u[:a] + grid + '\n\n        val read = GreenReadAdvisor.read(settings)' + u[b + len(grid_end):]
+
+          helper = '    ' + Path('.tv-v4/aimHelper.txt').read_text().rstrip() + '\n\n'
+          u = u.replace('    private fun drawBrandRail(c: Canvas) {', helper + '    private fun drawBrandRail(c: Canvas) {')
+          ball_end = '        p.color = Color.WHITE\n        c.drawCircle(bx, by, max(8f, w * .0065f), p)\n    }'
+          u = u.replace(ball_end, '        p.color = Color.WHITE\n        c.drawCircle(bx, by, max(8f, w * .0065f), p)\n\n        drawAimReadout(c, read)\n    }', 1)
+          g.write_text(u)
+
+          v = Path('app/src/main/java/com/puttvision/screen/PracticeGreenPreviewView.kt')
+          q = v.read_text()
+          q = q.replace(
+              '            val cx = r.centerX() + w * .08f\n            val cy = r.centerY() + h * .08f\n            val maxRadius = min(w, h) * .55f',
+              '            val variant = (style / 6).coerceIn(0, 3)\n            val cx = r.centerX() + w * (.045f + variant * .024f)\n            val cy = r.centerY() + h * (.035f + (3 - variant) * .024f)\n            val maxRadius = min(w, h) * (.50f + variant * .018f)'
+          )
+          v.write_text(q)
+          PY
+
+      - name: Compile verification
+        run: gradle assembleDebug
+
+      - name: Commit verified TV green-read v4
+        shell: bash
+        run: |
+          rm -rf .tv-v4
+          rm -f .github/workflows/tv-green-grid-aim-temp.yml
+          rm -f .github/workflows/tv-green-grid-aim-fix-temp.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add 24 spatial greens, TV grid and cup aim guide"
+          git push origin HEAD:tv-green-grid-aim-v4
