@@ -217,32 +217,20 @@ class MainActivity : AppCompatActivity() {
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(6, 10, 14))
-            setPadding(dp(8), dp(6), dp(8), dp(7))
+            setBackgroundColor(Pv.ink)
+            setPadding(pvDp(10), pvDp(8), pvDp(10), pvDp(9))
         }
 
-        fun compactButton(label: String, accent: Boolean = false, click: () -> Unit): Button =
-            Button(this).apply {
-                text = label
-                isAllCaps = false
-                textSize = 10.5f
-                typeface = Typeface.DEFAULT_BOLD
-                minHeight = 0
-                minimumHeight = 0
-                setPadding(dp(10), 0, dp(10), 0)
-                setTextColor(if (accent) Color.WHITE else Color.rgb(225, 232, 239))
-                backgroundTintList = ColorStateList.valueOf(
-                    if (accent) Color.rgb(89, 58, 204) else Color.rgb(22, 31, 40)
-                )
-                setOnClickListener { click() }
-            }
-
-        // Header follows the original concept preview: brand + precision status + compact controls.
+        // Header: brand identity on the left, live status + primary toggles on the right.
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), 0, dp(5), 0)
+            setPadding(pvDp(4), 0, pvDp(2), 0)
         }
+
+        header.addView(View(this).apply {
+            background = pvRounded(Pv.primary, 100f)
+        }, LinearLayout.LayoutParams(pvDp(8), pvDp(8)).apply { marginEnd = pvDp(9) })
 
         val brandBlock = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -250,40 +238,43 @@ class MainActivity : AppCompatActivity() {
         }
         brandBlock.addView(TextView(this).apply {
             text = "PuttVision Screen"
-            setTextColor(Color.WHITE)
-            textSize = 16.5f
+            setTextColor(Pv.textHi)
+            textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
         })
         brandBlock.addView(TextView(this).apply {
-            text = "스마트폰 = 런치모니터  ·  TV = 스크린 퍼팅 시뮬레이터"
-            setTextColor(Color.rgb(145, 159, 173))
+            text = "스마트폰 = 런치모니터   ·   TV = 스크린 퍼팅 시뮬레이터"
+            setTextColor(Pv.textLo)
             textSize = 8.5f
+            setPadding(0, pvDp(1), 0, 0)
         })
-        header.addView(brandBlock, LinearLayout.LayoutParams(0, -2, 1.25f))
+        header.addView(brandBlock, LinearLayout.LayoutParams(0, -2, 1f))
 
         hfrStatus = TextView(this).apply {
             text = "HFR 확인중"
-            setTextColor(Color.rgb(146, 255, 177))
-            textSize = 10f
+            setTextColor(Pv.primary)
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            background = roundedBg(Color.rgb(14, 24, 31), 10f, Color.rgb(51, 74, 91))
-            setPadding(dp(9), dp(4), dp(9), dp(4))
+            background = pvRounded(Pv.surfaceLo, 100f, Pv.line)
+            setPadding(pvDp(11), pvDp(6), pvDp(11), pvDp(6))
         }
-        header.addView(hfrStatus, LinearLayout.LayoutParams(0, -2, 0.72f).apply {
-            marginStart = dp(5)
+        header.addView(hfrStatus, LinearLayout.LayoutParams(-2, -2).apply {
+            marginStart = pvDp(6)
         })
 
         tvStatus = TextView(this).apply {
             text = "○ TV"
-            setTextColor(Color.LTGRAY)
+            setTextColor(Pv.textMid)
             textSize = 9.5f
+            typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setPadding(dp(7), 0, dp(7), 0)
+            background = pvRounded(Pv.surfaceLo, 100f, Pv.line)
+            setPadding(pvDp(10), pvDp(6), pvDp(10), pvDp(6))
         }
-        header.addView(tvStatus)
+        header.addView(tvStatus, LinearLayout.LayoutParams(-2, -2).apply { marginStart = pvDp(6) })
 
-        modeButton = compactButton(engine.gameModes.status.mode.label) {
+        modeButton = pvButton(engine.gameModes.status.mode.label, PvButtonStyle.SECONDARY, textSp = 10.5f, radiusDp = 100f) {
             if (engine.state?.running == true) {
                 toast("공 굴러가는 중엔 모드 변경 막아놨음")
             } else {
@@ -294,22 +285,22 @@ class MainActivity : AppCompatActivity() {
                 updateSettingLabels()
             }
         }
-        header.addView(modeButton, LinearLayout.LayoutParams(dp(84), dp(34)).apply { marginStart = dp(5) })
+        header.addView(modeButton, LinearLayout.LayoutParams(pvDp(88), pvDp(34)).apply { marginStart = pvDp(6) })
 
-        autoButton = compactButton("AUTO ON", true) {
+        autoButton = pvButton("AUTO ON", PvButtonStyle.PRIMARY, textSp = 10.5f, radiusDp = 100f) {
             autoPlayEnabled = !autoPlayEnabled
             autoGeneration++
             updateAutoButton()
             if (autoPlayEnabled) maybeAutoStartAfterCalibration()
         }
-        header.addView(autoButton, LinearLayout.LayoutParams(dp(78), dp(34)).apply { marginStart = dp(5) })
+        header.addView(autoButton, LinearLayout.LayoutParams(pvDp(80), pvDp(34)).apply { marginStart = pvDp(6) })
 
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(45)))
+        root.addView(header, LinearLayout.LayoutParams(-1, pvDp(46)))
 
-        // Camera is now the hero panel, exactly like the concept preview.
+        // Camera is the hero: a raised, hairlined viewport framing the live feed.
         val cameraFrame = FrameLayout(this).apply {
-            background = roundedBg(Color.rgb(9, 14, 17), 18f, Color.rgb(46, 61, 72))
-            setPadding(dp(2), dp(2), dp(2), dp(2))
+            background = pvRounded(Pv.surfaceLo, Pv.rLg, Pv.line)
+            setPadding(pvDp(3), pvDp(3), pvDp(3), pvDp(3))
         }
 
         previewView = PreviewView(this).apply {
@@ -325,13 +316,13 @@ class MainActivity : AppCompatActivity() {
         cameraFrame.addView(replayView, FrameLayout.LayoutParams(-1, -1))
 
         root.addView(cameraFrame, LinearLayout.LayoutParams(-1, 0, 1.55f).apply {
-            setMargins(0, dp(3), 0, dp(5))
+            setMargins(0, pvDp(8), 0, pvDp(8))
         })
 
         val dashboard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), dp(7), dp(8), dp(7))
-            background = roundedBg(Color.rgb(11, 17, 23), 18f, Color.rgb(29, 43, 54))
+            setPadding(pvDp(10), pvDp(10), pvDp(10), pvDp(10))
+            background = pvRounded(Pv.surface, Pv.rLg, Pv.lineSoft)
         }
 
         val contentRow = LinearLayout(this).apply {
@@ -341,33 +332,28 @@ class MainActivity : AppCompatActivity() {
         val metricsSection = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        metricsSection.addView(TextView(this).apply {
-            text = "실시간 측정"
-            setTextColor(Color.WHITE)
-            textSize = 10.5f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(2), 0, 0, dp(4))
-        })
+        metricsSection.addView(pvEyebrow("실시간 측정 · LIVE METRICS"))
 
         fun metricCard(title: String, key: String): LinearLayout {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(4), dp(2), dp(4), dp(2))
-                background = roundedBg(Color.rgb(20, 29, 38), 9f, Color.rgb(34, 47, 59))
+                setPadding(pvDp(5), pvDp(3), pvDp(5), pvDp(3))
+                background = pvRounded(Pv.surfaceHi, Pv.rSm, Pv.lineSoft)
             }
             card.addView(TextView(this).apply {
                 text = title
-                setTextColor(Color.rgb(151, 164, 178))
-                textSize = 7.8f
+                setTextColor(Pv.textMid)
+                textSize = 7.6f
                 gravity = Gravity.CENTER
             })
             val value = TextView(this).apply {
                 text = "--"
-                setTextColor(Color.WHITE)
+                setTextColor(Pv.textHi)
                 textSize = 12.4f
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                 gravity = Gravity.CENTER
+                setPadding(0, pvDp(1), 0, 0)
             }
             metricCards[key] = value
             card.addView(value)
@@ -382,27 +368,27 @@ class MainActivity : AppCompatActivity() {
         metricDefs.forEachIndexed { rowIndex, rowDefs ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             rowDefs.forEachIndexed { i, (title, key) ->
-                row.addView(metricCard(title, key), LinearLayout.LayoutParams(0, dp(40), 1f).apply {
-                    if (i > 0) marginStart = dp(3)
+                row.addView(metricCard(title, key), LinearLayout.LayoutParams(0, pvDp(40), 1f).apply {
+                    if (i > 0) marginStart = pvDp(5)
                 })
             }
-            metricsSection.addView(row, LinearLayout.LayoutParams(-1, dp(40)).apply {
-                if (rowIndex > 0) topMargin = dp(3)
+            metricsSection.addView(row, LinearLayout.LayoutParams(-1, pvDp(40)).apply {
+                if (rowIndex > 0) topMargin = pvDp(5)
             })
         }
 
         contentRow.addView(metricsSection, LinearLayout.LayoutParams(0, -1, 2.25f).apply {
-            marginEnd = dp(7)
+            marginEnd = pvDp(10)
         })
 
         val shotSection = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(9), dp(7), dp(9), dp(7))
-            background = roundedBg(Color.rgb(15, 23, 30), 12f, Color.rgb(38, 52, 64))
+            setPadding(pvDp(11), pvDp(9), pvDp(11), pvDp(9))
+            background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.lineSoft)
         }
         shotPanelTitle = TextView(this).apply {
             text = "샷 결과 예측"
-            setTextColor(Color.WHITE)
+            setTextColor(Pv.textHi)
             textSize = 10.5f
             typeface = Typeface.DEFAULT_BOLD
         }
@@ -410,16 +396,18 @@ class MainActivity : AppCompatActivity() {
 
         metricText = TextView(this).apply {
             text = "READY\n공을 놓고 퍼팅하세요"
-            setTextColor(Color.rgb(225, 235, 241))
-            textSize = 10.2f
-            setPadding(0, dp(5), 0, 0)
+            setTextColor(Pv.textHi)
+            textSize = 10.5f
+            setLineSpacing(pvDp(2).toFloat(), 1f)
+            setPadding(0, pvDp(6), 0, 0)
             maxLines = 5
         }
         shotSection.addView(metricText, LinearLayout.LayoutParams(-1, 0, 1f))
 
         settingSummary = TextView(this).apply {
-            setTextColor(Color.rgb(132, 247, 174))
+            setTextColor(Pv.primary)
             textSize = 8.2f
+            typeface = Typeface.MONOSPACE
             maxLines = 2
         }
         shotSection.addView(settingSummary)
@@ -430,34 +418,18 @@ class MainActivity : AppCompatActivity() {
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(6), 0, 0)
+            setPadding(0, pvDp(10), 0, 0)
         }
 
-        fun actionButton(label: String, purple: Boolean = false, click: () -> Unit): Button =
-            Button(this).apply {
-                text = label
-                isAllCaps = false
-                textSize = if (purple) 11.5f else 10.2f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
-                backgroundTintList = ColorStateList.valueOf(
-                    if (purple) Color.rgb(96, 57, 211) else Color.rgb(20, 31, 40)
-                )
-                minHeight = 0
-                minimumHeight = 0
-                setPadding(dp(8), 0, dp(8), 0)
-                setOnClickListener { click() }
-            }
-
-        actions.addView(actionButton("재캘리브레이션") { beginAutoCalibration() }, LinearLayout.LayoutParams(0, dp(42), 0.9f).apply {
-            marginEnd = dp(5)
+        actions.addView(pvButton("재캘리브레이션", PvButtonStyle.SECONDARY, textSp = 10.2f) { beginAutoCalibration() }, LinearLayout.LayoutParams(0, pvDp(44), 0.9f).apply {
+            marginEnd = pvDp(6)
         })
-        actions.addView(actionButton("PRECISION READY", true) { armPrecision() }, LinearLayout.LayoutParams(0, dp(42), 1.25f).apply {
-            marginStart = dp(2); marginEnd = dp(2)
+        actions.addView(pvButton("PRECISION READY", PvButtonStyle.PRIMARY, textSp = 11.5f) { armPrecision() }, LinearLayout.LayoutParams(0, pvDp(44), 1.25f).apply {
+            marginStart = pvDp(2); marginEnd = pvDp(2)
         })
-        settingsToggle = actionButton("설정 / 환경") { showSettingsDialog() }
-        actions.addView(settingsToggle, LinearLayout.LayoutParams(0, dp(42), 0.9f).apply {
-            marginStart = dp(5)
+        settingsToggle = pvButton("설정 / 환경", PvButtonStyle.SECONDARY, textSp = 10.2f) { showSettingsDialog() }
+        actions.addView(settingsToggle, LinearLayout.LayoutParams(0, pvDp(44), 0.9f).apply {
+            marginStart = pvDp(6)
         })
         dashboard.addView(actions)
 
@@ -482,7 +454,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildSmartPuttMenu(): FrameLayout {
         return FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Pv.inkDeep)
             addView(buildVideoHomeScreen(), FrameLayout.LayoutParams(-1, -1))
         }
     }
@@ -500,128 +472,101 @@ class MainActivity : AppCompatActivity() {
             textSize = scaledSp(14f)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(Pv.primaryInk)
             minHeight = 0
             minimumHeight = 0
+            stateListAnimator = null
             setPadding(sdp(8), sdp(10), sdp(8), sdp(10))
-            background = roundedBg(Color.rgb(84, 196, 228), 20f)
+            background = pvRounded(Pv.primary, Pv.rLg)
             setOnClickListener { click() }
         }
 
     private fun darkChoice(label: String, selected: Boolean, click: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            isAllCaps = false
-            textSize = scaledSp(10.5f)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            minHeight = 0
-            minimumHeight = 0
-            setPadding(sdp(6), sdp(8), sdp(6), sdp(8))
-            setSingleLine(false)
-            setTextColor(Color.WHITE)
-            background = roundedBg(
-                if (selected) Color.rgb(84, 196, 228) else Color.rgb(93, 97, 118),
-                16f
-            )
-            setOnClickListener { click() }
-        }
+        pvChip(label, selected, onClick = click)
 
     private fun roundMenuIcon(symbol: String, label: String, click: () -> Unit): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            val icon = TextView(this@MainActivity).apply {
-                text = symbol
-                textSize = scaledSp(18f)
-                gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-                background = roundedBg(Color.rgb(84, 196, 228), 26f, Color.rgb(25, 31, 39))
-            }
-            addView(icon, LinearLayout.LayoutParams(sdp(46), sdp(46)))
-            addView(TextView(this@MainActivity).apply {
-                text = label
-                textSize = scaledSp(9f)
-                typeface = Typeface.DEFAULT_BOLD
-                gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
-                setPadding(0, dp(3), 0, 0)
-            })
-            setOnClickListener { click() }
-        }
+        pvIconControl(symbol, label, click)
 
     private fun buildVideoHomeScreen(): View {
         val root = FrameLayout(this).apply {
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(118, 160, 94), Color.rgb(79, 124, 66), Color.rgb(104, 147, 84))
-            )
+            setBackgroundColor(Pv.inkDeep)
         }
 
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(8), dp(14), 0)
+            setPadding(dp(16), dp(12), dp(16), 0)
         }
         top.addView(roundMenuIcon("◎", "언어") { toast("한국어") })
         top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         top.addView(roundMenuIcon("⚙", "환경") { showSettingsDialog() })
-        top.addView(roundMenuIcon("⇥", "종료") { finishAffinity() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(10) })
+        top.addView(roundMenuIcon("⇥", "종료") { finishAffinity() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
         root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(22), dp(55), dp(22), dp(18))
+            setPadding(dp(24), dp(56), dp(24), dp(20))
         }
 
+        // Course visual: a lush green gradient panel that anchors the brand.
         val visual = FrameLayout(this).apply {
-            background = roundedBg(Color.argb(28, 255, 255, 255), 26f)
+            background = pvVGradient(Color.rgb(104, 170, 84), Color.rgb(44, 94, 52), Pv.rXl)
         }
         visual.addView(TextView(this).apply {
             text = "⛳"
-            textSize = 100f
+            textSize = 92f
             gravity = Gravity.CENTER
         }, FrameLayout.LayoutParams(-1, -1))
-        body.addView(visual, LinearLayout.LayoutParams(0, -1, 0.42f).apply { marginEnd = dp(14) })
+        body.addView(visual, LinearLayout.LayoutParams(0, -1, 0.42f).apply { marginEnd = dp(18) })
 
         val right = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val title = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val title = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         title.addView(TextView(this).apply {
             text = "Putt"
-            textSize = 49f
+            textSize = 46f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(52, 201, 246))
+            setTextColor(Pv.primary)
         })
         title.addView(TextView(this).apply {
             text = "Vision"
-            textSize = 49f
+            textSize = 46f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            setTextColor(Pv.textHi)
         })
         right.addView(title)
+        right.addView(TextView(this).apply {
+            text = "SCREEN PUTTING SIMULATOR"
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.22f
+            setTextColor(Pv.textLo)
+            setPadding(dp(3), dp(2), 0, 0)
+        })
 
-        fun homeButton(titleText: String, lineColor: Int, click: () -> Unit): LinearLayout =
+        fun homeTile(titleText: String, accent: Int, click: () -> Unit): LinearLayout =
             LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = roundedBg(Color.rgb(37, 39, 51), 18f)
-                setPadding(dp(24), dp(10), dp(16), 0)
+                background = pvRounded(Pv.surfaceHi, Pv.rLg, Pv.line)
+                setPadding(dp(24), dp(14), dp(18), dp(14))
                 addView(TextView(this@MainActivity).apply {
                     text = titleText
-                    textSize = 24f
+                    textSize = 23f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.WHITE)
+                    setTextColor(Pv.textHi)
                     gravity = Gravity.CENTER_VERTICAL
                 }, LinearLayout.LayoutParams(-1, 0, 1f))
-                addView(View(this@MainActivity).apply { setBackgroundColor(lineColor) }, LinearLayout.LayoutParams(-1, dp(4)))
+                addView(View(this@MainActivity).apply {
+                    background = pvRounded(accent, 100f)
+                }, LinearLayout.LayoutParams(dp(48), dp(4)).apply { topMargin = dp(8) })
                 setOnClickListener { click() }
             }
 
-        right.addView(homeButton("⛳  연습장", Color.rgb(243, 167, 32)) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, dp(72)).apply { topMargin = dp(18) })
-        right.addView(homeButton("♜  게임장", Color.rgb(189, 40, 207)) { showGameEntrance() }, LinearLayout.LayoutParams(-1, dp(72)).apply { topMargin = dp(10) })
+        right.addView(homeTile("⛳  연습장", Pv.primary) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(20) })
+        right.addView(homeTile("♟  게임장", Pv.amber) { showGameEntrance() }, LinearLayout.LayoutParams(-1, dp(76)).apply { topMargin = dp(12) })
         body.addView(right, LinearLayout.LayoutParams(0, -1, 0.58f))
         root.addView(body, FrameLayout.LayoutParams(-1, -1))
         return root
@@ -629,15 +574,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun sectionPanel(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        background = roundedBg(Color.rgb(40, 44, 56), 20f)
+        background = pvRounded(Pv.surface, Pv.rLg, Pv.lineSoft)
         setPadding(sdp(12), sdp(10), sdp(12), sdp(10))
     }
 
     private fun tinyCaption(textValue: String): TextView = TextView(this).apply {
         text = textValue
         textSize = scaledSp(9f)
-        setTextColor(Color.rgb(208, 214, 222))
+        setTextColor(Pv.textMid)
         typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = 0.06f
         setPadding(sdp(2), 0, 0, sdp(6))
     }
 
@@ -645,16 +591,19 @@ class MainActivity : AppCompatActivity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            addView(View(this@MainActivity).apply {
+                background = pvRounded(Pv.primary, 100f)
+            }, LinearLayout.LayoutParams(sdp(4), sdp(20)).apply { marginEnd = sdp(9) })
             addView(TextView(this@MainActivity).apply {
                 text = title
                 textSize = scaledSp(18f)
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(Color.WHITE)
+                setTextColor(Pv.textHi)
             })
             addView(TextView(this@MainActivity).apply {
                 text = english
                 textSize = scaledSp(9f)
-                setTextColor(Color.rgb(145, 149, 160))
+                setTextColor(Pv.textLo)
                 setPadding(sdp(6), sdp(6), 0, 0)
             })
             addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
@@ -671,7 +620,7 @@ class MainActivity : AppCompatActivity() {
     private fun buildPracticeEntrance(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Pv.inkDeep)
             setPadding(sdp(14), sdp(14), sdp(14), sdp(12))
         }
         root.addView(buildEntranceHeader("연습장 입구", "Practice Mode Entrance", { showCupGuideScreen() }) { showHomeMenu() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
@@ -770,7 +719,7 @@ class MainActivity : AppCompatActivity() {
     private fun buildGameEntrance(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Pv.inkDeep)
             setPadding(sdp(14), sdp(14), sdp(14), sdp(12))
         }
         root.addView(buildEntranceHeader("게임장 입구", "Game Zone Entrance", null) { showHomeMenu() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
@@ -827,7 +776,7 @@ class MainActivity : AppCompatActivity() {
     private fun showCupGuideScreen() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Pv.inkDeep)
             setPadding(sdp(18), sdp(14), sdp(18), sdp(12))
         }
         root.addView(buildEntranceHeader("컵 가이드", "", null) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
@@ -879,7 +828,7 @@ class MainActivity : AppCompatActivity() {
     private fun showPreStartGuide(game: Boolean) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Pv.inkDeep)
             setPadding(sdp(24), sdp(18), sdp(24), sdp(14))
             gravity = Gravity.CENTER_HORIZONTAL
         }
@@ -906,7 +855,7 @@ class MainActivity : AppCompatActivity() {
     private fun showMatPrep(game: Boolean) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Pv.inkDeep)
             setPadding(sdp(14), sdp(14), sdp(14), sdp(12))
         }
         root.addView(buildEntranceHeader("매트 준비", "", null) { if (game) showGameEntrance() else showPracticeEntrance() }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(8) })
@@ -1099,11 +1048,13 @@ class MainActivity : AppCompatActivity() {
                 "AUTO OFF"
             }
 
-        autoButton.backgroundTintList = ColorStateList.valueOf(
-            if (autoPlayEnabled) Color.rgb(126, 238, 174) else Color.rgb(58, 66, 62)
+        autoButton.background = pvRounded(
+            if (autoPlayEnabled) Pv.primary else Pv.surfaceHi,
+            100f,
+            if (autoPlayEnabled) Color.TRANSPARENT else Pv.line
         )
         autoButton.setTextColor(
-            if (autoPlayEnabled) Color.rgb(4, 24, 14) else Color.WHITE
+            if (autoPlayEnabled) Pv.primaryInk else Pv.textMid
         )
     }
 
