@@ -6,7 +6,8 @@ data class GreenSettings(
     var stimpMeters: Double = 2.8,
     var holeDistanceM: Double = 5.0,
     var sideSlopePct: Double = 0.0,   // + = right side is lower, ball breaks right
-    var longSlopePct: Double = 0.0    // + = downhill toward the hole
+    var longSlopePct: Double = 0.0,   // + = downhill toward the hole
+    var terrainProfileId: Int = -1    // -1 = uniform plane, 0..5 = practice terrain profile
 )
 
 data class SimState(
@@ -57,8 +58,20 @@ class GreenPhysics {
         // constant deceleration, a = v^2 / (2S).
         val frictionDecel = (STIMP_LAUNCH_MPS * STIMP_LAUNCH_MPS) / (2.0 * stimp)
 
-        val slopeAx = ROLLING_GRAVITY_FACTOR * G * (settings.sideSlopePct / 100.0)
-        val slopeAy = ROLLING_GRAVITY_FACTOR * G * (settings.longSlopePct / 100.0)
+        // The selected practice green may add a position-dependent terrain slope
+        // on top of the preset's base break/grade. Non-green practice and game
+        // modes use terrainProfileId=-1 and therefore retain the uniform plane.
+        val localTerrain = GreenTerrain.slopeAt(
+            profileId = settings.terrainProfileId,
+            x = state.x,
+            y = state.y,
+            holeDistanceM = settings.holeDistanceM
+        )
+        val effectiveSideSlopePct = settings.sideSlopePct + localTerrain.sidePct
+        val effectiveLongSlopePct = settings.longSlopePct + localTerrain.longPct
+
+        val slopeAx = ROLLING_GRAVITY_FACTOR * G * (effectiveSideSlopePct / 100.0)
+        val slopeAy = ROLLING_GRAVITY_FACTOR * G * (effectiveLongSlopePct / 100.0)
 
         val speed = hypot(state.vx, state.vy)
         var ax = slopeAx
