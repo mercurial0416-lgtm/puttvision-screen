@@ -5,273 +5,328 @@ import android.graphics.*
 import android.view.View
 import kotlin.math.*
 
+/**
+ * External TV / simulator renderer.
+ * Rendering only: it reads GameEngine state but never mutates game/camera logic.
+ */
 class GreenView(
     context: Context,
     private val engine: GameEngine
 ) : View(context) {
 
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
 
     init {
         isClickable = false
         isFocusable = false
         keepScreenOn = true
+        setBackgroundColor(Color.BLACK)
     }
-    private val rect = RectF()
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        drawSkyAndCourse(canvas)
-        drawPerspectiveGreen(canvas)
-        drawTopHud(canvas)
-        drawCornerCards(canvas)
+        drawCourse(canvas)
+        drawGreen(canvas)
+        drawBrandRail(canvas)
+        drawShotTelemetry(canvas)
+        drawResult(canvas)
         postInvalidateOnAnimation()
     }
 
-    private fun drawSkyAndCourse(c: Canvas) {
-        val horizon = height * 0.31f
+    private fun drawCourse(c: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val horizon = h * .305f
 
         p.shader = LinearGradient(
             0f, 0f, 0f, horizon,
-            Color.rgb(18, 43, 58),
-            Color.rgb(81, 126, 137),
+            intArrayOf(Color.rgb(12, 27, 36), Color.rgb(33, 66, 75), Color.rgb(73, 107, 108)),
+            floatArrayOf(0f, .58f, 1f),
             Shader.TileMode.CLAMP
         )
-        c.drawRect(0f, 0f, width.toFloat(), horizon, p)
+        c.drawRect(0f, 0f, w, horizon, p)
         p.shader = null
 
-        // Soft cloud bands for a photo-like screen-golf backdrop.
-        p.color = Color.argb(38, 236, 241, 247)
-        for (i in 0 until 8) {
-            val cx = width * (0.08f + i * 0.14f)
-            val cy = horizon * (0.20f + (i % 3) * 0.13f)
-            c.drawOval(RectF(cx - width * .055f, cy - 15f, cx + width * .055f, cy + 15f), p)
+        // Quiet atmospheric layers instead of cartoon clouds.
+        p.color = Color.argb(28, 240, 246, 247)
+        repeat(6) { i ->
+            val cx = w * (.10f + i * .17f)
+            val cy = horizon * (.18f + (i % 2) * .14f)
+            c.drawOval(RectF(cx - w * .085f, cy - h * .018f, cx + w * .085f, cy + h * .018f), p)
         }
 
-        // Tree line.
-        p.color = Color.rgb(37, 91, 45)
-        val base = horizon + height * .045f
-        for (i in 0..24) {
-            val x = width * i / 24f
-            val r = width * (0.018f + (i % 4) * .003f)
-            c.drawCircle(x, base - r * .6f, r, p)
-            c.drawRect(x - r * .12f, base - r * .3f, x + r * .12f, base + r * .6f, p)
+        // Distant course/tree silhouette.
+        p.color = Color.rgb(22, 60, 39)
+        val treeBase = horizon + h * .055f
+        repeat(30) { i ->
+            val x = w * i / 29f
+            val r = w * (.012f + (i % 5) * .0022f)
+            c.drawCircle(x, treeBase - r * .55f, r, p)
+            c.drawRect(x - r * .08f, treeBase - r * .1f, x + r * .08f, treeBase + r * .65f, p)
         }
 
         p.shader = LinearGradient(
-            0f, horizon, 0f, height.toFloat(),
-            Color.rgb(74, 144, 58),
-            Color.rgb(34, 91, 38),
-            Shader.TileMode.CLAMP
+            0f, horizon, 0f, h,
+            Color.rgb(43, 104, 49), Color.rgb(18, 59, 35), Shader.TileMode.CLAMP
         )
-        c.drawRect(0f, horizon, width.toFloat(), height.toFloat(), p)
+        c.drawRect(0f, horizon, w, h, p)
+        p.shader = null
+
+        // Cinematic lower vignette keeps HUD readable on bright TVs.
+        p.shader = LinearGradient(
+            0f, h * .58f, 0f, h,
+            Color.TRANSPARENT, Color.argb(126, 3, 7, 7), Shader.TileMode.CLAMP
+        )
+        c.drawRect(0f, h * .58f, w, h, p)
         p.shader = null
     }
 
-    private fun drawPerspectiveGreen(c: Canvas) {
+    private fun drawGreen(c: Canvas) {
         val settings = engine.settings
-        val horizonY = height * 0.37f
-        val bottomY = height * 0.91f
-        val centerX = width * 0.56f
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val horizonY = h * .355f
+        val bottomY = h * .955f
+        val centerX = w * .54f
 
-        val green = Path().apply {
-            moveTo(width * 0.26f, horizonY)
-            lineTo(width * 0.84f, horizonY)
-            lineTo(width * 0.96f, bottomY)
-            lineTo(width * 0.07f, bottomY)
+        val greenShape = Path().apply {
+            moveTo(w * .265f, horizonY)
+            lineTo(w * .815f, horizonY)
+            lineTo(w * .965f, bottomY)
+            lineTo(w * .075f, bottomY)
             close()
         }
+
         p.shader = LinearGradient(
             0f, horizonY, 0f, bottomY,
-            Color.rgb(91, 170, 48),
-            Color.rgb(70, 142, 37),
-            Shader.TileMode.CLAMP
+            intArrayOf(Color.rgb(78, 154, 61), Color.rgb(69, 140, 50), Color.rgb(50, 111, 43)),
+            floatArrayOf(0f, .48f, 1f), Shader.TileMode.CLAMP
         )
-        c.drawPath(green, p)
+        c.drawPath(greenShape, p)
         p.shader = null
 
-        val maxY = max(settings.holeDistanceM * 1.30, 3.0)
+        val maxY = max(settings.holeDistanceM * 1.28, 3.0)
         fun sy(y: Double): Float {
             val t = (y / maxY).coerceIn(0.0, 1.0).toFloat()
-            // Target is farther away, so visually higher.
             return bottomY - (bottomY - horizonY) * t
         }
-        fun halfWidthAtY(yPix: Float): Float {
+        fun halfWidthAt(yPix: Float): Float {
             val t = ((yPix - horizonY) / (bottomY - horizonY)).coerceIn(0f, 1f)
-            return width * (0.19f + 0.25f * t)
+            return w * (.175f + .265f * t)
         }
         fun sx(x: Double, y: Double): Float {
             val yp = sy(y)
-            val sideRange = max(1.2, settings.holeDistanceM * .20)
-            return centerX + (x / sideRange).toFloat() * halfWidthAtY(yp)
+            val sideRange = max(1.15, settings.holeDistanceM * .20)
+            return centerX + (x / sideRange).toFloat() * halfWidthAt(yp)
         }
 
-        // Perspective grid, converging toward the flag.
+        // Subtle mowing bands.
         p.style = Paint.Style.STROKE
-        p.strokeWidth = max(1f, width * .0007f)
-        p.color = Color.argb(92, 210, 244, 195)
-        for (i in -5..5) {
-            val frac = i / 5f
-            val xBottom = centerX + frac * halfWidthAtY(bottomY)
-            val xTop = centerX + frac * halfWidthAtY(horizonY)
-            c.drawLine(xBottom, bottomY, xTop, horizonY, p)
-        }
-        for (i in 1..10) {
-            val t = i / 10f
-            val y = bottomY - (bottomY - horizonY) * t.pow(1.45f)
-            val hw = halfWidthAtY(y)
+        p.strokeWidth = max(1f, w * .00055f)
+        for (i in 1..11) {
+            val t = i / 11f
+            val y = bottomY - (bottomY - horizonY) * t.pow(1.48f)
+            val hw = halfWidthAt(y)
+            p.color = if (i % 2 == 0) Color.argb(34, 224, 255, 221) else Color.argb(20, 17, 54, 27)
             c.drawLine(centerX - hw, y, centerX + hw, y, p)
         }
         p.style = Paint.Style.FILL
 
-        val holeY = settings.holeDistanceM
-        val hx = sx(0.0, holeY)
-        val hy = sy(holeY)
-
-        // Suggested break path (the big white preview curve).
+        // Aim/break line: refined and thin, not a giant white pipe.
         val read = GreenReadAdvisor.read(settings)
+        val holeY = settings.holeDistanceM
         val aimX = read.aimOffsetCm / 100.0
-        val path = Path().apply {
+        val guide = Path().apply {
             moveTo(sx(0.0, 0.0), sy(0.0))
-            val midY = holeY * .55
+            val midY = holeY * .56
             val curveX = aimX * .55 + settings.sideSlopePct * .012
             cubicTo(
-                sx(curveX * .20, holeY * .22), sy(holeY * .22),
+                sx(curveX * .16, holeY * .18), sy(holeY * .18),
                 sx(curveX, midY), sy(midY),
                 sx(aimX, holeY), sy(holeY)
             )
         }
         p.style = Paint.Style.STROKE
-        p.strokeWidth = max(5f, width * .004f)
         p.strokeCap = Paint.Cap.ROUND
-        p.color = Color.argb(215, 241, 255, 236)
-        c.drawPath(path, p)
-        p.style = Paint.Style.FILL
-        p.strokeCap = Paint.Cap.BUTT
+        p.strokeWidth = max(3f, w * .0021f)
+        p.color = Color.argb(188, 238, 247, 239)
+        c.drawPath(guide, p)
 
-        // Actual trail overlays the guide when the ball is moving.
         engine.state?.trail?.takeIf { it.size >= 2 }?.let { trail ->
             val actual = Path().apply {
                 moveTo(sx(trail.first().first, trail.first().second), sy(trail.first().second))
-                trail.drop(1).forEach { pt -> lineTo(sx(pt.first, pt.second), sy(pt.second)) }
+                trail.drop(1).forEach { point -> lineTo(sx(point.first, point.second), sy(point.second)) }
             }
-            p.style = Paint.Style.STROKE
-            p.strokeWidth = max(4f, width * .003f)
-            p.color = Color.argb(230, 255, 234, 126)
+            p.strokeWidth = max(4f, w * .0028f)
+            p.color = Color.argb(238, 255, 210, 88)
             c.drawPath(actual, p)
-            p.style = Paint.Style.FILL
         }
+        p.strokeCap = Paint.Cap.BUTT
+        p.style = Paint.Style.FILL
 
-        // Cup and flag.
-        p.color = Color.argb(140, 0, 0, 0)
-        c.drawOval(RectF(hx - 15f, hy - 4f, hx + 15f, hy + 5f), p)
+        val hx = sx(0.0, holeY)
+        val hy = sy(holeY)
+        p.color = Color.argb(125, 0, 0, 0)
+        c.drawOval(RectF(hx - w * .010f, hy - h * .0035f, hx + w * .010f, hy + h * .005f), p)
         p.color = Color.WHITE
-        c.drawRect(hx - 2f, hy - height * .115f, hx + 2f, hy, p)
+        c.drawRect(hx - 1.7f, hy - h * .12f, hx + 1.7f, hy, p)
         val flag = Path().apply {
-            moveTo(hx + 2f, hy - height * .115f)
-            lineTo(hx + width * .032f, hy - height * .098f)
-            lineTo(hx + 2f, hy - height * .080f)
+            moveTo(hx + 2f, hy - h * .12f)
+            lineTo(hx + w * .035f, hy - h * .103f)
+            lineTo(hx + 2f, hy - h * .082f)
             close()
         }
-        p.color = Color.rgb(245, 219, 62)
+        p.color = Pv.amber
         c.drawPath(flag, p)
 
-        // Ball shadow + ball.
         val state = engine.state
         val bx = if (state != null) sx(state.x, state.y) else sx(0.0, 0.0)
         val by = if (state != null) sy(state.y) else sy(0.0)
         p.color = Color.argb(72, 0, 0, 0)
-        c.drawOval(RectF(bx - 22f, by + 10f, bx + 22f, by + 20f), p)
+        c.drawOval(RectF(bx - w * .012f, by + h * .008f, bx + w * .012f, by + h * .017f), p)
         p.color = Color.WHITE
-        c.drawCircle(bx, by, max(9f, width * .007f), p)
+        c.drawCircle(bx, by, max(8f, w * .0065f), p)
     }
 
-    private fun drawTopHud(c: Canvas) {
+    private fun drawBrandRail(c: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val game = engine.gameModes.status
         val settings = engine.settings
-        val top = height * .035f
-        val h = height * .145f
-        val start = width * .035f
-        val totalW = width * .54f
-        val gap = width * .006f
-        val widths = floatArrayOf(.22f, .22f, .28f, .28f)
-        val labels = arrayOf("HOLE", "GREEN SPEED", "좌우 경사", "오르막/내리막")
-        val values = arrayOf(
-            "${"%.1f".format(settings.holeDistanceM)} m",
-            "${"%.1f".format(settings.stimpMeters)}",
-            if (settings.sideSlopePct >= 0) "R ${"%.1f".format(abs(settings.sideSlopePct))}%" else "L ${"%.1f".format(abs(settings.sideSlopePct))}%",
-            if (settings.longSlopePct >= 0) "▲ ${"%.1f".format(abs(settings.longSlopePct))}%" else "▼ ${"%.1f".format(abs(settings.longSlopePct))}%"
-        )
 
-        var x = start
-        widths.forEachIndexed { i, frac ->
-            val w = totalW * frac - gap
-            rect.set(x, top, x + w, top + h)
-            p.color = Color.argb(238, 13, 17, 22)
-            c.drawRoundRect(rect, 16f, 16f, p)
-            p.style = Paint.Style.STROKE
-            p.strokeWidth = 1.5f
-            p.color = Pv.line
-            c.drawRoundRect(rect, 16f, 16f, p)
-            p.style = Paint.Style.FILL
-            p.color = Pv.textMid
-            p.textSize = max(13f, width * .010f)
-            p.typeface = Typeface.DEFAULT
-            c.drawText(labels[i], x + 16f, top + h * .32f, p)
-            p.color = if (i == 0) Pv.primary else Pv.textHi
-            p.textSize = max(25f, width * .022f)
+        val left = w * .032f
+        val top = h * .032f
+        val right = w * .968f
+        val bottom = h * .155f
+        rect.set(left, top, right, bottom)
+        p.color = Color.argb(220, 7, 11, 14)
+        c.drawRoundRect(rect, h * .020f, h * .020f, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1.2f
+        p.color = Color.argb(140, 55, 68, 77)
+        c.drawRoundRect(rect, h * .020f, h * .020f, p)
+        p.style = Paint.Style.FILL
+
+        val padX = w * .016f
+        val labelY = top + h * .033f
+        val valueY = top + h * .083f
+
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(19f, w * .015f)
+        p.color = Pv.textHi
+        c.drawText("PUTTVISION", left + padX, labelY + h * .013f, p)
+        p.textSize = max(11f, w * .0085f)
+        p.color = Pv.primary
+        c.drawText("SCREEN", left + padX, valueY + h * .010f, p)
+
+        fun metric(x: Float, label: String, value: String, accent: Int = Pv.textHi) {
             p.typeface = Typeface.DEFAULT_BOLD
-            c.drawText(values[i], x + 16f, top + h * .73f, p)
-            x += w + gap
+            p.textSize = max(10f, w * .0078f)
+            p.color = Pv.textLo
+            c.drawText(label, x, labelY, p)
+            p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            p.textSize = max(23f, w * .018f)
+            p.color = accent
+            c.drawText(value, x, valueY, p)
         }
 
-        p.color = Pv.textHi
-        p.typeface = Typeface.DEFAULT_BOLD
+        metric(left + w * .185f, "TARGET", "${"%.1f".format(settings.holeDistanceM)} m", Pv.primary)
+        metric(left + w * .335f, "GREEN", "${"%.1f".format(settings.stimpMeters)}")
+        metric(left + w * .455f, "BREAK", if (settings.sideSlopePct >= 0) "R ${"%.1f".format(abs(settings.sideSlopePct))}%" else "L ${"%.1f".format(abs(settings.sideSlopePct))}%")
+        metric(left + w * .595f, "GRADE", if (settings.longSlopePct >= 0) "+${"%.1f".format(settings.longSlopePct)}%" else "${"%.1f".format(settings.longSlopePct)}%")
+
         p.textAlign = Paint.Align.RIGHT
-        p.textSize = max(23f, width * .019f)
-        c.drawText("PUTTVISION", width * .965f, top + h * .38f, p)
-        p.color = Pv.primary
-        c.drawText("SCREEN", width * .965f, top + h * .66f, p)
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(11f, w * .0085f)
+        p.color = Pv.textLo
+        c.drawText("${game.mode.label.uppercase()}  ·  PLAYER ${game.activePlayer}/${game.playerCount}", right - padX, labelY, p)
+        p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        p.textSize = max(22f, w * .017f)
+        p.color = Pv.textHi
+        val rightValue = if (game.totalHoles > 0) "HOLE ${game.hole}  ·  ${game.gameScore}" else game.gameScore
+        c.drawText(rightValue, right - padX, valueY, p)
         p.textAlign = Paint.Align.LEFT
         p.typeface = Typeface.DEFAULT
     }
 
-    private fun drawCornerCards(c: Canvas) {
-        val game = engine.gameModes.status
-        val result = engine.lastResult
+    private fun drawShotTelemetry(c: Canvas) {
+        val shot = engine.currentShot ?: return
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val left = w * .032f
+        val bottom = h * .955f
+        val top = h * .825f
+        val right = w * .61f
 
-        // Bottom-left player/shot card.
-        rect.set(width * .035f, height * .79f, width * .16f, height * .91f)
-        p.color = Color.argb(232, 13, 17, 22)
-        c.drawRoundRect(rect, 16f, 16f, p)
-        p.color = Pv.textMid
-        p.textSize = max(13f, width * .010f)
-        c.drawText("PLAYER ${game.activePlayer}/${game.playerCount}", rect.left + 15f, rect.top + 25f, p)
-        p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(20f, width * .015f)
-        val shotNo = if (game.totalHoles > 0) "HOLE ${game.hole} · ${game.gameScore}" else "${game.mode.label} · ${game.gameScore}"
-        c.drawText(shotNo, rect.left + 15f, rect.top + 54f, p)
-        p.typeface = Typeface.DEFAULT
+        rect.set(left, top, right, bottom)
+        p.color = Color.argb(214, 7, 11, 14)
+        c.drawRoundRect(rect, h * .018f, h * .018f, p)
 
-        if (result != null) {
-            rect.set(width * .79f, height * .70f, width * .965f, height * .91f)
-            p.color = Color.argb(238, 13, 17, 22)
-            c.drawRoundRect(rect, 18f, 18f, p)
-            p.color = Pv.textMid
-            p.textSize = max(14f, width * .011f)
-            c.drawText(if (result.holed) "RESULT" else "컵까지", rect.left + 18f, rect.top + 28f, p)
+        val pad = w * .014f
+        val columns = listOf(
+            Triple("BALL SPEED", shot.ballSpeedMps?.let { "%.2f".format(it) } ?: "--", "m/s"),
+            Triple("HEAD SPEED", shot.headSpeedMps?.let { "%.2f".format(it) } ?: "--", "m/s"),
+            Triple("FACE", shot.faceAngleDeg?.let { "%+.2f".format(it) } ?: "--", "°"),
+            Triple("PATH", shot.pathAngleDeg?.let { "%+.2f".format(it) } ?: "--", "°")
+        )
+        val colW = (right - left - pad * 2f) / columns.size
+        columns.forEachIndexed { index, item ->
+            val x = left + pad + colW * index
+            p.color = Pv.textLo
             p.typeface = Typeface.DEFAULT_BOLD
-            p.textSize = max(32f, width * .028f)
-            val main = if (result.holed) "HOLE IN" else "${"%.2f".format(result.distanceToCupM)} m"
-            c.drawText(main, rect.left + 18f, rect.top + 72f, p)
-            p.textSize = max(17f, width * .013f)
-            p.color = if (result.holed) Pv.amber else Pv.primary
-            val side = when {
-                result.finishX > 0.03 -> "RIGHT"
-                result.finishX < -0.03 -> "LEFT"
-                else -> "CENTER"
-            }
-            c.drawText(side, rect.left + 18f, rect.bottom - 18f, p)
-            p.typeface = Typeface.DEFAULT
+            p.textSize = max(9f, w * .0072f)
+            c.drawText(item.first, x, top + h * .036f, p)
+            p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            p.textSize = max(23f, w * .018f)
+            p.color = if (index == 0) Pv.primary else Pv.textHi
+            c.drawText(item.second, x, top + h * .087f, p)
+            p.typeface = Typeface.DEFAULT_BOLD
+            p.textSize = max(9f, w * .0068f)
+            p.color = Pv.textLo
+            c.drawText(item.third, x + colW * .63f, top + h * .087f, p)
         }
+    }
+
+    private fun drawResult(c: Canvas) {
+        val result = engine.lastResult ?: return
+        val score = engine.strokeScore
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val left = w * .665f
+        val right = w * .968f
+        val top = h * .745f
+        val bottom = h * .955f
+
+        rect.set(left, top, right, bottom)
+        p.color = Color.argb(232, 7, 11, 14)
+        c.drawRoundRect(rect, h * .020f, h * .020f, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1.4f
+        p.color = if (result.holed) Color.argb(170, 246, 190, 74) else Color.argb(135, 78, 209, 121)
+        c.drawRoundRect(rect, h * .020f, h * .020f, p)
+        p.style = Paint.Style.FILL
+
+        val x = left + w * .018f
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(11f, w * .0085f)
+        p.color = if (result.holed) Pv.amber else Pv.primary
+        c.drawText(if (result.holed) "HOLED" else "SHOT RESULT", x, top + h * .042f, p)
+
+        p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        p.textSize = max(38f, w * .030f)
+        p.color = Pv.textHi
+        val main = if (result.holed) "IN" else "${"%.2f".format(result.distanceToCupM)} m"
+        c.drawText(main, x, top + h * .112f, p)
+
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(13f, w * .010f)
+        val side = when {
+            result.finishX > .03 -> "RIGHT"
+            result.finishX < -.03 -> "LEFT"
+            else -> "CENTER"
+        }
+        p.color = Pv.textMid
+        c.drawText("$side  ·  ${score?.let { "SCORE ${it.total}" } ?: "ANALYZING"}", x, top + h * .158f, p)
     }
 }
