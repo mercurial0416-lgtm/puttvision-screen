@@ -19,6 +19,7 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.SeekBar
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
@@ -132,12 +133,33 @@ class MainActivity : AppCompatActivity() {
     )
 
     private val practiceGreenPresets = listOf(
-        PracticeGreenPreset("스트레이트", "0.5m / 20in", 0.0, 0.0, 0),
-        PracticeGreenPreset("좌→우 미세", "0.5m / 20in", 1.3, 0.0, 1),
-        PracticeGreenPreset("중앙 브레이크", "0.5m / 20in", -1.8, -0.6, 2),
-        PracticeGreenPreset("오르막 스트레이트", "1.2m / 45in", 0.0, -2.2, 3),
-        PracticeGreenPreset("오르막 브레이크", "1.2m / 45in", 2.8, -1.1, 4),
-        PracticeGreenPreset("복합 경사", "1.2m / 45in", -3.4, -1.6, 5)
+        PracticeGreenPreset("스타트 라인", "EASY · FLAT", 0.0, 0.0, 0),
+        PracticeGreenPreset("소프트 우브레이크", "EASY · R BREAK", 0.45, 0.0, 1),
+        PracticeGreenPreset("소프트 좌브레이크", "EASY · L BREAK", -0.45, 0.0, 2),
+        PracticeGreenPreset("소프트 오르막", "EASY · UPHILL", 0.0, -0.55, 3),
+        PracticeGreenPreset("소프트 내리막", "EASY · DOWNHILL", 0.0, 0.55, 4),
+        PracticeGreenPreset("얕은 볼", "EASY · BOWL", 0.0, 0.0, 5),
+
+        PracticeGreenPreset("우측 브레이크", "STANDARD · R BREAK", 0.90, 0.0, 6),
+        PracticeGreenPreset("좌측 브레이크", "STANDARD · L BREAK", -0.90, 0.0, 7),
+        PracticeGreenPreset("오르막 우측", "STANDARD · UP + R", 0.75, -0.85, 8),
+        PracticeGreenPreset("오르막 좌측", "STANDARD · UP + L", -0.75, -0.85, 9),
+        PracticeGreenPreset("내리막 우측", "STANDARD · DOWN + R", 0.75, 0.85, 10),
+        PracticeGreenPreset("내리막 좌측", "STANDARD · DOWN + L", -0.75, 0.85, 11),
+
+        PracticeGreenPreset("더블 브레이크 R→L", "ADVANCED · DOUBLE", 0.0, -0.10, 12),
+        PracticeGreenPreset("더블 브레이크 L→R", "ADVANCED · DOUBLE", 0.0, -0.10, 13),
+        PracticeGreenPreset("크라운", "ADVANCED · CROWN", 0.0, 0.0, 14),
+        PracticeGreenPreset("딥 볼", "ADVANCED · DEEP BOWL", 0.0, -0.15, 15),
+        PracticeGreenPreset("후반 우브레이크", "ADVANCED · LATE R", 0.25, -0.10, 16),
+        PracticeGreenPreset("후반 좌브레이크", "ADVANCED · LATE L", -0.25, -0.10, 17),
+
+        PracticeGreenPreset("리지 라인", "EXPERT · RIDGE", 0.20, -0.20, 18),
+        PracticeGreenPreset("스네이크", "EXPERT · S-CURVE", 0.0, 0.0, 19),
+        PracticeGreenPreset("강한 오르막 우측", "EXPERT · UP + R", 1.15, -1.35, 20),
+        PracticeGreenPreset("강한 내리막 좌측", "EXPERT · DOWN + L", -1.15, 1.35, 21),
+        PracticeGreenPreset("크로스 크라운", "EXPERT · CROSS", 0.0, 0.0, 22),
+        PracticeGreenPreset("챔피언십 믹스", "EXPERT · CHAMPIONSHIP", -0.35, -0.25, 23)
     )
 
     private val permission =
@@ -1131,7 +1153,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14), sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14))
         }
         root.addView(
-            buildEntranceHeader("그린 선택", "GREEN LIBRARY", null) { showPracticeEntrance() },
+            buildEntranceHeader("그린 선택", "24 GREEN LIBRARY", null) { showPracticeEntrance() },
             LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(if (compact) 8 else 12) }
         )
 
@@ -1140,6 +1162,14 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val selected = practiceGreenPresets[practiceGreenPresetIndex]
+        val selectedReadSettings = GreenSettings(
+            stimpMeters = practiceGreenSpeed,
+            holeDistanceM = practiceDistanceM.toDouble(),
+            sideSlopePct = selected.sideSlopePct,
+            longSlopePct = selected.longSlopePct,
+            terrainProfileId = selected.previewStyle
+        )
+        val selectedRead = GreenReadAdvisor.read(selectedReadSettings)
 
         val info = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1147,28 +1177,45 @@ class MainActivity : AppCompatActivity() {
             setPadding(sdp(if (compact) 12 else 16), sdp(if (compact) 10 else 14), sdp(if (compact) 12 else 16), sdp(if (compact) 10 else 14))
             addView(PracticeGreenPreviewView(this@MainActivity).apply {
                 styleIndex = selected.previewStyle
-            }, LinearLayout.LayoutParams(-1, 0, .60f))
+            }, LinearLayout.LayoutParams(-1, 0, .48f))
             addView(TextView(this@MainActivity).apply {
-                text = "퍼팅을 연습할\n그린을 선택하세요"
+                text = selected.title
                 setTextColor(Pv.textHi)
-                textSize = scaledSp(if (compact) 15f else 18f)
+                textSize = scaledSp(if (compact) 14f else 17f)
                 typeface = Typeface.DEFAULT_BOLD
                 includeFontPadding = false
-                setPadding(0, sdp(10), 0, 0)
+                setPadding(0, sdp(8), 0, 0)
             })
             addView(TextView(this@MainActivity).apply {
-                text = "현재 · ${selected.title}\n${selected.subtitle}  ·  BREAK ${if (selected.sideSlopePct >= 0) "+" else ""}${"%.1f".format(selected.sideSlopePct)}%  ·  GRADE ${if (selected.longSlopePct >= 0) "+" else ""}${"%.1f".format(selected.longSlopePct)}%"
+                text = selected.subtitle
+                setTextColor(Pv.primary)
+                textSize = scaledSp(if (compact) 7f else 8f)
+                typeface = Typeface.DEFAULT_BOLD
+                includeFontPadding = false
+                setPadding(0, sdp(3), 0, 0)
+            })
+            addView(TextView(this@MainActivity).apply {
+                val aim = if (selectedRead.aimSideLabel == "센터") {
+                    "추천 에임 · 센터"
+                } else {
+                    "추천 에임 · ${selectedRead.aimSideLabel}  ${"%.1f".format(selectedRead.cupCount)}컵  /  ${"%.1f".format(selectedRead.putterHeadCount)}헤드"
+                }
+                text = "$aim\n${selectedRead.paceHint}"
                 setTextColor(Pv.textMid)
-                textSize = scaledSp(if (compact) 6.6f else 7.8f)
+                textSize = scaledSp(if (compact) 6.5f else 7.6f)
                 typeface = Typeface.MONOSPACE
                 includeFontPadding = false
                 setPadding(0, sdp(7), 0, 0)
             })
         }
-        body.addView(info, LinearLayout.LayoutParams(0, -1, .25f).apply { marginEnd = sdp(if (compact) 8 else 12) })
+        body.addView(info, LinearLayout.LayoutParams(0, -1, .23f).apply { marginEnd = sdp(if (compact) 8 else 12) })
 
-        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        practiceGreenPresets.chunked(3).forEachIndexed { rowIndex, rowItems ->
+        val grid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, sdp(4), sdp(4))
+        }
+
+        practiceGreenPresets.chunked(4).forEachIndexed { rowIndex, rowItems ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             rowItems.forEachIndexed { colIndex, preset ->
                 val presetIndex = practiceGreenPresets.indexOf(preset)
@@ -1176,36 +1223,35 @@ class MainActivity : AppCompatActivity() {
                 val card = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     background = pvRounded(if (active) Color.rgb(29, 58, 42) else Pv.surfaceHi, Pv.rLg, if (active) Pv.primary else Pv.lineSoft)
-                    setPadding(sdp(if (compact) 8 else 10), sdp(if (compact) 6 else 8), sdp(if (compact) 8 else 10), sdp(if (compact) 6 else 8))
-                    val header = LinearLayout(this@MainActivity).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        addView(TextView(this@MainActivity).apply {
-                            text = preset.title
-                            setTextColor(if (active) Pv.primary else Pv.textHi)
-                            textSize = scaledSp(if (compact) 7.5f else 9f)
-                            typeface = Typeface.DEFAULT_BOLD
-                            includeFontPadding = false
-                        }, LinearLayout.LayoutParams(0, -2, 1f))
-                        addView(TextView(this@MainActivity).apply {
-                            text = preset.subtitle
-                            setTextColor(Pv.textMid)
-                            textSize = scaledSp(if (compact) 6f else 7f)
-                            typeface = Typeface.MONOSPACE
-                            includeFontPadding = false
-                        })
-                    }
-                    addView(header)
+                    setPadding(sdp(if (compact) 7 else 9), sdp(if (compact) 6 else 8), sdp(if (compact) 7 else 9), sdp(if (compact) 6 else 8))
+
+                    addView(TextView(this@MainActivity).apply {
+                        text = preset.subtitle
+                        setTextColor(if (active) Pv.primary else Pv.textLo)
+                        textSize = scaledSp(if (compact) 5.4f else 6.3f)
+                        typeface = Typeface.DEFAULT_BOLD
+                        includeFontPadding = false
+                        maxLines = 1
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        text = preset.title
+                        setTextColor(Pv.textHi)
+                        textSize = scaledSp(if (compact) 7.4f else 8.7f)
+                        typeface = Typeface.DEFAULT_BOLD
+                        includeFontPadding = false
+                        maxLines = 1
+                    }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(2) })
                     addView(PracticeGreenPreviewView(this@MainActivity).apply {
                         styleIndex = preset.previewStyle
-                    }, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = sdp(5) })
+                    }, LinearLayout.LayoutParams(-1, sdp(if (compact) 58 else 72)).apply { topMargin = sdp(5) })
                     addView(TextView(this@MainActivity).apply {
-                        text = "BREAK ${if (preset.sideSlopePct >= 0) "+" else ""}${"%.1f".format(preset.sideSlopePct)}%   ·   GRADE ${if (preset.longSlopePct >= 0) "+" else ""}${"%.1f".format(preset.longSlopePct)}%"
+                        text = "B ${if (preset.sideSlopePct >= 0) "+" else ""}${"%.1f".format(preset.sideSlopePct)}%  ·  G ${if (preset.longSlopePct >= 0) "+" else ""}${"%.1f".format(preset.longSlopePct)}%"
                         setTextColor(Pv.textLo)
-                        textSize = scaledSp(if (compact) 5.4f else 6.4f)
+                        textSize = scaledSp(if (compact) 5.2f else 6f)
                         typeface = Typeface.MONOSPACE
                         includeFontPadding = false
                         gravity = Gravity.CENTER_HORIZONTAL
+                        maxLines = 1
                         setPadding(0, sdp(4), 0, 0)
                     })
                     isClickable = true
@@ -1215,11 +1261,21 @@ class MainActivity : AppCompatActivity() {
                         showPracticeEntrance()
                     }
                 }
-                row.addView(card, LinearLayout.LayoutParams(0, -1, 1f).apply { if (colIndex > 0) marginStart = sdp(if (compact) 6 else 8) })
+                row.addView(card, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    if (colIndex > 0) marginStart = sdp(if (compact) 5 else 7)
+                })
             }
-            grid.addView(row, LinearLayout.LayoutParams(-1, 0, 1f).apply { if (rowIndex > 0) topMargin = sdp(if (compact) 6 else 8) })
+            grid.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                if (rowIndex > 0) topMargin = sdp(if (compact) 5 else 7)
+            })
         }
-        body.addView(grid, LinearLayout.LayoutParams(0, -1, .75f))
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(grid, FrameLayout.LayoutParams(-1, -2))
+        }
+        body.addView(scroll, LinearLayout.LayoutParams(0, -1, .77f))
         root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
         return root
     }

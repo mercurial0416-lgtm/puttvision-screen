@@ -116,9 +116,10 @@ class PracticeGreenPreviewView(context: Context) : View(context) {
             }
             p.style = Paint.Style.FILL
         } else {
-            val cx = r.centerX() + w * .08f
-            val cy = r.centerY() + h * .08f
-            val maxRadius = min(w, h) * .55f
+            val variant = (style / 6).coerceIn(0, 3)
+            val cx = r.centerX() + w * (.045f + variant * .024f)
+            val cy = r.centerY() + h * (.035f + (3 - variant) * .024f)
+            val maxRadius = min(w, h) * (.50f + variant * .018f)
             for (i in colors.indices.reversed()) {
                 val f = (i + 1) / colors.size.toFloat()
                 p.color = colors[i]

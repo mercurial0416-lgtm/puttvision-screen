@@ -119,13 +119,49 @@ class GreenView(
         }
 
         p.style = Paint.Style.STROKE
-        p.strokeWidth = max(1f, w * .00055f)
-        for (i in 1..11) {
-            val t = i / 11f
-            val y = bottomY - (bottomY - horizonY) * t.pow(1.48f)
-            val hw = halfWidthAt(y)
-            p.color = if (i % 2 == 0) Color.argb(34, 224, 255, 221) else Color.argb(20, 17, 54, 27)
-            c.drawLine(centerX - hw, y, centerX + hw, y, p)
+        p.strokeCap = Paint.Cap.BUTT
+
+        // Perspective putting grid. Spacing adapts to the selected distance so
+        // short-putt screens stay precise while long putts do not become noisy.
+        val gridStepM = when {
+            maxY <= 6.0 -> 0.5
+            maxY <= 12.0 -> 1.0
+            else -> 2.0
+        }
+        val gridSideRange = max(1.15, settings.holeDistanceM * .20)
+        var gridY = gridStepM
+        while (gridY < maxY) {
+            val major = kotlin.math.abs(gridY - kotlin.math.round(gridY)) < 0.02
+            val yp = sy(gridY)
+            val hw = halfWidthAt(yp)
+            p.strokeWidth = if (major) max(1.4f, w * .0009f) else max(.7f, w * .00045f)
+            p.color = if (major) Color.argb(84, 231, 255, 235) else Color.argb(38, 183, 238, 199)
+            c.drawLine(centerX - hw, yp, centerX + hw, yp, p)
+
+            if (major && gridY <= settings.holeDistanceM + 1.0) {
+                p.style = Paint.Style.FILL
+                p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                p.textSize = max(9f, w * .0067f)
+                p.color = Color.argb(150, 235, 244, 238)
+                c.drawText("${"%.0f".format(gridY)}m", centerX - hw + w * .008f, yp - h * .006f, p)
+                p.style = Paint.Style.STROKE
+            }
+            gridY += gridStepM
+        }
+
+        for (lane in -5..5) {
+            val frac = lane / 5.0
+            val path = Path()
+            for (step in 0..36) {
+                val yM = maxY * step / 36.0
+                val xM = gridSideRange * frac
+                val px = sx(xM, yM)
+                val py = sy(yM)
+                if (step == 0) path.moveTo(px, py) else path.lineTo(px, py)
+            }
+            p.strokeWidth = if (lane == 0) max(1.5f, w * .0010f) else max(.7f, w * .00045f)
+            p.color = if (lane == 0) Color.argb(96, 239, 255, 241) else Color.argb(38, 183, 238, 199)
+            c.drawPath(path, p)
         }
         p.style = Paint.Style.FILL
 
@@ -182,6 +218,54 @@ class GreenView(
         c.drawOval(RectF(bx - w * .012f, by + h * .008f, bx + w * .012f, by + h * .017f), p)
         p.color = Color.WHITE
         c.drawCircle(bx, by, max(8f, w * .0065f), p)
+
+        drawAimReadout(c, read)
+    }
+
+    private fun drawAimReadout(c: Canvas, read: GreenRead) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val left = w * .695f
+        val right = w * .968f
+        val top = h * .185f
+        val bottom = h * .315f
+
+        rect.set(left, top, right, bottom)
+        p.color = Color.argb(228, 6, 10, 13)
+        c.drawRoundRect(rect, h * .018f, h * .018f, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1.2f
+        p.color = Color.argb(145, 67, 91, 78)
+        c.drawRoundRect(rect, h * .018f, h * .018f, p)
+        p.style = Paint.Style.FILL
+
+        val pad = w * .014f
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(10f, w * .0078f)
+        p.color = Pv.primary
+        c.drawText("추천 에임 · GREEN READ", left + pad, top + h * .029f, p)
+
+        val main = if (read.aimSideLabel == "센터") {
+            "센터 조준"
+        } else {
+            "${read.aimSideLabel}  ${"%.1f".format(read.cupCount)}컵"
+        }
+        p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        p.textSize = max(24f, w * .019f)
+        p.color = Pv.textHi
+        c.drawText(main, left + pad, top + h * .071f, p)
+
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(10f, w * .0075f)
+        p.color = Pv.textMid
+        val head = if (read.aimSideLabel == "센터") "퍼터헤드 0.0개" else "퍼터헤드 ${"%.1f".format(read.putterHeadCount)}개"
+        c.drawText("$head  ·  ${read.paceHint}", left + pad, top + h * .102f, p)
+
+        p.typeface = Typeface.MONOSPACE
+        p.textSize = max(8f, w * .0064f)
+        p.color = Pv.textLo
+        val breakText = "경사 ${if (read.effectiveSideSlopePct >= 0) "+" else ""}${"%.1f".format(read.effectiveSideSlopePct)}%  ·  종경사 ${if (read.effectiveLongSlopePct >= 0) "+" else ""}${"%.1f".format(read.effectiveLongSlopePct)}%"
+        c.drawText(breakText, left + pad, bottom - h * .012f, p)
     }
 
     private fun drawBrandRail(c: Canvas) {
