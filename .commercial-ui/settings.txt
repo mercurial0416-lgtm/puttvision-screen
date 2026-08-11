@@ -1,0 +1,200 @@
+private fun showSettingsDialog() {
+    if (settingsDialog?.isShowing == true) return
+    if (engine.state?.running == true) {
+        toast("공이 멈춘 뒤 설정을 열어주세요")
+        return
+    }
+
+    val wasActiveSession = sessionActive
+    if (wasActiveSession) suspendMeasurementForOverlay()
+    var resumeOnDismiss = wasActiveSession
+
+    fun closeThen(resumeAfter: Boolean = false, block: () -> Unit) {
+        resumeOnDismiss = resumeAfter
+        settingsDialog?.dismiss()
+        settingsDialog = null
+        block()
+    }
+
+    val compact = compactLandscape
+    val shell = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(pvDp(if (compact) 4 else 8), 0, pvDp(if (compact) 4 else 8), 0)
+    }
+
+    shell.addView(TextView(this).apply {
+        text = "SESSION CONTROL"
+        setTextColor(Pv.primary)
+        textSize = pvSp(if (compact) 7f else 8f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .14f
+        includeFontPadding = false
+    })
+    shell.addView(TextView(this).apply {
+        text = "그린 환경과 시스템 도구"
+        setTextColor(Pv.textHi)
+        textSize = pvSp(if (compact) 15f else 18f)
+        typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+        setPadding(0, pvDp(3), 0, pvDp(if (compact) 8 else 11))
+    })
+
+    val columns = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.TOP
+    }
+
+    fun fieldLabel(text: String): TextView = TextView(this).apply {
+        this.text = text
+        setTextColor(Pv.textHi)
+        textSize = pvSp(if (compact) 8f else 9f)
+        typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+    }
+
+    fun sliderRow(labelView: TextView, seekBar: SeekBar): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.lineSoft)
+        setPadding(pvDp(if (compact) 10 else 12), pvDp(if (compact) 7 else 9), pvDp(if (compact) 10 else 12), pvDp(if (compact) 4 else 6))
+        addView(labelView)
+        addView(seekBar, LinearLayout.LayoutParams(-1, pvDp(if (compact) 28 else 34)))
+    }
+
+    fun seek(maxV: Int, progressV: Int, accent: Int = Pv.primary, onChange: (Int) -> Unit): SeekBar = SeekBar(this).apply {
+        max = maxV
+        progress = progressV
+        progressTintList = ColorStateList.valueOf(accent)
+        progressBackgroundTintList = ColorStateList.valueOf(Pv.line)
+        thumbTintList = ColorStateList.valueOf(accent)
+        setOnSeekBarChangeListener(simpleSeek(onChange))
+    }
+
+    val env = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    env.addView(TextView(this).apply {
+        text = "GREEN CONDITIONS"
+        setTextColor(Pv.textLo)
+        textSize = pvSp(if (compact) 6f else 7f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .12f
+        includeFontPadding = false
+    })
+
+    val speed = fieldLabel("그린 스피드   ${"%.1f".format(engine.settings.stimpMeters)}")
+    env.addView(sliderRow(speed, seek(20, ((engine.settings.stimpMeters - 2.0) * 10).toInt().coerceIn(0, 20)) {
+        engine.settings.stimpMeters = 2.0 + it / 10.0
+        speed.text = "그린 스피드   ${"%.1f".format(engine.settings.stimpMeters)}"
+        updateSettingLabels()
+    }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
+
+    val distance = fieldLabel("홀 거리   ${"%.1f".format(engine.settings.holeDistanceM)} m")
+    env.addView(sliderRow(distance, seek(140, ((engine.settings.holeDistanceM - 1.0) * 10).toInt().coerceIn(0, 140)) {
+        engine.settings.holeDistanceM = 1.0 + it / 10.0
+        distance.text = "홀 거리   ${"%.1f".format(engine.settings.holeDistanceM)} m"
+        updateSettingLabels()
+    }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
+
+    val side = fieldLabel("좌우 경사   ${"%+.1f".format(engine.settings.sideSlopePct)} %")
+    env.addView(sliderRow(side, seek(100, (engine.settings.sideSlopePct * 10 + 50).toInt().coerceIn(0, 100)) {
+        engine.settings.sideSlopePct = (it - 50) / 10.0
+        side.text = "좌우 경사   ${"%+.1f".format(engine.settings.sideSlopePct)} %"
+        updateSettingLabels()
+    }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
+
+    val grade = fieldLabel("오르막 / 내리막   ${"%+.1f".format(engine.settings.longSlopePct)} %")
+    env.addView(sliderRow(grade, seek(100, (engine.settings.longSlopePct * 10 + 50).toInt().coerceIn(0, 100)) {
+        engine.settings.longSlopePct = (it - 50) / 10.0
+        grade.text = "오르막 / 내리막   ${"%+.1f".format(engine.settings.longSlopePct)} %"
+        updateSettingLabels()
+    }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
+
+    columns.addView(env, LinearLayout.LayoutParams(0, -2, 1.22f).apply { marginEnd = pvDp(if (compact) 8 else 12) })
+
+    val tools = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    tools.addView(TextView(this).apply {
+        text = "SYSTEM"
+        setTextColor(Pv.textLo)
+        textSize = pvSp(if (compact) 6f else 7f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .12f
+        includeFontPadding = false
+    })
+
+    fun tool(kicker: String, title: String, click: () -> Unit): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = pvRounded(Pv.surfaceHi, Pv.rMd, Pv.line)
+        setPadding(pvDp(if (compact) 10 else 12), pvDp(if (compact) 6 else 8), pvDp(if (compact) 8 else 10), pvDp(if (compact) 6 else 8))
+        val copy = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+        copy.addView(TextView(this@MainActivity).apply {
+            text = kicker
+            setTextColor(Pv.textLo)
+            textSize = pvSp(if (compact) 5.6f else 6.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .08f
+            includeFontPadding = false
+        })
+        copy.addView(TextView(this@MainActivity).apply {
+            text = title
+            setTextColor(Pv.textHi)
+            textSize = pvSp(if (compact) 8f else 9.2f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        })
+        addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(TextView(this@MainActivity).apply {
+            text = "›"
+            setTextColor(Pv.primary)
+            textSize = pvSp(if (compact) 18f else 21f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        })
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { click() }
+    }
+
+    tools.addView(tool("NAVIGATION", "메인 메뉴") { closeThen { showHomeMenu() } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("ANALYTICS", "샷 기록 / STATS") { closeThen { showStats(resumeAfter = wasActiveSession) } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("DISPLAY", "TV 다시 연결") { displayController.refresh() }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("TRAINING", "컵 가이드") {
+        closeThen {
+            if (sessionActive) {
+                suspendMeasurementForOverlay()
+                showCupGuideScreen {
+                    menuBackAction = null
+                    menuOverlay.isClickable = false
+                    menuOverlay.visibility = View.GONE
+                    mainHandler.post { armPrecision() }
+                }
+            } else {
+                showCupGuideScreen { showHomeMenu() }
+            }
+        }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("SOFTWARE", "업데이트 확인") {
+        closeThen {
+            if (wasActiveSession) showHomeMenu()
+            appUpdater.check(silent = false)
+        }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("DEVELOPER", "ZIP 배포") {
+        closeThen {
+            if (wasActiveSession) showHomeMenu()
+            startActivity(Intent(this, DeployActivity::class.java))
+        }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+
+    columns.addView(tools, LinearLayout.LayoutParams(0, -2, .78f))
+    shell.addView(columns)
+
+    val dialog = pvDialog(title = "설정", content = shell, dismissLabel = "완료")
+    settingsDialog = dialog
+    dialog.setOnDismissListener {
+        if (settingsDialog === dialog) settingsDialog = null
+        if (resumeOnDismiss && sessionActive && menuOverlay.visibility != View.VISIBLE) {
+            mainHandler.post { armPrecision() }
+        }
+    }
+    dialog.show()
+}
