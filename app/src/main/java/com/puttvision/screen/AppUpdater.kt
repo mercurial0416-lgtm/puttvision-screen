@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -18,14 +19,16 @@ data class UpdateInfo(
     val versionCode: Int,
     val versionName: String,
     val apkUrl: String,
-    val sha256: String?
+    val sha256: String?,
+    val githubToken: String? = null
 )
 
 class AppUpdater(
     private val activity: Activity,
-    private val manifestUrl: String = "https://puttvision-update.vercel.app/update.json"
+    private val fallbackManifestUrl: String = "https://puttvision-update.vercel.app/update.json"
 ) {
     private val executor = Executors.newSingleThreadExecutor()
+    private val tokenStore = SecureTokenStore(activity)
 
     fun check(silent: Boolean = true) {
         executor.execute {
@@ -43,7 +46,7 @@ class AppUpdater(
                     activity.runOnUiThread {
                         AlertDialog.Builder(activity)
                             .setTitle("PuttVision")
-                            .setMessage("최신 버전입니다.")
+                            .setMessage("최신 버전입니다. (v$current)")
                             .setPositiveButton("확인", null)
                             .show()
                     }
@@ -63,7 +66,49 @@ class AppUpdater(
     }
 
     private fun fetchInfo(): UpdateInfo {
-        val c = (URL(manifestUrl).openConnection() as HttpURLConnection).apply {
+        val token = tokenStore.loadToken()
+        if (!token.isNullOrBlank()) {
+            try {
+                return fetchGitHubRelease(token)
+            } catch (_: Throwable) {
+                // Keep the v0.5 public-manifest path as a bootstrap fallback.
+            }
+        }
+        return fetchFallbackManifest()
+    }
+
+    /**
+     * Uses the same private-repo credential as one-tap deploy, so source and APK can stay private.
+     * release-apk.yml publishes assets named puttvision.apk and puttvision.apk.sha256.
+     */
+    private fun fetchGitHubRelease(token: String): UpdateInfo {
+        val release = githubJson(
+            "https://api.github.com/repos/mercurial0416-lgtm/puttvision-screen/releases/latest",
+            token
+        )
+        val tag = release.getString("tag_name")
+        val versionCode = tag.substringAfter("pv-", "").toIntOrNull()
+            ?: error("Release tag 형식 오류: $tag")
+        val versionName = release.optString("name").ifBlank { tag }
+
+        val assets = release.getJSONArray("assets")
+        var apkApiUrl: String? = null
+        var shaApiUrl: String? = null
+        for (i in 0 until assets.length()) {
+            val asset = assets.getJSONObject(i)
+            when (asset.getString("name")) {
+                "puttvision.apk" -> apkApiUrl = asset.getString("url")
+                "puttvision.apk.sha256" -> shaApiUrl = asset.getString("url")
+            }
+        }
+        val apk = apkApiUrl ?: error("Release에 puttvision.apk가 없습니다.")
+        val sha = shaApiUrl?.let { fetchGithubAssetText(it, token).trim().substringBefore(' ') }
+
+        return UpdateInfo(versionCode, versionName, apk, sha, token)
+    }
+
+    private fun fetchFallbackManifest(): UpdateInfo {
+        val c = (URL(fallbackManifestUrl).openConnection() as HttpURLConnection).apply {
             connectTimeout = 5000
             readTimeout = 7000
             requestMethod = "GET"
@@ -93,18 +138,25 @@ class AppUpdater(
             try {
                 val dir = File(activity.cacheDir, "updates").apply { mkdirs() }
                 val apk = File(dir, "puttvision-${info.versionCode}.apk")
-                val c = (URL(info.apkUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 30000
+
+                val input = if (!info.githubToken.isNullOrBlank() && info.apkUrl.startsWith("https://api.github.com/")) {
+                    openGithubAsset(info.apkUrl, info.githubToken)
+                } else {
+                    val c = (URL(info.apkUrl).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 8000
+                        readTimeout = 45_000
+                    }
+                    c.inputStream
                 }
-                c.inputStream.use { input ->
-                    apk.outputStream().use { output -> input.copyTo(output) }
+
+                input.use { source ->
+                    apk.outputStream().use { output -> source.copyTo(output) }
                 }
 
                 info.sha256?.let { expected ->
                     val actual = sha256(apk)
                     require(actual.equals(expected, ignoreCase = true)) {
-                        "APK 검증 실패"
+                        "APK SHA-256 검증 실패"
                     }
                 }
 
@@ -120,6 +172,54 @@ class AppUpdater(
             }
         }
     }
+
+    private fun githubJson(url: String, token: String): JSONObject {
+        val c = githubConnection(url, token, "application/vnd.github+json")
+        val code = c.responseCode
+        val text = (if (code in 200..299) c.inputStream else c.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) error("GitHub $code: ${text.take(180)}")
+        return JSONObject(text)
+    }
+
+    private fun fetchGithubAssetText(url: String, token: String): String =
+        openGithubAsset(url, token).bufferedReader().use { it.readText() }
+
+    private fun openGithubAsset(url: String, token: String): InputStream {
+        val first = githubConnection(url, token, "application/octet-stream").apply {
+            instanceFollowRedirects = false
+        }
+        return when (val code = first.responseCode) {
+            in 200..299 -> first.inputStream
+            in 300..399 -> {
+                val location = first.getHeaderField("Location") ?: error("GitHub asset redirect 없음")
+                val redirected = (URL(location).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 45_000
+                    instanceFollowRedirects = true
+                }
+                if (redirected.responseCode !in 200..299) {
+                    error("APK 다운로드 실패: HTTP ${redirected.responseCode}")
+                }
+                redirected.inputStream
+            }
+            else -> {
+                val body = first.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                error("GitHub asset $code: ${body.take(180)}")
+            }
+        }
+    }
+
+    private fun githubConnection(url: String, token: String, accept: String): HttpURLConnection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8000
+            readTimeout = 30_000
+            requestMethod = "GET"
+            setRequestProperty("Accept", accept)
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
+            setRequestProperty("User-Agent", "PuttVision-Screen-Updater")
+        }
 
     private fun install(apk: File) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&

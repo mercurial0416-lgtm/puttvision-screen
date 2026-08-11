@@ -11,8 +11,8 @@ android {
         applicationId = "com.puttvision.screen"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0-autoupdate"
+        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 6
+        versionName = System.getenv("PV_VERSION_NAME") ?: "0.6.0-one-tap-deploy"
     }
 
 

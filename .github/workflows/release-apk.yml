@@ -1,4 +1,4 @@
-name: Build PuttVision Release APK
+name: Build and publish PuttVision APK
 
 on:
   workflow_dispatch:
@@ -6,10 +6,14 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: puttvision-release
+  cancel-in-progress: false
 
 jobs:
-  build-release:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,35 +27,64 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Restore fixed release keystore
+      - name: Allocate monotonic app version
         shell: bash
         run: |
-          base64 -d ci/puttvision-release.jks.b64 > "$RUNNER_TEMP/puttvision-release.jks"
+          VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="0.6.${GITHUB_RUN_NUMBER}"
+          echo "PV_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
+
+      # Bootstrap compatibility: keeps the signing identity already used by v0.5.
+      # After v0.6 is installed, migrate this key to GitHub Actions secrets and rotate only
+      # if you are willing to reinstall the app once.
+      - name: Restore release keystore
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.PUTTVISION_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/puttvision-release.jks"
+          elif [ -f ci/puttvision-release.jks.b64 ]; then
+            base64 -d ci/puttvision-release.jks.b64 > "$RUNNER_TEMP/puttvision-release.jks"
+          else
+            echo "No release keystore configured" >&2
+            exit 1
+          fi
 
       - name: Build signed release APK
         env:
           PUTTVISION_STORE_FILE: ${{ runner.temp }}/puttvision-release.jks
-          PUTTVISION_STORE_PASSWORD: PuttVision_2026_UpdateKey
-          PUTTVISION_KEY_ALIAS: puttvision
-          PUTTVISION_KEY_PASSWORD: PuttVision_2026_UpdateKey
+          PUTTVISION_STORE_PASSWORD: ${{ secrets.PUTTVISION_STORE_PASSWORD || 'PuttVision_2026_UpdateKey' }}
+          PUTTVISION_KEY_ALIAS: ${{ secrets.PUTTVISION_KEY_ALIAS || 'puttvision' }}
+          PUTTVISION_KEY_PASSWORD: ${{ secrets.PUTTVISION_KEY_PASSWORD || 'PuttVision_2026_UpdateKey' }}
         run: gradle assembleRelease
 
-      - name: Prepare update payload
+      - name: Prepare verified assets
         shell: bash
         run: |
-          mkdir -p update-payload
-          cp app/build/outputs/apk/release/app-release.apk update-payload/puttvision.apk
-          SHA=$(sha256sum update-payload/puttvision.apk | awk '{print $1}')
-          cat > update-payload/update.json <<EOF
-          {
-            "versionCode": 5,
-            "versionName": "0.5.0-autoupdate",
-            "apkUrl": "https://puttvision-update.vercel.app/puttvision.apk",
-            "sha256": "$SHA"
-          }
-          EOF
+          cp app/build/outputs/apk/release/app-release.apk puttvision.apk
+          sha256sum puttvision.apk > puttvision.apk.sha256
+
+      - name: Publish private GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$PV_TAG" >/dev/null 2>&1; then
+            gh release upload "$PV_TAG" puttvision.apk puttvision.apk.sha256 --clobber
+            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "Automated PuttVision release $PV_VERSION_NAME" --latest
+          else
+            gh release create "$PV_TAG" puttvision.apk puttvision.apk.sha256 \
+              --title "PuttVision $PV_VERSION_NAME" \
+              --notes "Automated PuttVision release $PV_VERSION_NAME" \
+              --latest
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: PuttVision-v0.5-Release-And-UpdatePayload
-          path: update-payload/
+          name: PuttVision-${{ env.PV_VERSION_NAME }}
+          path: |
+            puttvision.apk
+            puttvision.apk.sha256
