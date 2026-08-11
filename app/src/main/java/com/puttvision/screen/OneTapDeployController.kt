@@ -1,11 +1,12 @@
 package com.puttvision.screen
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.text.InputType
 import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
 import java.util.concurrent.Executors
 
 class OneTapDeployController(
@@ -39,46 +40,62 @@ class OneTapDeployController(
             } catch (t: Throwable) {
                 onUi {
                     onProgress(0, "배포 실패")
-                    AlertDialog.Builder(activity)
-                        .setTitle("ZIP 배포 실패")
-                        .setMessage(t.message ?: "알 수 없는 오류")
-                        .setPositiveButton("확인", null)
-                        .setNeutralButton("GitHub 재연결") { _, _ -> showTokenSetup() }
-                        .show()
+                    activity.pvMessageDialog(
+                        title = "ZIP 배포 실패",
+                        message = t.message ?: "알 수 없는 오류",
+                        positiveLabel = "GitHub 재연결",
+                        onPositive = { showTokenSetup() },
+                        negativeLabel = "확인"
+                    ).show()
                 }
             }
         }
     }
 
     fun showTokenSetup() {
+        val message = TextView(activity).apply {
+            text = "puttvision-screen 전용 Fine-grained token을 한 번만 넣으세요.\n\n" +
+                "Repository: puttvision-screen only\n" +
+                "Permissions: Contents = Read and write, Workflows = Read and write\n\n" +
+                "토큰은 Android Keystore로 암호화 저장됩니다."
+            setTextColor(Pv.textMid)
+            textSize = Pv.body
+            setLineSpacing(activity.pvDp(3).toFloat(), 1f)
+        }
         val input = EditText(activity).apply {
             hint = "github_pat_..."
+            setHintTextColor(Pv.textLo)
+            setTextColor(Pv.textHi)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             setSingleLine(true)
+            background = activity.pvRounded(Pv.surfaceHi, Pv.rMd, Pv.line)
+            setPadding(activity.pvDp(12), activity.pvDp(10), activity.pvDp(12), activity.pvDp(10))
+        }
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(message)
+            addView(input, LinearLayout.LayoutParams(-1, -2).apply { topMargin = activity.pvDp(14) })
         }
 
-        AlertDialog.Builder(activity)
-            .setTitle("GitHub 최초 1회 연결")
-            .setMessage(
-                "puttvision-screen 전용 Fine-grained token을 한 번만 넣으세요.\n\n" +
-                    "Repository: puttvision-screen only\n" +
-                    "Permissions: Contents = Read and write, Workflows = Read and write\n\n" +
-                    "토큰은 Android Keystore로 암호화 저장됩니다."
-            )
-            .setView(input)
-            .setNegativeButton("취소", null)
-            .setNeutralButton("토큰 만들기") { _, _ ->
-                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/settings/personal-access-tokens/new")))
-            }
-            .setPositiveButton("저장/확인") { _, _ ->
+        activity.pvDialog(
+            title = "GitHub 최초 1회 연결",
+            content = box,
+            dismissLabel = "저장/확인",
+            onDismissTap = {
                 val value = input.text?.toString().orEmpty().trim()
                 if (value.isNotBlank()) {
                     runCatching { store.saveToken(value) }
                         .onSuccess { verifyThenPick() }
                         .onFailure { showError(it.message ?: "토큰 저장 실패") }
                 }
-            }
-            .show()
+            },
+            extraActions = listOf(
+                "토큰 만들기" to {
+                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/settings/personal-access-tokens/new")))
+                },
+                "취소" to {}
+            )
+        ).show()
     }
 
     fun rollback() {
@@ -96,11 +113,7 @@ class OneTapDeployController(
             } catch (t: Throwable) {
                 onUi {
                     onProgress(0, "롤백 실패")
-                    AlertDialog.Builder(activity)
-                        .setTitle("롤백 실패")
-                        .setMessage(t.message ?: "알 수 없는 오류")
-                        .setPositiveButton("확인", null)
-                        .show()
+                    activity.pvMessageDialog("롤백 실패", t.message ?: "알 수 없는 오류").show()
                 }
             }
         }
@@ -129,11 +142,7 @@ class OneTapDeployController(
     }
 
     private fun showError(message: String) {
-        AlertDialog.Builder(activity)
-            .setTitle("GitHub 연결 오류")
-            .setMessage(message)
-            .setPositiveButton("확인", null)
-            .show()
+        activity.pvMessageDialog("GitHub 연결 오류", message).show()
     }
 
     private fun onUi(block: () -> Unit) = activity.runOnUiThread(block)

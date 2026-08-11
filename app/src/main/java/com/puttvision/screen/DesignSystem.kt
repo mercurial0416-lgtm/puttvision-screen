@@ -1,15 +1,20 @@
 package com.puttvision.screen
 
+import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.content.res.ColorStateList
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.math.min
 
@@ -248,4 +253,149 @@ fun Context.pvIconControl(
         })
     }
     setOnClickListener { onClick() }
+}
+
+/** 1px hairline divider, themed. Caller sets LayoutParams(-1, pvDp(1)) with margins. */
+fun Context.pvDivider(): View = View(this).apply {
+    setBackgroundColor(Pv.lineSoft)
+}
+
+/** Small stat tile: label over a monospace numeric read-out, used in stats/results screens. */
+fun Context.pvStatTile(label: String, value: String, accent: Int = Pv.textHi): LinearLayout =
+    LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        background = pvRounded(Pv.surfaceHi, Pv.rMd, Pv.lineSoft)
+        setPadding(pvSdp(8), pvSdp(10), pvSdp(8), pvSdp(10))
+        addView(TextView(this@pvStatTile).apply {
+            text = label
+            setTextColor(Pv.textMid)
+            textSize = pvSp(Pv.caption)
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            setSingleLine(false)
+        })
+        addView(TextView(this@pvStatTile).apply {
+            text = value
+            setTextColor(accent)
+            textSize = pvSp(Pv.title)
+            gravity = Gravity.CENTER
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setPadding(0, pvDp(3), 0, 0)
+        })
+    }
+
+/**
+ * Premium themed dialog shell: dark rounded card, brand tick + title, hairline
+ * rule, caller-supplied content, and a bottom action row. Replaces the stock
+ * platform [AlertDialog] chrome (white title bar, default buttons) so floating
+ * dialogs read as part of the same "precision instrument" product as the HUD.
+ *
+ * Content is wrapped in a [ScrollView] automatically and the card is capped so
+ * it never grows edge-to-edge on tablets/landscape.
+ */
+fun Context.pvDialog(
+    title: String,
+    content: View,
+    dismissLabel: String = "닫기",
+    extraActions: List<Pair<String, () -> Unit>> = emptyList(),
+    maxWidthDp: Int = 420,
+    onDismissTap: (() -> Unit)? = null
+): AlertDialog {
+    val card = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = pvRounded(Pv.surface, Pv.rXl, Pv.line)
+        setPadding(pvDp(20), pvDp(18), pvDp(20), pvDp(16))
+    }
+
+    val header = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    header.addView(View(this).apply {
+        background = pvRounded(Pv.primary, 100f)
+    }, LinearLayout.LayoutParams(pvDp(7), pvDp(20)).apply { marginEnd = pvDp(9) })
+    header.addView(TextView(this).apply {
+        text = title
+        setTextColor(Pv.textHi)
+        textSize = Pv.title
+        typeface = Typeface.DEFAULT_BOLD
+    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+    card.addView(header)
+
+    card.addView(View(this).apply { setBackgroundColor(Pv.lineSoft) },
+        LinearLayout.LayoutParams(-1, pvDp(1)).apply { topMargin = pvDp(12); bottomMargin = pvDp(2) })
+
+    val scroll = ScrollView(this).apply {
+        overScrollMode = View.OVER_SCROLL_NEVER
+        addView(content, ViewGroup.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+    card.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = pvDp(4) })
+
+    var dialogRef: AlertDialog? = null
+    val actionsRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        setPadding(0, pvDp(16), 0, 0)
+    }
+    extraActions.forEach { (label, onClick) ->
+        actionsRow.addView(pvButton(label, PvButtonStyle.GHOST, onClick = {
+            onClick()
+            dialogRef?.dismiss()
+        }), LinearLayout.LayoutParams(0, pvDp(46), 1f).apply { marginEnd = pvDp(8) })
+    }
+    actionsRow.addView(pvButton(dismissLabel, PvButtonStyle.PRIMARY, onClick = {
+        onDismissTap?.invoke()
+        dialogRef?.dismiss()
+    }), LinearLayout.LayoutParams(0, pvDp(46), 1f))
+    card.addView(actionsRow)
+
+    val outer = FrameLayout(this).apply {
+        setPadding(pvDp(20), pvDp(20), pvDp(20), pvDp(20))
+        val cardWidth = min(pvDp(maxWidthDp), (resources.displayMetrics.widthPixels * 0.92f).toInt())
+        addView(card, FrameLayout.LayoutParams(cardWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.CENTER
+        })
+    }
+
+    val dialog = AlertDialog.Builder(this).setView(outer).create()
+    dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+    dialogRef = dialog
+    return dialog
+}
+
+/**
+ * Themed drop-in replacement for a plain `AlertDialog.Builder(...).setTitle/setMessage(...)`
+ * confirm/alert dialog. Keeps call sites terse for the many one- and two-button
+ * status dialogs across update-checking and deploy flows.
+ */
+fun Context.pvMessageDialog(
+    title: String,
+    message: String,
+    positiveLabel: String = "확인",
+    onPositive: (() -> Unit)? = null,
+    negativeLabel: String? = null,
+    onNegative: (() -> Unit)? = null
+): AlertDialog {
+    val body = TextView(this).apply {
+        text = message
+        setTextColor(Pv.textMid)
+        textSize = Pv.body
+        setLineSpacing(pvDp(3).toFloat(), 1f)
+    }
+    return if (negativeLabel != null) {
+        pvDialog(
+            title = title,
+            content = body,
+            dismissLabel = negativeLabel,
+            onDismissTap = onNegative,
+            extraActions = listOf(positiveLabel to { onPositive?.invoke() })
+        )
+    } else {
+        pvDialog(
+            title = title,
+            content = body,
+            dismissLabel = positiveLabel,
+            onDismissTap = onPositive
+        )
+    }
 }

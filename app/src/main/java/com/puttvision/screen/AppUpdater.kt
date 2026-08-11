@@ -1,7 +1,6 @@
 package com.puttvision.screen
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -44,21 +43,13 @@ class AppUpdater(
                     activity.runOnUiThread { showUpdateDialog(info) }
                 } else if (!silent) {
                     activity.runOnUiThread {
-                        AlertDialog.Builder(activity)
-                            .setTitle("PuttVision")
-                            .setMessage("최신 버전입니다. (v$current)")
-                            .setPositiveButton("확인", null)
-                            .show()
+                        activity.pvMessageDialog("PuttVision", "최신 버전입니다. (v$current)").show()
                     }
                 }
             } catch (t: Throwable) {
                 if (!silent) {
                     activity.runOnUiThread {
-                        AlertDialog.Builder(activity)
-                            .setTitle("업데이트 확인 실패")
-                            .setMessage(t.message ?: "네트워크 오류")
-                            .setPositiveButton("확인", null)
-                            .show()
+                        activity.pvMessageDialog("업데이트 확인 실패", t.message ?: "네트워크 오류").show()
                     }
                 }
             }
@@ -125,12 +116,13 @@ class AppUpdater(
     }
 
     private fun showUpdateDialog(info: UpdateInfo) {
-        AlertDialog.Builder(activity)
-            .setTitle("PuttVision ${info.versionName} 업데이트")
-            .setMessage("새 버전이 있습니다. 지금 업데이트할까요?")
-            .setNegativeButton("나중에", null)
-            .setPositiveButton("업데이트") { _, _ -> downloadAndInstall(info) }
-            .show()
+        activity.pvMessageDialog(
+            title = "PuttVision ${info.versionName} 업데이트",
+            message = "새 버전이 있습니다. 지금 업데이트할까요?",
+            positiveLabel = "업데이트",
+            onPositive = { downloadAndInstall(info) },
+            negativeLabel = "나중에"
+        ).show()
     }
 
     private fun downloadAndInstall(info: UpdateInfo) {
@@ -163,11 +155,7 @@ class AppUpdater(
                 activity.runOnUiThread { install(apk) }
             } catch (t: Throwable) {
                 activity.runOnUiThread {
-                    AlertDialog.Builder(activity)
-                        .setTitle("업데이트 실패")
-                        .setMessage(t.message ?: "다운로드 오류")
-                        .setPositiveButton("확인", null)
-                        .show()
+                    activity.pvMessageDialog("업데이트 실패", t.message ?: "다운로드 오류").show()
                 }
             }
         }
@@ -229,11 +217,10 @@ class AppUpdater(
                 Uri.parse("package:${activity.packageName}")
             )
             activity.startActivity(intent)
-            AlertDialog.Builder(activity)
-                .setTitle("설치 권한 필요")
-                .setMessage("PuttVision 업데이트를 위해 '이 출처 허용'을 켠 뒤 앱으로 돌아와 업데이트를 다시 눌러주세요.")
-                .setPositiveButton("확인", null)
-                .show()
+            activity.pvMessageDialog(
+                "설치 권한 필요",
+                "PuttVision 업데이트를 위해 '이 출처 허용'을 켠 뒤 앱으로 돌아와 업데이트를 다시 눌러주세요."
+            ).show()
             return
         }
 

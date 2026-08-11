@@ -1,12 +1,10 @@
 package com.puttvision.screen
 
 import android.Manifest
-import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.os.Handler
@@ -146,15 +144,7 @@ class MainActivity : AppCompatActivity() {
                         }
 
                     tvStatus.setTextColor(
-                        if (connected) {
-                            Color.rgb(
-                                137,
-                                247,
-                                176
-                            )
-                        } else {
-                            Color.LTGRAY
-                        }
+                        if (connected) Pv.primary else Pv.textMid
                     )
                 }
             }
@@ -794,11 +784,18 @@ class MainActivity : AppCompatActivity() {
         panels.addView(chart, LinearLayout.LayoutParams(0, -1, 0.57f).apply { marginEnd = dp(8) })
         val table = sectionPanel()
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val quadrantColors = listOf(Pv.danger, Pv.info, Pv.amber)
+        val quadrantInk = listOf(Pv.textHi, Pv.textHi, Pv.amberInk)
         listOf("", "①", "②", "③").forEachIndexed { i, t ->
             header.addView(TextView(this@MainActivity).apply {
-                text = t; gravity = Gravity.CENTER; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
-                if (i > 0) setBackgroundColor(listOf(Color.rgb(214, 27, 44), Color.rgb(39, 76, 208), Color.rgb(222, 211, 66))[i - 1])
-            }, LinearLayout.LayoutParams(0, dp(34), 1f))
+                text = t; gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD
+                if (i > 0) {
+                    setTextColor(quadrantInk[i - 1])
+                    background = pvRounded(quadrantColors[i - 1], Pv.rSm)
+                } else {
+                    setTextColor(Pv.textMid)
+                }
+            }, LinearLayout.LayoutParams(0, dp(34), 1f).apply { if (i > 0) marginStart = dp(3) })
         }
         table.addView(header)
         val rows = listOf(
@@ -811,11 +808,16 @@ class MainActivity : AppCompatActivity() {
             val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             rr.forEachIndexed { i, t ->
                 r.addView(TextView(this@MainActivity).apply {
-                    text = t; gravity = Gravity.CENTER; textSize = 11f; typeface = Typeface.DEFAULT_BOLD; setTextColor(if (i == 3) Color.BLACK else Color.WHITE)
-                    if (i > 0) setBackgroundColor(listOf(Color.rgb(200, 24, 40), Color.rgb(36, 72, 196), Color.rgb(211, 202, 60))[i - 1])
-                }, LinearLayout.LayoutParams(0, dp(36), 1f))
+                    text = t; gravity = Gravity.CENTER; textSize = 11f; typeface = Typeface.DEFAULT_BOLD
+                    if (i > 0) {
+                        setTextColor(quadrantInk[i - 1])
+                        background = pvRounded(quadrantColors[i - 1], Pv.rSm)
+                    } else {
+                        setTextColor(Pv.textHi)
+                    }
+                }, LinearLayout.LayoutParams(0, dp(36), 1f).apply { if (i > 0) marginStart = dp(3) })
             }
-            table.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
+            table.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
         }
         table.addView(TextView(this).apply {
             text = "※ 1클럽 = 6컵"; gravity = Gravity.CENTER; textSize = 13f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Pv.textLo); setPadding(0, dp(8), 0, 0)
@@ -903,20 +905,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSettingsDialog() {
-        val scroll = ScrollView(this)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(12), dp(18), dp(12))
-            setBackgroundColor(Pv.surface)
         }
-        scroll.addView(box)
 
-        fun title(text: String): TextView = TextView(this).apply {
+        box.addView(pvEyebrow("그린 컨디션 · GREEN CONDITIONS"))
+
+        fun row(field: TextView, seekBar: SeekBar) {
+            val wrap = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = pvRounded(Pv.surfaceHi, Pv.rMd, Pv.lineSoft)
+                setPadding(pvDp(12), pvDp(8), pvDp(12), pvDp(4))
+            }
+            wrap.addView(field)
+            wrap.addView(seekBar)
+            box.addView(wrap, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = pvDp(8) })
+        }
+
+        fun fieldLabel(text: String): TextView = TextView(this).apply {
             this.text = text
             setTextColor(Pv.textHi)
-            textSize = 12f
+            textSize = Pv.body
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(8), 0, dp(2))
         }
         fun seek(maxV: Int, progressV: Int, onChange: (Int) -> Unit): SeekBar = SeekBar(this).apply {
             max = maxV
@@ -929,53 +939,48 @@ class MainActivity : AppCompatActivity() {
         fun util(label: String, click: () -> Unit): Button =
             pvButton(label, PvButtonStyle.SECONDARY, textSp = Pv.label, onClick = click)
 
-        val speed = title("그린 스피드  ${"%.1f".format(engine.settings.stimpMeters)}m")
-        box.addView(speed)
-        box.addView(seek(20, ((engine.settings.stimpMeters - 2.0) * 10).toInt().coerceIn(0, 20)) {
+        val speed = fieldLabel("그린 스피드  ${"%.1f".format(engine.settings.stimpMeters)}m")
+        row(speed, seek(20, ((engine.settings.stimpMeters - 2.0) * 10).toInt().coerceIn(0, 20)) {
             engine.settings.stimpMeters = 2.0 + it / 10.0
             speed.text = "그린 스피드  ${"%.1f".format(engine.settings.stimpMeters)}m"
             updateSettingLabels()
         })
 
-        val distance = title("홀 거리  ${"%.1f".format(engine.settings.holeDistanceM)}m")
-        box.addView(distance)
-        box.addView(seek(140, ((engine.settings.holeDistanceM - 1.0) * 10).toInt().coerceIn(0, 140)) {
+        val distance = fieldLabel("홀 거리  ${"%.1f".format(engine.settings.holeDistanceM)}m")
+        row(distance, seek(140, ((engine.settings.holeDistanceM - 1.0) * 10).toInt().coerceIn(0, 140)) {
             engine.settings.holeDistanceM = 1.0 + it / 10.0
             distance.text = "홀 거리  ${"%.1f".format(engine.settings.holeDistanceM)}m"
             updateSettingLabels()
         })
 
-        val side = title("좌우 경사  ${"%+.1f".format(engine.settings.sideSlopePct)}%")
-        box.addView(side)
-        box.addView(seek(100, (engine.settings.sideSlopePct * 10 + 50).toInt().coerceIn(0, 100)) {
+        val side = fieldLabel("좌우 경사  ${"%+.1f".format(engine.settings.sideSlopePct)}%")
+        row(side, seek(100, (engine.settings.sideSlopePct * 10 + 50).toInt().coerceIn(0, 100)) {
             engine.settings.sideSlopePct = (it - 50) / 10.0
             side.text = "좌우 경사  ${"%+.1f".format(engine.settings.sideSlopePct)}%"
             updateSettingLabels()
         })
 
-        val longSlope = title("오르막 / 내리막  ${"%+.1f".format(engine.settings.longSlopePct)}%")
-        box.addView(longSlope)
-        box.addView(seek(100, (engine.settings.longSlopePct * 10 + 50).toInt().coerceIn(0, 100)) {
+        val longSlope = fieldLabel("오르막 / 내리막  ${"%+.1f".format(engine.settings.longSlopePct)}%")
+        row(longSlope, seek(100, (engine.settings.longSlopePct * 10 + 50).toInt().coerceIn(0, 100)) {
             engine.settings.longSlopePct = (it - 50) / 10.0
             longSlope.text = "오르막 / 내리막  ${"%+.1f".format(engine.settings.longSlopePct)}%"
             updateSettingLabels()
         })
 
-        val utility = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, 0) }
+        box.addView(pvEyebrow("도구 · TOOLS"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
+
+        val utility = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         utility.addView(util("메뉴") { showHomeMenu() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
         utility.addView(util("STATS") { showStats() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(2); marginEnd = dp(2) })
         utility.addView(util("업데이트") { appUpdater.check(silent = false) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
-        box.addView(utility)
+        box.addView(utility, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = pvDp(8) })
 
-        val utility2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0) }
+        val utility2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         utility2.addView(util("TV 재연결") { displayController.refresh() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
         utility2.addView(util("컵 가이드") { showCupGuideScreen() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
-        box.addView(utility2)
+        box.addView(utility2, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = pvDp(8) })
 
-        val deployRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(8), 0, 0)
-        }
+        val deployRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         deployRow.addView(
             util("ZIP 배포") {
                 startActivity(Intent(this, DeployActivity::class.java))
@@ -984,11 +989,7 @@ class MainActivity : AppCompatActivity() {
         )
         box.addView(deployRow)
 
-        AlertDialog.Builder(this)
-            .setTitle("PuttVision 설정 / 환경")
-            .setView(scroll)
-            .setPositiveButton("닫기", null)
-            .show()
+        pvDialog(title = "설정 / 환경", content = box, dismissLabel = "닫기").show()
     }
 
     private fun updateMetricCards(m: ShotMetrics) {
@@ -1023,16 +1024,6 @@ class MainActivity : AppCompatActivity() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density + 0.5f).toInt()
 
-    private fun roundedBg(color: Int, radiusDp: Float, strokeColor: Int = Color.TRANSPARENT): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(color)
-            cornerRadius = radiusDp * resources.displayMetrics.density
-            if (strokeColor != Color.TRANSPARENT) {
-                setStroke(dp(1), strokeColor)
-            }
-        }
-
     private fun updateAutoButton() {
         if (!::autoButton.isInitialized) {
             return
@@ -1057,14 +1048,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun settingLabel(): TextView =
         TextView(this).apply {
-            setTextColor(
-                Color.rgb(
-                    215,
-                    225,
-                    219
-                )
-            )
-
+            setTextColor(Pv.textHi)
             textSize = 11.5f
         }
 
@@ -1901,93 +1885,67 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showStats() {
-        val summary =
-            statsRepository.summary()
+        val summary = statsRepository.summary()
+        val recent = statsRepository.recent(10)
 
-        val recent =
-            statsRepository.recent(
-                10
-            )
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        box.addView(pvEyebrow("누적 기록 · CAREER TOTALS"))
 
-        val text =
-            buildString {
-                append(
-                    "누적 ${summary.shots}구"
-                )
-
-                append(
-                    "\n홀인 ${summary.made} · ${"%.1f".format(summary.makePct)}%"
-                )
-
-                append(
-                    "\nPerfect 평균 ${"%.1f".format(summary.avgScore)}"
-                )
-
-                append(
-                    "\n출발각 평균 ${"%+.2f".format(summary.avgLaunch)}°"
-                )
-
-                append(
-                    " · 편차 ${"%.2f".format(summary.launchStd)}°"
-                )
-
-                summary.avgFace?.let {
-                    append(
-                        "\nFace 평균 ${"%+.2f".format(it)}°"
-                    )
-                }
-
-                summary.avgPath?.let {
-                    append(
-                        " · Path ${"%+.2f".format(it)}°"
-                    )
-                }
-
-                summary.avgDistanceErrorCm?.let {
-                    append(
-                        "\n평균 컵 오차 ${"%.0f".format(it)}cm"
-                    )
-                }
-
-                if (recent.isNotEmpty()) {
-                    append(
-                        "\n\n최근 ${recent.size}구 Perfect: "
-                    )
-
-                    append(
-                        recent.joinToString(
-                            ", "
-                        ) {
-                            it.strokeScore.total.toString()
-                        }
-                    )
-                }
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun statRow(vararg cells: Pair<String, String>) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            cells.forEachIndexed { i, (label, value) ->
+                row.addView(pvStatTile(label, value, if (i == 0) Pv.primary else Pv.textHi),
+                    LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) marginStart = pvDp(6) })
             }
+            grid.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
+        }
+        statRow(
+            "누적 샷" to "${summary.shots}구",
+            "홀인" to "${summary.made} · ${"%.0f".format(summary.makePct)}%"
+        )
+        statRow(
+            "Perfect 평균" to "%.1f".format(summary.avgScore),
+            "출발각 평균" to "${"%+.2f".format(summary.avgLaunch)}° (±${"%.2f".format(summary.launchStd)})"
+        )
+        if (summary.avgFace != null || summary.avgPath != null || summary.avgDistanceErrorCm != null) {
+            statRow(
+                "Face 평균" to (summary.avgFace?.let { "${"%+.2f".format(it)}°" } ?: "--"),
+                "Path 평균" to (summary.avgPath?.let { "${"%+.2f".format(it)}°" } ?: "--")
+            )
+            summary.avgDistanceErrorCm?.let {
+                statRow("평균 컵 오차" to "${"%.0f".format(it)}cm")
+            }
+        }
+        box.addView(grid)
 
-        AlertDialog.Builder(this)
-            .setTitle(
-                "PuttVision Stats"
-            )
-            .setMessage(
-                text
-            )
-            .setPositiveButton(
-                "닫기",
-                null
-            )
-            .setNeutralButton(
-                "기록 초기화"
-            ) { _, _ ->
+        if (recent.isNotEmpty()) {
+            box.addView(pvEyebrow("최근 ${recent.size}구 · PERFECT SCORE"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(14) })
+            val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            recent.forEachIndexed { i, r ->
+                chipRow.addView(TextView(this@MainActivity).apply {
+                    text = r.strokeScore.total.toString()
+                    setTextColor(Pv.primaryInk)
+                    typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                    textSize = Pv.body
+                    gravity = Gravity.CENTER
+                    background = pvRounded(Pv.primary, Pv.rSm)
+                    setPadding(pvDp(4), pvDp(6), pvDp(4), pvDp(6))
+                }, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i > 0) marginStart = pvDp(4) })
+            }
+            box.addView(chipRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
+        }
+
+        pvDialog(
+            title = "STATS",
+            content = box,
+            dismissLabel = "닫기",
+            extraActions = listOf("기록 초기화" to {
                 statsRepository.clear()
-                engine.seedHistory(
-                    emptyList()
-                )
-
-                toast(
-                    "기록 초기화함"
-                )
-            }
-            .show()
+                engine.seedHistory(emptyList())
+                toast("기록 초기화함")
+            })
+        ).show()
     }
 
     private fun formatMetrics(

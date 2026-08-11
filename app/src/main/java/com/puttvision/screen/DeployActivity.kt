@@ -1,6 +1,5 @@
 package com.puttvision.screen
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -118,12 +117,18 @@ class DeployActivity : AppCompatActivity() {
         utilities.addView(pvButton("GitHub 연결", PvButtonStyle.SECONDARY) { controller.showTokenSetup() }, LinearLayout.LayoutParams(0, pvSdp(46), 1f))
         utilities.addView(pvButton("업데이트 확인", PvButtonStyle.SECONDARY) { updater.check(silent = false) }, LinearLayout.LayoutParams(0, pvSdp(46), 1f).apply { marginStart = pvSdp(8) })
         utilities.addView(pvButton("직전 배포 롤백", PvButtonStyle.GHOST) {
-                AlertDialog.Builder(this@DeployActivity)
-                    .setTitle("직전 배포로 롤백")
-                    .setMessage("현재 main 내용을 직전 ZIP 배포 직전 상태로 복구 커밋합니다. 계속할까요?")
-                    .setNegativeButton("취소", null)
-                    .setPositiveButton("롤백") { _, _ -> controller.rollback() }
-                    .show()
+                val message = TextView(this@DeployActivity).apply {
+                    text = "현재 main 내용을 직전 ZIP 배포 직전 상태로 복구 커밋합니다. 계속할까요?"
+                    textSize = Pv.body
+                    setTextColor(Pv.textMid)
+                    setLineSpacing(pvDp(3).toFloat(), 1f)
+                }
+                pvDialog(
+                    title = "직전 배포로 롤백",
+                    content = message,
+                    dismissLabel = "취소",
+                    extraActions = listOf("롤백" to { controller.rollback() })
+                ).show()
         }, LinearLayout.LayoutParams(0, pvSdp(46), 1f).apply { marginStart = pvSdp(8) })
         panel.addView(utilities, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvSdp(10) })
 
@@ -165,13 +170,19 @@ class DeployActivity : AppCompatActivity() {
     }
 
     private fun showSuccess(result: GitHubDeployClient.Result) {
-        AlertDialog.Builder(this)
-            .setTitle("배포 완료")
-            .setMessage("main 커밋 완료. Actions에서 signed APK를 자동 생성합니다. 빌드가 끝나면 업데이트 확인을 누르세요.")
-            .setNegativeButton("닫기", null)
-            .setPositiveButton("Actions 보기") { _, _ ->
+        val message = TextView(this).apply {
+            text = "main 커밋 완료. Actions에서 signed APK를 자동 생성합니다. 빌드가 끝나면 업데이트 확인을 누르세요."
+            textSize = Pv.body
+            setTextColor(Pv.textMid)
+            setLineSpacing(pvDp(3).toFloat(), 1f)
+        }
+        pvDialog(
+            title = "배포 완료 ✓",
+            content = message,
+            dismissLabel = "닫기",
+            extraActions = listOf("Actions 보기" to {
                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/mercurial0416-lgtm/puttvision-screen/actions")))
-            }
-            .show()
+            })
+        ).show()
     }
 }
