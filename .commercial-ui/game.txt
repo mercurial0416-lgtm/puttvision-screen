@@ -1,0 +1,182 @@
+private fun buildGameEntrance(): View {
+    val compact = compactLandscape
+    val root = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundColor(Pv.inkDeep)
+        setPadding(sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14), sdp(if (compact) 14 else 20), sdp(if (compact) 10 else 14))
+    }
+
+    root.addView(
+        buildEntranceHeader("게임 세션", "MATCH PLAY", null) { showHomeMenu() },
+        LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = sdp(if (compact) 8 else 12) }
+    )
+
+    val body = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+
+    val visual = FrameLayout(this).apply {
+        background = pvRounded(Color.rgb(11, 10, 8), Pv.rXl, Pv.lineSoft)
+        clipToOutline = true
+        addView(CommercialModeVisualView(this@MainActivity, true), FrameLayout.LayoutParams(-1, -1))
+        addView(LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.BOTTOM
+            setPadding(sdp(if (compact) 14 else 18), sdp(12), sdp(if (compact) 14 else 18), sdp(if (compact) 12 else 16))
+            addView(TextView(this@MainActivity).apply {
+                text = when (gameModeIndex) {
+                    0 -> "9 HOLE"
+                    1 -> "18 HOLE"
+                    2 -> "DISTANCE MATCH"
+                    else -> "RANDOM BREAK"
+                }
+                setTextColor(Pv.amber)
+                textSize = scaledSp(if (compact) 7f else 8f)
+                typeface = Typeface.DEFAULT_BOLD
+                letterSpacing = .14f
+                includeFontPadding = false
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = when (gameModeIndex) {
+                    0 -> "짧고 빠르게\n9홀 승부"
+                    1 -> "정식 라운드 느낌의\n18홀 승부"
+                    2 -> "목표 거리에 가장\n가깝게 붙이는 게임"
+                    else -> "매 샷 달라지는 경사를\n읽고 대응하는 게임"
+                }
+                setTextColor(Pv.textHi)
+                textSize = scaledSp(if (compact) 15.5f else 18.5f)
+                typeface = Typeface.DEFAULT_BOLD
+                includeFontPadding = false
+                setLineSpacing(sdp(1).toFloat(), 1f)
+            })
+        }, FrameLayout.LayoutParams(-1, -1))
+    }
+    body.addView(visual, LinearLayout.LayoutParams(0, -1, .42f).apply { marginEnd = sdp(if (compact) 10 else 14) })
+
+    val panel = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = pvRounded(Pv.surface, Pv.rXl, Pv.lineSoft)
+        setPadding(sdp(if (compact) 13 else 17), sdp(if (compact) 10 else 13), sdp(if (compact) 13 else 17), sdp(if (compact) 10 else 13))
+    }
+
+    fun label(textValue: String): TextView = TextView(this).apply {
+        text = textValue
+        setTextColor(Pv.textLo)
+        textSize = scaledSp(if (compact) 6.2f else 7.2f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .12f
+        includeFontPadding = false
+    }
+
+    panel.addView(label("GAME MODE"))
+    val modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+    listOf("9홀", "18홀", "거리 맞추기", "랜덤 경사").forEachIndexed { i, text ->
+        modeRow.addView(
+            darkChoice(text, gameModeIndex == i) {
+                gameModeIndex = i
+                showGameEntrance()
+            },
+            LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { if (i > 0) marginStart = sdp(5) }
+        )
+    }
+    panel.addView(modeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(6) })
+
+    val mid = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+
+    val players = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    players.addView(label("PLAYERS"))
+    val playerRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+    (1..4).forEachIndexed { i, value ->
+        playerRow.addView(darkChoice(value.toString(), gamePlayers == value) {
+            gamePlayers = value
+            showGameEntrance()
+        }, LinearLayout.LayoutParams(0, sdp(if (compact) 36 else 42), 1f).apply { if (i > 0) marginStart = sdp(4) })
+    }
+    players.addView(playerRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(6) })
+    mid.addView(players, LinearLayout.LayoutParams(0, -1, 1f).apply { marginEnd = sdp(if (compact) 10 else 14) })
+
+    val speed = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    speed.addView(label("GREEN SPEED"))
+    val speedValue = TextView(this).apply {
+        text = "%.1f".format(practiceGreenSpeed)
+        setTextColor(Pv.amber)
+        textSize = scaledSp(if (compact) 20f else 24f)
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        includeFontPadding = false
+        setPadding(0, sdp(3), 0, 0)
+    }
+    speed.addView(speedValue)
+    speed.addView(SeekBar(this).apply {
+        max = 5
+        progress = ((practiceGreenSpeed - 2.5) * 10).toInt().coerceIn(0, 5)
+        progressTintList = ColorStateList.valueOf(Pv.amber)
+        progressBackgroundTintList = ColorStateList.valueOf(Pv.line)
+        thumbTintList = ColorStateList.valueOf(Pv.amber)
+        setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                practiceGreenSpeed = 2.5 + progress * .1
+                speedValue.text = "%.1f".format(practiceGreenSpeed)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+    })
+    mid.addView(speed, LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = sdp(if (compact) 10 else 14) })
+    panel.addView(mid, LinearLayout.LayoutParams(-1, 0, .32f).apply { topMargin = sdp(if (compact) 8 else 11) })
+
+    val option = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = pvRounded(Pv.surfaceLo, Pv.rLg, Pv.lineSoft)
+        setPadding(sdp(if (compact) 11 else 14), sdp(if (compact) 8 else 10), sdp(if (compact) 11 else 14), sdp(if (compact) 8 else 10))
+    }
+    if (gameModeIndex == 2) {
+        option.addView(label("TARGET DISTANCE"))
+        val distanceRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(3, 5, 7, 10).forEachIndexed { i, distance ->
+            distanceRow.addView(darkChoice("${distance}m", gameDistanceM == distance) {
+                gameDistanceM = distance
+                showGameEntrance()
+            }, LinearLayout.LayoutParams(0, sdp(if (compact) 36 else 42), 1f).apply { if (i > 0) marginStart = sdp(5) })
+        }
+        option.addView(distanceRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(6) })
+    } else {
+        option.addView(label("SESSION FORMAT"))
+        option.addView(TextView(this).apply {
+            text = when (gameModeIndex) {
+                0 -> "9개 홀 · 홀마다 거리와 경사 자동 구성 · 빠른 대결"
+                1 -> "18개 홀 · 풀 라운드 구성 · 누적 스코어 경쟁"
+                else -> "매 샷 거리와 경사가 랜덤으로 바뀌는 읽기 테스트"
+            }
+            setTextColor(Pv.textMid)
+            textSize = scaledSp(if (compact) 8f else 9f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            gravity = Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(-1, 0, 1f))
+    }
+    panel.addView(option, LinearLayout.LayoutParams(-1, 0, .27f).apply { topMargin = sdp(if (compact) 7 else 10) })
+
+    val bottom = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    bottom.addView(TextView(this).apply {
+        text = "${gamePlayers} PLAYER  ·  ${when (gameModeIndex) { 0 -> "9 HOLE"; 1 -> "18 HOLE"; 2 -> "DISTANCE"; else -> "RANDOM" }}"
+        setTextColor(Pv.textMid)
+        textSize = scaledSp(if (compact) 7f else 8.2f)
+        typeface = Typeface.MONOSPACE
+        includeFontPadding = false
+    }, LinearLayout.LayoutParams(0, -2, 1f))
+    bottom.addView(pvButton("게임 시작  →", PvButtonStyle.AMBER, textSp = if (compact) 10f else 11.5f, radiusDp = Pv.rLg) {
+        openPreStartOrMat(true)
+    }, LinearLayout.LayoutParams(0, sdp(if (compact) 58 else 68), .72f))
+    panel.addView(bottom, LinearLayout.LayoutParams(-1, 0, .25f).apply { topMargin = sdp(if (compact) 7 else 10) })
+
+    body.addView(panel, LinearLayout.LayoutParams(0, -1, .58f))
+    root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
+    return root
+}
