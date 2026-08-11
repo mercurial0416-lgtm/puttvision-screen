@@ -1,0 +1,19 @@
+name: Audit source export
+on:
+  push:
+    branches: [audit-ui-bugfix]
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+      - name: Create source zip
+        run: zip -r PuttVision-audit-source.zip . -x '.git/*' 'PuttVision-audit-source.zip'
+      - name: Upload source zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: PuttVision-audit-source
+          path: PuttVision-audit-source.zip
+          retention-days: 1
