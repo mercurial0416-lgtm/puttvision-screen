@@ -85,6 +85,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsToggle: Button
     private val metricCards = linkedMapOf<String, TextView>()
     private lateinit var shotPanelTitle: TextView
+    private lateinit var menuOverlay: FrameLayout
 
     private val permission =
         registerForActivityResult(
@@ -463,7 +464,246 @@ class MainActivity : AppCompatActivity() {
         updateAutoButton()
 
         root.addView(dashboard, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+
+        val shell = FrameLayout(this)
+        shell.addView(root, FrameLayout.LayoutParams(-1, -1))
+        menuOverlay = buildSmartPuttMenu()
+        shell.addView(menuOverlay, FrameLayout.LayoutParams(-1, -1))
+        setContentView(shell)
+    }
+
+    private fun buildSmartPuttMenu(): FrameLayout {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(Color.rgb(79, 120, 63))
+        }
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(18), dp(14), dp(18), dp(10))
+        }
+
+        fun topIcon(label: String, click: () -> Unit): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            val circle = TextView(this@MainActivity).apply {
+                text = when (label) {
+                    "언어" -> "◎"
+                    "환경" -> "⚙"
+                    "종료" -> "⇥"
+                    else -> "?"
+                }
+                textSize = 22f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                background = roundedBg(Color.rgb(64, 199, 242), 22f, Color.rgb(34, 42, 50))
+                layoutParams = LinearLayout.LayoutParams(dp(54), dp(54))
+            }
+            addView(circle)
+            addView(TextView(this@MainActivity).apply {
+                text = label
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4), 0, 0)
+            })
+            setOnClickListener { click() }
+        }
+
+        topRow.addView(topIcon("언어") { toast("언어 선택은 준비중") })
+        topRow.addView(View(this), LinearLayout.LayoutParams(0, 0, 1f))
+        topRow.addView(topIcon("환경") { showSettingsDialog() })
+        topRow.addView(topIcon("종료") { finishAffinity() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(14) })
+        overlay.addView(topRow, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+
+        val centerBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(40), dp(70), dp(40), dp(40))
+        }
+
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        titleRow.addView(TextView(this).apply {
+            text = "Putt"
+            textSize = 44f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(65, 208, 255))
+        })
+        titleRow.addView(TextView(this).apply {
+            text = "Vision"
+            textSize = 44f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+        })
+        centerBox.addView(titleRow)
+        centerBox.addView(TextView(this).apply {
+            text = "스마트 퍼팅 스크린"
+            setTextColor(Color.rgb(238, 245, 250))
+            textSize = 16f
+            setPadding(0, dp(4), 0, dp(22))
+        })
+
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = roundedBg(Color.argb(72, 20, 29, 34), 24f)
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+        }
+        val heroClub = TextView(this).apply {
+            text = "⛳"
+            textSize = 86f
+        }
+        hero.addView(heroClub, LinearLayout.LayoutParams(0, -2, 0.45f))
+        hero.addView(TextView(this).apply {
+            text = "TV 연결 후 연습장 또는 게임장으로 진입
+카메라/HFR/마커 자동 인식 기반"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(0, -2, 0.55f))
+        centerBox.addView(hero, LinearLayout.LayoutParams(-1, -2))
+
+        fun menuButton(title: String, subtitle: String, lineColor: Int, click: () -> Unit): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = roundedBg(Color.rgb(31, 36, 51), 22f)
+            setPadding(dp(22), dp(16), dp(22), dp(16))
+            addView(TextView(this@MainActivity).apply {
+                text = title
+                setTextColor(Color.WHITE)
+                textSize = 23f
+                typeface = Typeface.DEFAULT_BOLD
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = subtitle
+                setTextColor(Color.rgb(190, 201, 213))
+                textSize = 12f
+                setPadding(0, dp(4), 0, dp(8))
+            })
+            addView(View(this@MainActivity).apply {
+                setBackgroundColor(lineColor)
+            }, LinearLayout.LayoutParams(-1, dp(4)))
+            setOnClickListener { click() }
+        }
+
+        val btn1 = menuButton("연습장", "자유 퍼팅 · 데이터 측정 · 빠른 시작", Color.rgb(245, 170, 33)) {
+            startPracticeFromMenu()
+        }
+        val btn2 = menuButton("게임장", "9홀 / 18홀 / 챌린지", Color.rgb(187, 45, 215)) {
+            showGameStartDialog()
+        }
+        centerBox.addView(btn1, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(24) })
+        centerBox.addView(btn2, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+
+        val bottomTools = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(16), 0, 0)
+        }
+        fun mini(label: String, click: () -> Unit): Button = Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 11f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            backgroundTintList = ColorStateList.valueOf(Color.rgb(19, 28, 36))
+            setOnClickListener { click() }
+        }
+        bottomTools.addView(mini("컵 가이드") { showCupGuideDialog() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        bottomTools.addView(mini("최근 기록") { showStats() }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginStart = dp(6) })
+        centerBox.addView(bottomTools, LinearLayout.LayoutParams(-1, -2))
+
+        overlay.addView(centerBox, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
+        return overlay
+    }
+
+    private fun startPracticeFromMenu() {
+        engine.gameModes.setMode(PracticeMode.PRACTICE)
+        modeButton.text = engine.gameModes.status.mode.label
+        metricText.text = "${engine.gameModes.status.mode.label} · READY"
+        updateSettingLabels()
+        menuOverlay.visibility = View.GONE
+    }
+
+    private fun showGameStartDialog() {
+        val labels = arrayOf("9홀 라운드", "18홀 라운드", "거리 맞추기", "압박 퍼팅", "랜덤 경사")
+        val modes = arrayOf(PracticeMode.NINE_HOLE, PracticeMode.EIGHTEEN_HOLE, PracticeMode.DISTANCE, PracticeMode.PRESSURE, PracticeMode.RANDOM_SLOPE)
+        AlertDialog.Builder(this)
+            .setTitle("게임장 선택")
+            .setItems(labels) { _, which ->
+                engine.gameModes.setMode(modes[which])
+                modeButton.text = engine.gameModes.status.mode.label
+                metricText.text = "${engine.gameModes.status.mode.label} · READY"
+                updateSettingLabels()
+                menuOverlay.visibility = View.GONE
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun showCupGuideDialog() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(12))
+        }
+        box.addView(TextView(this).apply {
+            text = "컵 가이드"
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+        })
+        box.addView(TextView(this).apply {
+            text = "1컵 = 약 6컵반 기준. 거리/경사에 따라 대략 이렇게 보면 됨."
+            textSize = 12f
+            setTextColor(Color.rgb(214, 222, 228))
+            setPadding(0, dp(6), 0, dp(12))
+        })
+
+        fun guideRow(distance: String, left: String, straight: String, right: String): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(TextView(this@MainActivity).apply {
+                text = distance
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                background = roundedBg(Color.rgb(44, 49, 60), 10f)
+            }, LinearLayout.LayoutParams(0, dp(38), 0.22f).apply { marginEnd = dp(4) })
+            addView(TextView(this@MainActivity).apply {
+                text = left
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                background = roundedBg(Color.rgb(219, 42, 52), 10f)
+            }, LinearLayout.LayoutParams(0, dp(38), 0.26f).apply { marginEnd = dp(4) })
+            addView(TextView(this@MainActivity).apply {
+                text = straight
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                background = roundedBg(Color.rgb(38, 91, 222), 10f)
+            }, LinearLayout.LayoutParams(0, dp(38), 0.26f).apply { marginEnd = dp(4) })
+            addView(TextView(this@MainActivity).apply {
+                text = right
+                setTextColor(Color.BLACK)
+                gravity = Gravity.CENTER
+                background = roundedBg(Color.rgb(229, 219, 79), 10f)
+            }, LinearLayout.LayoutParams(0, dp(38), 0.26f))
+        }
+
+        box.addView(guideRow("3m", "1컵반", "3컵", "4컵반"))
+        box.addView(guideRow("5m", "2컵반", "5컵", "7컵반"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        box.addView(guideRow("7m", "3컵반", "7컵", "10컵반"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        box.addView(guideRow("10m", "5컵", "10컵", "16컵반"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setView(box.apply { setBackgroundColor(Color.rgb(22, 27, 34)) })
+            .setPositiveButton("닫기", null)
+            .show()
+    }
+
+    private fun showHomeMenu() {
+        menuOverlay.visibility = View.VISIBLE
     }
 
     private fun showSettingsDialog() {
@@ -529,10 +769,15 @@ class MainActivity : AppCompatActivity() {
         })
 
         val utility = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, 0) }
-        utility.addView(util("STATS") { showStats() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
-        utility.addView(util("TV 재연결") { displayController.refresh() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(2); marginEnd = dp(2) })
+        utility.addView(util("메뉴") { showHomeMenu() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
+        utility.addView(util("STATS") { showStats() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(2); marginEnd = dp(2) })
         utility.addView(util("업데이트") { appUpdater.check(silent = false) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
         box.addView(utility)
+
+        val utility2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0) }
+        utility2.addView(util("TV 재연결") { displayController.refresh() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginEnd = dp(4) })
+        utility2.addView(util("컵 가이드") { showCupGuideDialog() }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { marginStart = dp(4) })
+        box.addView(utility2)
 
         val deployRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
