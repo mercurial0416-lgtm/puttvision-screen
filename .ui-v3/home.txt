@@ -1,0 +1,202 @@
+private fun buildVideoHomeScreen(): View {
+    val compact = compactLandscape
+    val root = FrameLayout(this).apply {
+        setBackgroundColor(Pv.inkDeep)
+        addView(CommercialHomeBackdropView(this@MainActivity), FrameLayout.LayoutParams(-1, -1))
+    }
+
+    val top = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(sdp(if (compact) 16 else 24), sdp(if (compact) 9 else 14), sdp(if (compact) 16 else 24), 0)
+    }
+    val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    brand.addView(TextView(this).apply {
+        text = "PUTTVISION"
+        setTextColor(Pv.textHi)
+        textSize = scaledSp(if (compact) 13f else 15f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .08f
+        includeFontPadding = false
+    })
+    brand.addView(TextView(this).apply {
+        text = "PERSONAL PUTTING STUDIO"
+        setTextColor(Pv.textLo)
+        textSize = scaledSp(if (compact) 5.8f else 6.8f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .16f
+        includeFontPadding = false
+    })
+    top.addView(brand)
+    top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+    top.addView(pvButton("환경", PvButtonStyle.GHOST, textSp = if (compact) 7f else 8f, scaled = true, radiusDp = 100f) { showSettingsDialog() }, LinearLayout.LayoutParams(sdp(if (compact) 58 else 66), sdp(if (compact) 31 else 35)))
+    top.addView(pvButton("종료", PvButtonStyle.GHOST, textSp = if (compact) 7f else 8f, scaled = true, radiusDp = 100f) { finishAffinity() }, LinearLayout.LayoutParams(sdp(if (compact) 58 else 66), sdp(if (compact) 31 else 35)).apply { marginStart = sdp(6) })
+
+    val body = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(sdp(if (compact) 24 else 36), sdp(if (compact) 50 else 64), sdp(if (compact) 24 else 36), sdp(if (compact) 17 else 24))
+    }
+
+    val hero = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(sdp(if (compact) 4 else 8), 0, sdp(if (compact) 18 else 28), 0)
+    }
+    hero.addView(TextView(this).apply {
+        text = "240 FPS · CAMERA VISION · TV SIMULATOR"
+        setTextColor(Pv.primary)
+        textSize = scaledSp(if (compact) 6.6f else 7.8f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .14f
+        includeFontPadding = false
+    })
+    hero.addView(TextView(this).apply {
+        text = "퍼팅을 보고,\n숫자로 고칩니다."
+        setTextColor(Pv.textHi)
+        textSize = scaledSp(if (compact) 28f else 37f)
+        typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+        setLineSpacing(sdp(1).toFloat(), .98f)
+        setPadding(0, sdp(if (compact) 7 else 10), 0, 0)
+    })
+    hero.addView(TextView(this).apply {
+        text = "볼 스피드 · 출발각 · 페이스 · 패스 · 임팩트 · 템포를\n한 번의 스트로크에서 측정하고 TV에서 바로 확인합니다."
+        setTextColor(Pv.textMid)
+        textSize = scaledSp(if (compact) 7.6f else 9f)
+        includeFontPadding = false
+        setLineSpacing(sdp(2).toFloat(), 1.08f)
+        setPadding(0, sdp(if (compact) 8 else 12), 0, 0)
+    })
+
+    val capabilityRow = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
+    fun capability(title: String, sub: String, accent: Int): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        background = pvRounded(Color.argb(210, 10, 15, 18), Pv.rMd, Pv.lineSoft)
+        setPadding(sdp(if (compact) 9 else 12), sdp(if (compact) 7 else 9), sdp(if (compact) 9 else 12), sdp(if (compact) 7 else 9))
+        addView(TextView(this@MainActivity).apply {
+            text = title
+            setTextColor(accent)
+            textSize = scaledSp(if (compact) 7f else 8f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        })
+        addView(TextView(this@MainActivity).apply {
+            text = sub
+            setTextColor(Pv.textLo)
+            textSize = scaledSp(if (compact) 5.8f else 6.8f)
+            includeFontPadding = false
+            setPadding(0, sdp(2), 0, 0)
+        })
+    }
+    capabilityRow.addView(capability("CAMERA", "240fps 우선", Pv.primary), LinearLayout.LayoutParams(0, -2, 1f))
+    capabilityRow.addView(capability("CAL", "마커 4개 자동", Pv.info), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = sdp(6) })
+    capabilityRow.addView(capability("SCREEN", "HDMI / DeX", Pv.amber), LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = sdp(6) })
+    hero.addView(capabilityRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (compact) 12 else 18) })
+    body.addView(hero, LinearLayout.LayoutParams(0, -1, .56f))
+
+    val launcher = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = pvRounded(Color.argb(238, 11, 15, 19), Pv.rXl, Color.argb(150, 55, 68, 78))
+        setPadding(sdp(if (compact) 14 else 18), sdp(if (compact) 12 else 16), sdp(if (compact) 14 else 18), sdp(if (compact) 12 else 16))
+    }
+    launcher.addView(TextView(this).apply {
+        text = "SESSION"
+        setTextColor(Pv.textLo)
+        textSize = scaledSp(if (compact) 6.2f else 7.2f)
+        typeface = Typeface.DEFAULT_BOLD
+        letterSpacing = .16f
+        includeFontPadding = false
+    })
+    launcher.addView(TextView(this).apply {
+        text = "오늘의 퍼팅"
+        setTextColor(Pv.textHi)
+        textSize = scaledSp(if (compact) 17f else 21f)
+        typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+        setPadding(0, sdp(3), 0, 0)
+    })
+    launcher.addView(TextView(this).apply {
+        text = "목적에 맞는 세션을 선택하세요."
+        setTextColor(Pv.textMid)
+        textSize = scaledSp(if (compact) 6.8f else 8f)
+        includeFontPadding = false
+        setPadding(0, sdp(3), 0, 0)
+    })
+
+    fun sessionCard(number: String, title: String, sub: String, meta: String, accent: Int, click: () -> Unit): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = pvRounded(Pv.surfaceHi, Pv.rLg, Pv.line)
+        setPadding(sdp(if (compact) 10 else 13), sdp(if (compact) 8 else 10), sdp(if (compact) 11 else 14), sdp(if (compact) 8 else 10))
+        addView(TextView(this@MainActivity).apply {
+            text = number
+            setTextColor(if (accent == Pv.amber) Pv.amberInk else Pv.primaryInk)
+            setBackgroundColor(accent)
+            textSize = scaledSp(if (compact) 8f else 9f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+        }, LinearLayout.LayoutParams(sdp(if (compact) 31 else 36), sdp(if (compact) 31 else 36)))
+        val copy = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(sdp(10), 0, 0, 0)
+        }
+        copy.addView(TextView(this@MainActivity).apply {
+            text = title
+            setTextColor(Pv.textHi)
+            textSize = scaledSp(if (compact) 13f else 15.5f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+        })
+        copy.addView(TextView(this@MainActivity).apply {
+            text = sub
+            setTextColor(Pv.textMid)
+            textSize = scaledSp(if (compact) 6.3f else 7.4f)
+            includeFontPadding = false
+            maxLines = 1
+        })
+        copy.addView(TextView(this@MainActivity).apply {
+            text = meta
+            setTextColor(accent)
+            textSize = scaledSp(if (compact) 5.6f else 6.6f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            setPadding(0, sdp(2), 0, 0)
+        })
+        addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(TextView(this@MainActivity).apply {
+            text = "→"
+            setTextColor(accent)
+            textSize = scaledSp(if (compact) 19f else 22f)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(sdp(28), -1))
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { click() }
+    }
+
+    launcher.addView(sessionCard("01", "연습 세션", "거리 · 컵 · 그린 읽기 · 반복", "PRACTICE LAB", Pv.primary) { showPracticeEntrance() }, LinearLayout.LayoutParams(-1, sdp(if (compact) 74 else 86)).apply { topMargin = sdp(if (compact) 10 else 14) })
+    launcher.addView(sessionCard("02", "게임 세션", "1–4인 · 9홀 · 18홀 · 챌린지", "MATCH PLAY", Pv.amber) { showGameEntrance() }, LinearLayout.LayoutParams(-1, sdp(if (compact) 74 else 86)).apply { topMargin = sdp(if (compact) 8 else 10) })
+
+    launcher.addView(TextView(this).apply {
+        text = "RECENT  ${engine.recentRecords.size} SHOTS  ·  DATA STORED LOCALLY"
+        setTextColor(Pv.textLo)
+        textSize = scaledSp(if (compact) 5.4f else 6.4f)
+        typeface = Typeface.MONOSPACE
+        includeFontPadding = false
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(0, sdp(if (compact) 8 else 10), 0, 0)
+    })
+
+    body.addView(launcher, LinearLayout.LayoutParams(0, -1, .44f).apply { marginStart = sdp(if (compact) 12 else 18) })
+    root.addView(body, FrameLayout.LayoutParams(-1, -1))
+    root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+    return root
+}
