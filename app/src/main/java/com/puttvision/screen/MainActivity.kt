@@ -2000,7 +2000,7 @@ class MainActivity : AppCompatActivity() {
         actions.addView(pvButton("같은 조건 다시", PvButtonStyle.GHOST, textSp = if (compact) 7.8f else 9f, radiusDp = Pv.rLg) {
             sessionActive = false
             measurementSuspended = true
-            showPracticeEntrance()
+            if (activeSessionIsGame) showGameEntrance() else showPracticeEntrance()
         }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginEnd = sdp(5) })
         actions.addView(pvButton("추천 훈련 시작", PvButtonStyle.PRIMARY, textSp = if (compact) 8f else 9.2f, radiusDp = Pv.rLg) {
             applyAutoCoachPlan(report.plan)
@@ -2092,8 +2092,8 @@ class MainActivity : AppCompatActivity() {
     })
 
     val speed = fieldLabel("그린 스피드   ${"%.1f".format(engine.settings.stimpMeters)}")
-    env.addView(sliderRow(speed, seek(20, ((engine.settings.stimpMeters - 2.0) * 10).toInt().coerceIn(0, 20)) {
-        engine.settings.stimpMeters = 2.0 + it / 10.0
+    env.addView(sliderRow(speed, seek(12, ((engine.settings.stimpMeters - 2.4) * 10).toInt().coerceIn(0, 12)) {
+        engine.settings.stimpMeters = 2.4 + it / 10.0
         speed.text = "그린 스피드   ${"%.1f".format(engine.settings.stimpMeters)}"
         updateSettingLabels()
     }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(6) })
@@ -2926,7 +2926,7 @@ class MainActivity : AppCompatActivity() {
                         900L
                     )
                 } else {
-                    handleMeasuredShot(
+                    val accepted = handleMeasuredShot(
                         metrics =
                             result.metrics,
                         replay = replay,
@@ -2934,10 +2934,12 @@ class MainActivity : AppCompatActivity() {
                             "PRECISION ${result.fps}fps"
                     )
 
-                    setHfrStatus(
-                        "✓ ${result.fps}fps",
-                        "✓ ${result.fps}fps · ${result.analyzedFrames} frames · F${result.impactFrame}"
-                    )
+                    if (accepted) {
+                        setHfrStatus(
+                            "✓ ${result.fps}fps",
+                            "✓ ${result.fps}fps · ${result.analyzedFrames} frames · F${result.impactFrame}"
+                        )
+                    }
                 }
 
                 try {
@@ -2952,10 +2954,10 @@ class MainActivity : AppCompatActivity() {
         metrics: ShotMetrics,
         replay: ImpactReplay?,
         source: String
-    ) {
+    ): Boolean {
         if (!sessionActive || measurementSuspended) {
             replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
-            return
+            return false
         }
 
         val confidence = metrics.confidence
@@ -2969,7 +2971,7 @@ class MainActivity : AppCompatActivity() {
             overlay.invalidate()
             setHfrStatus("재측정", "측정 신뢰도 ${pct}% · 자동 폐기")
             scheduleAutoRetry(850L)
-            return
+            return false
         }
 
         confidence?.let {
@@ -3010,6 +3012,7 @@ class MainActivity : AppCompatActivity() {
   }
 
         overlay.invalidate()
+        return true
     }
 
     private fun startSimulationTicker() {
