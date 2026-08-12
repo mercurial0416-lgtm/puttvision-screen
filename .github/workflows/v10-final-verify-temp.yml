@@ -27,6 +27,7 @@ jobs:
         run: |
           python .v10/apply_v10.py
           python .v10/fixups_v10.py
+          python .v10/fixups_v10b.py
       - name: Diff sanity
         run: git diff --check
       - name: Full V10 unit regression
