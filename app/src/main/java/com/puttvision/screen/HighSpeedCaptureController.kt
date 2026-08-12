@@ -19,7 +19,7 @@ import androidx.lifecycle.LifecycleOwner
 import java.io.File
 import java.util.concurrent.Executor
 
-data class ActiveHfrSession(val fps: Int, val description: String)
+data class ActiveHfrSession(val fps: Int, val description: String, val resolution: String)
 
 class HighSpeedCaptureController(
     private val context: Context,
@@ -61,6 +61,14 @@ class HighSpeedCaptureController(
             qualities.contains(Quality.FHD) -> Quality.FHD
             qualities.contains(Quality.HD) -> Quality.HD
             else -> qualities.first()
+        }
+
+        val resolution = when (quality) {
+            Quality.UHD -> "3840x2160"
+            Quality.FHD -> "1920x1080"
+            Quality.HD -> "1280x720"
+            Quality.SD -> "720x480"
+            else -> quality.toString()
         }
 
         val preview = Preview.Builder().build().also {
@@ -111,7 +119,7 @@ class HighSpeedCaptureController(
             selectedFps = chosen.upper
             val desc = "$quality @ ${chosen.upper}fps"
             status("PRECISION ${chosen.upper}fps 준비 · AF/AE LOCK")
-            ActiveHfrSession(chosen.upper, desc)
+            ActiveHfrSession(chosen.upper, desc, resolution)
         } catch (t: Throwable) {
             recorder = null
             videoCapture = null

@@ -1166,7 +1166,7 @@ class MainActivity : AppCompatActivity() {
             longSlopePct = selected.longSlopePct,
             terrainProfileId = selected.previewStyle
         )
-        val selectedRead = GreenReadAdvisor.read(selectedReadSettings)
+        val selectedRead = GreenReadRuntime.peekOrSchedule(selectedReadSettings)
 
         val info = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1195,12 +1195,20 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, sdp(3), 0, 0)
             })
             addView(TextView(this@MainActivity).apply {
-                val aim = if (selectedRead.aimSideLabel == "센터") {
-                    "추천 에임 · 센터"
-                } else {
-                    "추천 에임 · ${selectedRead.aimSideLabel}  ${"%.1f".format(selectedRead.cupCount)}컵  /  ${"%.1f".format(selectedRead.putterHeadCount)}헤드"
+                fun render(read: GreenRead?) {
+                    text = when {
+                        read == null -> "추천 에임 계산중 · 물리 솔버 준비"
+                        !read.solverReliable -> "추천선 보류 · SOLVER ±${"%.1f".format(read.solverMissCm)}cm"
+                        read.aimSideLabel == "센터" -> "추천 에임 · 센터\n${read.paceHint} · SOLVER ±${"%.1f".format(read.solverMissCm)}cm"
+                        else -> "추천 에임 · ${read.aimSideLabel}  ${"%.1f".format(read.cupCount)}컵  /  ${"%.1f".format(read.putterHeadCount)}헤드\n${read.paceHint} · SOLVER ±${"%.1f".format(read.solverMissCm)}cm"
+                    }
                 }
-                text = "$aim\n${selectedRead.paceHint}"
+                render(selectedRead)
+                if (selectedRead == null) {
+                    GreenReadRuntime.request(selectedReadSettings) { solved ->
+                        runOnUiThread { if (isAttachedToWindow) render(solved) }
+                    }
+                }
                 setTextColor(Pv.textMid)
                 textSize = scaledSp(if (compact) 6.5f else 7.6f)
                 typeface = Typeface.MONOSPACE
@@ -2614,6 +2622,7 @@ class MainActivity : AppCompatActivity() {
         }
 
     private fun updateSettingLabels() {
+        GreenReadRuntime.prefetch(engine.settings)
         if (::speedLabel.isInitialized) {
             speedLabel.text = "그린스피드 ${"%.1f".format(engine.settings.stimpMeters)}m"
         }
@@ -2943,7 +2952,8 @@ class MainActivity : AppCompatActivity() {
         updateSettingLabels()
 
         if (::voiceCoach.isInitialized) {
-            voiceCoach.speakReady(GreenReadAdvisor.read(engine.settings))
+            val cachedRead = GreenReadRuntime.peekOrSchedule(engine.settings)
+            voiceCoach.speakReady(cachedRead?.takeIf { it.solverReliable })
         }
         if (::previewView.isInitialized) previewView.productHaptic()
 
@@ -2955,6 +2965,7 @@ class MainActivity : AppCompatActivity() {
 
         val hfrCoolingDown = System.currentTimeMillis() < hfrRetryAfterMs
         if (!hfrHardwareAvailable || hfrCoolingDown) {
+            accuracyAutoTuner.selectProfile(0, "NORMAL", deviceReport.cameraId)
             tracker.arm()
 
             overlay.status = if (hfrCoolingDown)
@@ -2973,6 +2984,7 @@ class MainActivity : AppCompatActivity() {
 
         val thermal = thermalHfrPolicy.current()
         if (thermal.maxFps < 120) {
+            accuracyAutoTuner.selectProfile(0, "NORMAL", deviceReport.cameraId)
             val switchingFromHfr = hfrController != null
             hfrController?.close()
             hfrController = null
@@ -2995,6 +3007,13 @@ class MainActivity : AppCompatActivity() {
             thermal.maxFps,
             deviceReport.maxHfrFps.takeIf { it >= 120 } ?: thermal.maxFps
         ).coerceIn(120, 240)
+        accuracyAutoTuner.selectProfile(
+            desiredHfrCap,
+            deviceReport.bestHfrSize,
+            deviceReport.cameraId
+        )
+        GreenReadRuntime.prefetch(engine.settings)
+
 
         overlay.status =
             "${desiredHfrCap}fps PRECISION 준비중"
@@ -3048,6 +3067,10 @@ class MainActivity : AppCompatActivity() {
 
         val session =
             controller.bindBest(maxFps = desiredHfrCap)
+
+        if (session != null) {
+            accuracyAutoTuner.selectProfile(session.fps, session.resolution, deviceReport.cameraId)
+        }
 
         if (session == null) {
             hfrRetryAfterMs = System.currentTimeMillis() + 60_000L

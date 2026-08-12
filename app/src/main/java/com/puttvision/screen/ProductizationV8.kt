@@ -350,6 +350,7 @@ data class DeviceCapabilityReport(
     val hardwareLevel: String,
     val memoryMb: Int,
     val model: String,
+    val cameraId: String,
     val recommendation: String
 )
 
@@ -358,12 +359,14 @@ object DeviceDiagnostics {
         var maxFps = 0
         var bestSize = "--"
         var hw = "UNKNOWN"
+        var selectedCameraId = "BACK"
         runCatching {
             val manager = context.getSystemService(CameraManager::class.java)
             val id = manager.cameraIdList.firstOrNull { cameraId ->
                 manager.getCameraCharacteristics(cameraId)
                     .get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
             } ?: manager.cameraIdList.first()
+            selectedCameraId = id
             val chars = manager.getCameraCharacteristics(id)
             hw = when (chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)) {
                 CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3 -> "LEVEL_3"
@@ -398,7 +401,7 @@ object DeviceDiagnostics {
             else -> "NORMAL 추적 사용 · 240fps 지원 기기에서 정밀도가 더 높습니다"
         }
         ProductSessionRuntime.deviceGrade = grade
-        return DeviceCapabilityReport(grade, maxFps, bestSize, hw, memory, "${Build.MANUFACTURER} ${Build.MODEL}", rec)
+        return DeviceCapabilityReport(grade, maxFps, bestSize, hw, memory, "${Build.MANUFACTURER} ${Build.MODEL}", selectedCameraId, rec)
     }
 
     private fun bestSizeArea(text: String): Int {
@@ -433,6 +436,7 @@ data class ValidationSample(
     val measuredFace: Double?,
     val measuredPath: Double?,
     val confidence: Double?,
+    val profileKey: String? = null,
     val refBall: Double? = null,
     val refLaunch: Double? = null,
     val refHead: Double? = null,
@@ -448,7 +452,7 @@ class AccuracyValidationLab(private val context: Context) {
         get() = prefs.getBoolean("enabled", false)
         set(value) { prefs.edit().putBoolean("enabled", value).apply() }
 
-    fun capture(metrics: ShotMetrics) {
+    fun capture(metrics: ShotMetrics, profileKey: String? = null) {
         if (!enabled) return
         samples += ValidationSample(
             id = UUID.randomUUID().toString().take(10),
@@ -458,7 +462,8 @@ class AccuracyValidationLab(private val context: Context) {
             measuredHead = metrics.headSpeedMps,
             measuredFace = metrics.faceAngleDeg,
             measuredPath = metrics.pathAngleDeg,
-            confidence = metrics.confidence
+            confidence = metrics.confidence,
+            profileKey = profileKey
         )
         while (samples.size > 300) samples.removeAt(0)
         persist()
@@ -557,12 +562,13 @@ class AccuracyValidationLab(private val context: Context) {
         val dir = File(activity.cacheDir, "exports").apply { mkdirs() }
         val file = File(dir, "puttvision-validation-${System.currentTimeMillis()}.csv")
         file.bufferedWriter().use { out ->
-            out.appendLine("timestamp,measured_ball,ref_ball,ball_error_pct,measured_launch,ref_launch,launch_error_deg,measured_head,ref_head,head_error_pct,measured_face,ref_face,face_error_deg,measured_path,ref_path,path_error_deg,confidence")
+            out.appendLine("timestamp,profile_key,measured_ball,ref_ball,ball_error_pct,measured_launch,ref_launch,launch_error_deg,measured_head,ref_head,head_error_pct,measured_face,ref_face,face_error_deg,measured_path,ref_path,path_error_deg,confidence")
             samples.forEach { s ->
                 fun pct(a: Double?, b: Double?): String = if (a != null && b != null && abs(b) > .01) "%.3f".format(abs(a - b) / abs(b) * 100.0) else ""
                 fun deg(a: Double?, b: Double?): String = if (a != null && b != null) "%.3f".format(abs(a - b)) else ""
                 out.appendLine(listOf(
                     s.timestampMs,
+                    s.profileKey ?: "",
                     s.measuredBall, s.refBall ?: "", pct(s.measuredBall, s.refBall),
                     s.measuredLaunch, s.refLaunch ?: "", deg(s.measuredLaunch, s.refLaunch),
                     s.measuredHead ?: "", s.refHead ?: "", pct(s.measuredHead, s.refHead),
@@ -580,7 +586,7 @@ class AccuracyValidationLab(private val context: Context) {
         samples.forEach { s ->
             arr.put(JSONObject().apply {
                 put("id", s.id); put("t", s.timestampMs)
-                put("mb", s.measuredBall); put("ml", s.measuredLaunch)
+                put("mb", s.measuredBall); put("ml", s.measuredLaunch); put("pk", s.profileKey ?: JSONObject.NULL)
                 putNullable("mh", s.measuredHead); putNullable("mf", s.measuredFace); putNullable("mp", s.measuredPath); putNullable("c", s.confidence)
                 putNullable("rb", s.refBall); putNullable("rl", s.refLaunch); putNullable("rh", s.refHead); putNullable("rf", s.refFace); putNullable("rp", s.refPath)
             })
@@ -600,6 +606,7 @@ class AccuracyValidationLab(private val context: Context) {
                         timestampMs = j.optLong("t"),
                         measuredBall = j.optDouble("mb"), measuredLaunch = j.optDouble("ml"),
                         measuredHead = j.optNullableDouble("mh"), measuredFace = j.optNullableDouble("mf"), measuredPath = j.optNullableDouble("mp"), confidence = j.optNullableDouble("c"),
+                        profileKey = j.optString("pk").takeIf { it.isNotBlank() && it != "null" },
                         refBall = j.optNullableDouble("rb"), refLaunch = j.optNullableDouble("rl"), refHead = j.optNullableDouble("rh"), refFace = j.optNullableDouble("rf"), refPath = j.optNullableDouble("rp")
                     ))
                 }
@@ -715,6 +722,11 @@ class ProductBackupManager(
             put("accuracyTune", JSONObject().apply {
                 put("enabled", tunePrefs.getBoolean("enabled", true))
                 put("model", tunePrefs.getString("model", ""))
+                put("profiles", JSONObject().apply {
+                    tunePrefs.all.filterKeys { it.startsWith("model_") }.forEach { (key, value) ->
+                        if (value is String) put(key, value)
+                    }
+                })
             })
             val setupPrefs = activity.getSharedPreferences("puttvision_first_run_v9", Context.MODE_PRIVATE)
             put("setupV9Completed", setupPrefs.getBoolean("completed", false))

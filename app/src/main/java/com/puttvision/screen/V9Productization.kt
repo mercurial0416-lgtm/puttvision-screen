@@ -187,20 +187,39 @@ object AccuracyModelCalculator {
 
 class AccuracyAutoTuner(context: Context, private val deviceKey: String) {
     private val prefs = context.getSharedPreferences("puttvision_accuracy_tune_v1", Context.MODE_PRIVATE)
-    @Volatile private var model: AccuracyCorrectionModel? = load()
+    @Volatile private var activeKey: String = AccuracyProfileKey.build(deviceKey, "BACK", 0, "NORMAL", Build.VERSION.SDK_INT)
+    @Volatile private var model: AccuracyCorrectionModel? = loadProfile(activeKey) ?: loadLegacy()
 
     var enabled: Boolean
         get() = prefs.getBoolean("enabled", true)
         set(value) { prefs.edit().putBoolean("enabled", value).apply() }
 
+    @Synchronized
+    fun selectProfile(
+        fps: Int,
+        resolution: String,
+        cameraId: String,
+        api: Int = Build.VERSION.SDK_INT
+    ): String {
+        val next = AccuracyProfileKey.build(deviceKey, cameraId, fps, resolution, api)
+        if (next != activeKey) {
+            activeKey = next
+            model = loadProfile(next)
+        }
+        return next
+    }
+
+    fun profileKey(): String = activeKey
+
     fun refresh(samples: List<ValidationSample>, force: Boolean = false): AccuracyCorrectionModel? {
-        val derived = AccuracyModelCalculator.derive(samples) ?: return model
+        val exact = samples.filter { it.profileKey == activeKey }
+        val scoped = if (exact.size >= 8) exact else samples.filter { it.profileKey == activeKey || it.profileKey == null }
+        val derived = AccuracyModelCalculator.derive(scoped) ?: return model
         val current = model
         if (!force && current != null && current.sampleCount == derived.sampleCount) return current
-        // Do not auto-apply a calibration that does not materially improve its own reference set.
         if (derived.improvementPct >= 7.0) {
             model = derived
-            persist(derived)
+            persist(activeKey, derived)
         }
         return model
     }
@@ -214,19 +233,21 @@ class AccuracyAutoTuner(context: Context, private val deviceKey: String) {
 
     fun reset() {
         model = null
-        prefs.edit().remove("model").apply()
+        prefs.edit().remove(AccuracyProfileKey.slot(activeKey)).apply()
     }
 
-    fun reload() { model = load() }
+    fun reload() { model = loadProfile(activeKey) ?: loadLegacy() }
 
     fun summary(): String {
-        val m = model ?: return "기준 센서 8샷 이상 필요"
-        return "${m.sampleCount}샷 · 개선 ${"%.0f".format(m.improvementPct)}% · BALL ×${"%.3f".format(m.ballScale)} · START ${"%+.2f".format(m.launchOffsetDeg)}°"
+        val mode = activeKey.substringAfter("|CAM:", "BACK|FPS:0|SIZE:NORMAL|API:${Build.VERSION.SDK_INT}")
+        val m = model ?: return "$mode · 기준 센서 8샷 이상 필요"
+        return "$mode · ${m.sampleCount}샷 · 개선 ${"%.0f".format(m.improvementPct)}% · BALL ×${"%.3f".format(m.ballScale)} · START ${"%+.2f".format(m.launchOffsetDeg)}°"
     }
 
-    private fun persist(m: AccuracyCorrectionModel) {
+    private fun persist(profileKey: String, m: AccuracyCorrectionModel) {
         val j = JSONObject().apply {
             put("device", deviceKey)
+            put("profile", profileKey)
             put("n", m.sampleCount)
             put("ball", m.ballScale)
             put("launch", m.launchOffsetDeg)
@@ -236,26 +257,34 @@ class AccuracyAutoTuner(context: Context, private val deviceKey: String) {
             put("improvement", m.improvementPct)
             put("updated", m.updatedAtMs)
         }
-        prefs.edit().putString("model", j.toString()).apply()
+        prefs.edit().putString(AccuracyProfileKey.slot(profileKey), j.toString()).apply()
     }
 
-    private fun load(): AccuracyCorrectionModel? {
-        val raw = prefs.getString("model", null) ?: return null
-        return runCatching {
-            val j = JSONObject(raw)
-            if (j.optString("device") != deviceKey) return@runCatching null
-            AccuracyCorrectionModel(
-                sampleCount = j.getInt("n"),
-                ballScale = j.getDouble("ball"),
-                launchOffsetDeg = j.getDouble("launch"),
-                headScale = j.getDouble("head"),
-                faceOffsetDeg = j.getDouble("face"),
-                pathOffsetDeg = j.getDouble("path"),
-                improvementPct = j.getDouble("improvement"),
-                updatedAtMs = j.optLong("updated", 0L)
-            )
-        }.getOrNull()
+    private fun loadProfile(profileKey: String): AccuracyCorrectionModel? {
+        val raw = prefs.getString(AccuracyProfileKey.slot(profileKey), null) ?: return null
+        return parseModel(raw, expectedProfile = profileKey)
     }
+
+    private fun loadLegacy(): AccuracyCorrectionModel? {
+        val raw = prefs.getString("model", null) ?: return null
+        return parseModel(raw, expectedProfile = null)
+    }
+
+    private fun parseModel(raw: String, expectedProfile: String?): AccuracyCorrectionModel? = runCatching {
+        val j = JSONObject(raw)
+        if (j.optString("device") != deviceKey) return@runCatching null
+        if (expectedProfile != null && j.optString("profile") != expectedProfile) return@runCatching null
+        AccuracyCorrectionModel(
+            sampleCount = j.getInt("n"),
+            ballScale = j.getDouble("ball"),
+            launchOffsetDeg = j.getDouble("launch"),
+            headScale = j.getDouble("head"),
+            faceOffsetDeg = j.getDouble("face"),
+            pathOffsetDeg = j.getDouble("path"),
+            improvementPct = j.getDouble("improvement"),
+            updatedAtMs = j.optLong("updated", 0L)
+        )
+    }.getOrNull()
 }
 
 fun showAccuracyTuningDialog(activity: Activity, tuner: AccuracyAutoTuner, lab: AccuracyValidationLab) {

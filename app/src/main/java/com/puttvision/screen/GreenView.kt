@@ -42,7 +42,8 @@ class GreenView(
         drawResult(canvas)
         if (ProductSessionRuntime.tvCalibrationGuide) drawTvCalibrationGuide(canvas)
         canvas.restoreToCount(save)
-        postInvalidateOnAnimation()
+        val dynamic = engine.state?.running == true || engine.lastResult == null || ProductSessionRuntime.tvCalibrationGuide
+        if (dynamic) postInvalidateOnAnimation() else postInvalidateDelayed(200L)
     }
 
     private fun drawTvCalibrationGuide(c: Canvas) {
@@ -144,16 +145,23 @@ class GreenView(
         p.shader = null
 
         val maxY = max(settings.holeDistanceM * 1.28, 3.0)
-        fun sy(y: Double): Float {
+        fun syBase(y: Double): Float {
             val t = (y / maxY).coerceIn(0.0, 1.0).toFloat()
             return bottomY - (bottomY - horizonY) * t
         }
+        val originHeight = GreenTerrain.heightAt(settings.terrainProfileId, 0.0, 0.0, settings.holeDistanceM)
+        fun sySurface(x: Double, y: Double): Float {
+            val z = GreenTerrain.heightAt(settings.terrainProfileId, x, y, settings.holeDistanceM)
+            val relief = ((z - originHeight) * h * 1.35).toFloat()
+            return syBase(y) - relief
+        }
+        fun sy(y: Double): Float = sySurface(0.0, y)
         fun halfWidthAt(yPix: Float): Float {
             val t = ((yPix - horizonY) / (bottomY - horizonY)).coerceIn(0f, 1f)
             return w * (.175f + .265f * t)
         }
         fun sx(x: Double, y: Double): Float {
-            val yp = sy(y)
+            val yp = syBase(y)
             val sideRange = max(1.15, settings.holeDistanceM * .20)
             return centerX + (x / sideRange).toFloat() * halfWidthAt(yp)
         }
@@ -176,7 +184,15 @@ class GreenView(
             val hw = halfWidthAt(yp)
             p.strokeWidth = if (major) max(1.4f, w * .0009f) else max(.7f, w * .00045f)
             p.color = if (major) Color.argb(84, 231, 255, 235) else Color.argb(38, 183, 238, 199)
-            c.drawLine(centerX - hw, yp, centerX + hw, yp, p)
+            val contour = Path()
+            for (sample in 0..24) {
+                val frac = sample / 24.0 * 2.0 - 1.0
+                val xM = gridSideRange * frac
+                val px = sx(xM, gridY)
+                val py = sySurface(xM, gridY)
+                if (sample == 0) contour.moveTo(px, py) else contour.lineTo(px, py)
+            }
+            c.drawPath(contour, p)
 
             if (major && gridY <= settings.holeDistanceM + 1.0) {
                 p.style = Paint.Style.FILL
@@ -196,7 +212,7 @@ class GreenView(
                 val yM = maxY * step / 36.0
                 val xM = gridSideRange * frac
                 val px = sx(xM, yM)
-                val py = sy(yM)
+                val py = sySurface(xM, yM)
                 if (step == 0) path.moveTo(px, py) else path.lineTo(px, py)
             }
             p.strokeWidth = if (lane == 0) max(1.5f, w * .0010f) else max(.7f, w * .00045f)
@@ -207,7 +223,7 @@ class GreenView(
 
         val holeY = settings.holeDistanceM
         val preShot = engine.state?.running != true && engine.lastResult == null
-        val read = if (preShot) GreenReadAdvisor.read(settings) else null
+        val read = if (preShot) GreenReadRuntime.peekOrSchedule(settings) else null
 
         if (preShot && read != null) {
             // V11 slope-flow field. Each particle follows the same local slope vector
@@ -233,7 +249,7 @@ class GreenView(
                         val pxM = xM + ux * travelM * centered
                         val pyM = yM + uy * travelM * centered
                         val px = sx(pxM, pyM)
-                        val py = sy(pyM)
+                        val py = sySurface(pxM, pyM)
                         val alpha = (70 + 150 * (1.0 - abs(centered) * 1.45).coerceIn(.0, 1.0)).toInt()
                         p.style = Paint.Style.FILL
                         p.color = Color.argb(alpha, 218, 255, 226)
@@ -245,11 +261,11 @@ class GreenView(
 
             // No decorative Bezier: this line is literally the path GreenPhysics produced
             // from the recommended launch angle and ball speed.
-            read.predictedTrail.takeIf { it.size >= 2 }?.let { trail ->
+            read.predictedTrail.takeIf { read.solverReliable && it.size >= 2 }?.let { trail ->
                 val guide = Path().apply {
-                    moveTo(sx(trail.first().first, trail.first().second), sy(trail.first().second))
+                    moveTo(sx(trail.first().first, trail.first().second), sySurface(trail.first().first, trail.first().second))
                     trail.drop(1).forEach { point ->
-                        lineTo(sx(point.first, point.second), sy(point.second))
+                        lineTo(sx(point.first, point.second), sySurface(point.first, point.second))
                     }
                 }
                 p.style = Paint.Style.STROKE
@@ -264,10 +280,11 @@ class GreenView(
 
             // Physical aim point at cup distance. This is the same lateral offset used
             // to calculate cup/head counts, not a decorative HUD coordinate.
-            val aimX = read.aimOffsetCm / 100.0
-            val ax = sx(aimX, holeY)
-            val ay = sy(holeY)
-            val radius = max(8f, w * .0068f)
+            if (read.solverReliable) {
+                val aimX = read.aimOffsetCm / 100.0
+                val ax = sx(aimX, holeY)
+                val ay = sySurface(aimX, holeY)
+                val radius = max(8f, w * .0068f)
             p.style = Paint.Style.FILL
             p.color = Color.argb(205, 5, 9, 11)
             c.drawCircle(ax, ay, radius * 1.45f, p)
@@ -283,12 +300,13 @@ class GreenView(
             p.color = Pv.primary
             val aimLabel = if (read.aimSideLabel == "센터") "AIM · CENTER" else "AIM · ${"%.1f".format(read.cupCount)} CUP"
             c.drawText(aimLabel, ax + radius * 1.65f, ay - radius * .35f, p)
+            }
         }
 
         engine.state?.trail?.takeIf { it.size >= 2 }?.let { trail ->
             val actual = Path().apply {
                 moveTo(sx(trail.first().first, trail.first().second), sy(trail.first().second))
-                trail.drop(1).forEach { point -> lineTo(sx(point.first, point.second), sy(point.second)) }
+                trail.drop(1).forEach { point -> lineTo(sx(point.first, point.second), sySurface(point.first, point.second)) }
             }
             p.strokeWidth = max(4f, w * .0028f)
             p.color = Color.argb(238, 255, 210, 88)
@@ -298,7 +316,7 @@ class GreenView(
         p.style = Paint.Style.FILL
 
         val hx = sx(0.0, holeY)
-        val hy = sy(holeY)
+        val hy = sySurface(0.0, holeY)
         p.color = Color.argb(125, 0, 0, 0)
         c.drawOval(RectF(hx - w * .010f, hy - h * .0035f, hx + w * .010f, hy + h * .005f), p)
         p.color = Color.WHITE
@@ -314,7 +332,7 @@ class GreenView(
 
         val state = engine.state
         val bx = if (state != null) sx(state.x, state.y) else sx(0.0, 0.0)
-        val by = if (state != null) sy(state.y) else sy(0.0)
+        val by = if (state != null) sySurface(state.x, state.y) else sySurface(0.0, 0.0)
         p.color = Color.argb(72, 0, 0, 0)
         c.drawOval(RectF(bx - w * .012f, by + h * .008f, bx + w * .012f, by + h * .017f), p)
         p.color = Color.WHITE
@@ -350,10 +368,10 @@ class GreenView(
     p.color = Pv.primary
     c.drawText("GREEN READ", left + pad, top + h * .026f, p)
 
-    val main = if (read.aimSideLabel == "센터") {
-        "센터"
-    } else {
-        "${read.aimSideLabel}  ${"%.1f".format(read.cupCount)}컵"
+    val main = when {
+        !read.solverReliable -> "추천선 재계산"
+        read.aimSideLabel == "센터" -> "센터"
+        else -> "${read.aimSideLabel}  ${"%.1f".format(read.cupCount)}컵"
     }
     p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     p.textSize = max(24f, w * .018f)
@@ -364,7 +382,8 @@ class GreenView(
     p.textSize = max(9f, w * .0068f)
     p.color = Pv.textMid
     val head = if (read.aimSideLabel == "센터") "헤드 0.0개" else "헤드 ${"%.1f".format(read.putterHeadCount)}개"
-    c.drawText("$head  ·  ${read.paceHint}  ·  ${"%.2f".format(read.recommendedBallSpeedMps)}m/s", left + pad, bottom - h * .014f, p)
+    val residual = "SOLVER ±${"%.1f".format(read.solverMissCm)}cm"
+    c.drawText("$head  ·  ${read.paceHint}  ·  ${"%.2f".format(read.recommendedBallSpeedMps)}m/s  ·  $residual", left + pad, bottom - h * .014f, p)
 }
 
         private fun drawBrandRail(c: Canvas) {
@@ -501,11 +520,16 @@ class GreenView(
     p.color = Pv.textMid
     c.drawText("$side  ·  ${score?.let { "SCORE ${it.total}" } ?: "분석 중"}", x, top + h * .128f, p)
 
-    val read = GreenReadAdvisor.read(engine.settings)
+    val read = GreenReadRuntime.peekOrSchedule(engine.settings)
     p.typeface = Typeface.DEFAULT
     p.textSize = max(9f, w * .0068f)
     p.color = Pv.textLo
-    val readText = if (read.aimSideLabel == "센터") "추천 에임 센터" else "추천 ${read.aimSideLabel} ${"%.1f".format(read.cupCount)}컵"
+    val readText = when {
+        read == null -> "추천 에임 계산중"
+        !read.solverReliable -> "추천 에임 보류 · SOLVER ±${"%.1f".format(read.solverMissCm)}cm"
+        read.aimSideLabel == "센터" -> "추천 에임 센터"
+        else -> "추천 ${read.aimSideLabel} ${"%.1f".format(read.cupCount)}컵"
+    }
     c.drawText(readText, x, bottom - h * .014f, p)
 }
 }

@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -27,6 +28,8 @@ data class ThermalHfrDecision(
  * NORMAL and later recover without restarting the app.
  */
 class ThermalHfrPolicy(private val context: Context) {
+    private val hysteresis = ThermalHfrHysteresis()
+
     fun current(): ThermalHfrDecision {
         val power = context.getSystemService(PowerManager::class.java)
         val status = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -40,7 +43,7 @@ class ThermalHfrPolicy(private val context: Context) {
                 ?.takeIf { it > 0 }
                 ?.div(10.0)
         }.getOrNull()
-        return decide(status, battery)
+        return hysteresis.update(decide(status, battery), SystemClock.elapsedRealtime())
     }
 
     companion object {

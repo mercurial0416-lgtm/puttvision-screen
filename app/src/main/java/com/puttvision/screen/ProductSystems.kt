@@ -492,7 +492,9 @@ class HandsFreeVoiceCoach(context: Context) : TextToSpeech.OnInitListener {
         if (now - lastReadyAt < 1500L) return
         lastReadyAt = now
         val guide = when {
-            read == null || read.aimSideLabel == "센터" -> "준비 완료. 에임은 센터입니다."
+            read == null -> "준비 완료."
+            !read.solverReliable -> "준비 완료. 추천 에임을 계산 중입니다."
+            read.aimSideLabel == "센터" -> "준비 완료. 에임은 센터입니다."
             else -> "준비 완료. ${read.aimSideLabel} ${"%.1f".format(read.cupCount)}컵을 보세요."
         }
         speak(guide, flush = true)

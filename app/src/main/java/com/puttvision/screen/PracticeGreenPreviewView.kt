@@ -56,8 +56,9 @@ class PracticeGreenPreviewView(context: Context) : View(context) {
                 val xNorm = (col + .5) / cols.toDouble() * 2.0 - 1.0
                 val realX = xNorm * max(.8, holeDistanceM * .22)
                 val s = GreenTerrain.effectiveSlopeAt(settings, realX, realY)
+                val z = GreenTerrain.heightAt(styleIndex, realX, realY, holeDistanceM)
                 val mag = hypot(s.sidePct, s.longPct)
-                p.color = slopeColor(s.sidePct, s.longPct, mag)
+                p.color = surfaceColor(z, s.sidePct, s.longPct, mag)
                 val l = r.left + col * cellW
                 val t = r.top + row * cellH
                 canvas.drawRect(l, t, l + cellW + 1f, t + cellH + 1f, p)
@@ -106,12 +107,14 @@ class PracticeGreenPreviewView(context: Context) : View(context) {
         canvas.drawCircle(r.centerX(), r.top + r.height() * .08f, max(2.5f, min(w, h) * .018f), p)
     }
 
-    private fun slopeColor(side: Double, long: Double, magnitude: Double): Int {
+    private fun surfaceColor(heightM: Double, side: Double, long: Double, magnitude: Double): Int {
         val hot = (magnitude / 3.8).coerceIn(0.0, 1.0)
         val directional = (abs(side) / (abs(side) + abs(long) + .01)).coerceIn(0.0, 1.0)
-        val r = (18 + hot * 210).toInt().coerceIn(0, 255)
-        val g = (126 + (1.0 - hot) * 82).toInt().coerceIn(0, 255)
-        val b = (52 + directional * 135 + (1.0 - hot) * 32).toInt().coerceIn(0, 255)
+        val elevation = (heightM / .025).coerceIn(-1.0, 1.0)
+        val lift = elevation * 24.0
+        val r = (18 + hot * 190 + lift).toInt().coerceIn(0, 255)
+        val g = (126 + (1.0 - hot) * 82 + lift).toInt().coerceIn(0, 255)
+        val b = (52 + directional * 120 + (1.0 - hot) * 32 + lift).toInt().coerceIn(0, 255)
         return Color.rgb(r, g, b)
     }
 
