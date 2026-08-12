@@ -2208,12 +2208,6 @@ class MainActivity : AppCompatActivity() {
             appUpdater.check(silent = false)
         }
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
-    tools.addView(tool("DEVELOPER", "ZIP 배포") {
-        closeThen {
-            if (wasActiveSession) showHomeMenu()
-            startActivity(Intent(this, DeployActivity::class.java))
-        }
-    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
 
     columns.addView(tools, LinearLayout.LayoutParams(0, -2, .78f))
     shell.addView(columns)
