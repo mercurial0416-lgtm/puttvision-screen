@@ -74,18 +74,12 @@ class GameEngine {
     @Synchronized
     fun step(dt: Double): SimResult? {
         val s = state ?: return null
-
-        if (!s.running) {
-            return lastResult
-        }
+        if (!s.running) return lastResult
 
         val r = physics.step(s, settings, dt)
-
         if (r != null && lastResult == null) {
             lastResult = r
-
             val metrics = currentShot
-
             if (metrics != null) {
                 val modeAtShot = gameModes.status.mode
                 val targetDistance = settings.holeDistanceM
@@ -93,18 +87,9 @@ class GameEngine {
                 val sideSlope = settings.sideSlopePct
                 val longSlope = settings.longSlopePct
 
-                val finalScore = StrokeScorer.score(
-                    metrics = metrics,
-                    result = r,
-                    recent = recentRecords
-                )
-
+                val finalScore = StrokeScorer.score(metrics = metrics, result = r, recent = recentRecords)
                 strokeScore = finalScore
-                coachFeedback = CoachEngine.diagnose(
-                    metrics = metrics,
-                    score = finalScore,
-                    recent = recentRecords
-                )
+                coachFeedback = CoachEngine.diagnose(metrics = metrics, score = finalScore, recent = recentRecords)
 
                 val record = ShotRecord(
                     metrics = metrics,
@@ -118,19 +103,16 @@ class GameEngine {
                     terrainProfileId = settings.terrainProfileId,
                     putterProfileName = ProductRuntime.putterProfileName,
                     putterHeadWidthCm = ProductRuntime.putterHeadWidthCm,
-                    physicalMatStimpM = ProductRuntime.physicalMatStimpM
+                    physicalMatStimpM = ProductRuntime.physicalMatStimpM,
+                    userProfileId = ProductSessionRuntime.userProfileId
                 )
 
                 latestRecord = record
                 recentRecords = (recentRecords + record).takeLast(40)
                 onRecordFinalized?.invoke(record)
-
-                // Advance the game only after the just-finished hole has been
-                // recorded with its original distance/slope.
                 gameModes.onResult(r)
             }
         }
-
         return r
     }
 
