@@ -14,6 +14,7 @@ class ImpactReplayView(context: Context) : View(context) {
 
     private var replay: ImpactReplay? = null
     private var metrics: ShotMetrics? = null
+    private var referenceMetrics: ShotMetrics? = null
     private var frame = 0
     private var loops = 0
 
@@ -41,10 +42,11 @@ class ImpactReplayView(context: Context) : View(context) {
         isFocusable = false
     }
 
-    fun play(value: ImpactReplay, shot: ShotMetrics) {
+    fun play(value: ImpactReplay, shot: ShotMetrics, reference: ShotMetrics? = null) {
         stopReplay(recycleFrames = true)
         replay = value
         metrics = shot
+        referenceMetrics = reference
         frame = 0
         loops = 0
         visibility = VISIBLE
@@ -57,6 +59,7 @@ class ImpactReplayView(context: Context) : View(context) {
         val old = replay
         replay = null
         metrics = null
+        referenceMetrics = null
         frame = 0
         loops = 0
         visibility = GONE
@@ -146,6 +149,7 @@ class ImpactReplayView(context: Context) : View(context) {
             paint.color = Color.argb(220, 246, 190, 74)
             canvas.drawRoundRect(media, max(10f, h * .018f), max(10f, h * .018f), paint)
             paint.style = Paint.Style.FILL
+            drawBestShotComparison(canvas, media)
         }
 
         // Telemetry rail
@@ -171,6 +175,58 @@ class ImpactReplayView(context: Context) : View(context) {
             }
         }
         paint.typeface = Typeface.DEFAULT
+    }
+
+    private fun drawBestShotComparison(canvas: Canvas, media: RectF) {
+        val current = metrics ?: return
+        val best = referenceMetrics ?: return
+        val cx = media.centerX()
+        val baseY = media.bottom - media.height() * .08f
+        val len = media.height() * .43f
+
+        fun lineForAngle(angleDeg: Double?, color: Int, widthPx: Float) {
+            val a = Math.toRadians(angleDeg ?: 0.0)
+            val dx = kotlin.math.sin(a).toFloat() * len
+            val dy = kotlin.math.cos(a).toFloat() * len
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = widthPx
+            paint.color = color
+            canvas.drawLine(cx, baseY, cx + dx, baseY - dy, paint)
+            paint.style = Paint.Style.FILL
+        }
+
+        lineForAngle(best.pathAngleDeg ?: best.launchAngleDeg, Color.argb(175, 96, 178, 255), max(2f, width * .0015f))
+        lineForAngle(current.pathAngleDeg ?: current.launchAngleDeg, Color.argb(230, 78, 209, 121), max(3f, width * .0022f))
+
+        val faceY = baseY - len * .23f
+        fun face(angle: Double?, color: Int, stroke: Float) {
+            val a = Math.toRadians(angle ?: 0.0)
+            val half = media.width() * .055f
+            val dx = kotlin.math.cos(a).toFloat() * half
+            val dy = kotlin.math.sin(a).toFloat() * half
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = stroke
+            paint.color = color
+            canvas.drawLine(cx - dx, faceY - dy, cx + dx, faceY + dy, paint)
+            paint.style = Paint.Style.FILL
+        }
+        face(best.faceAngleDeg, Color.argb(175, 96, 178, 255), max(2f, width * .0015f))
+        face(current.faceAngleDeg, Color.argb(235, 246, 190, 74), max(3f, width * .0022f))
+
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textSize = max(9f, width * .0075f)
+        paint.color = Color.argb(215, 96, 178, 255)
+        canvas.drawText("BEST", media.left + media.width() * .025f, media.top + media.height() * .075f, paint)
+        paint.color = Pv.primary
+        canvas.drawText("CURRENT", media.left + media.width() * .025f, media.top + media.height() * .125f, paint)
+        paint.color = Pv.textMid
+        paint.textSize = max(8f, width * .0067f)
+        canvas.drawText(
+            "PATH ${current.pathAngleDeg?.let { "%+.2f°".format(it) } ?: "--"} / ${best.pathAngleDeg?.let { "%+.2f°".format(it) } ?: "--"}   ·   FACE ${current.faceAngleDeg?.let { "%+.2f°".format(it) } ?: "--"} / ${best.faceAngleDeg?.let { "%+.2f°".format(it) } ?: "--"}",
+            media.left + media.width() * .025f,
+            media.bottom - media.height() * .035f,
+            paint
+        )
     }
 
     override fun onDetachedFromWindow() {

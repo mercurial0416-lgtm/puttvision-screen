@@ -26,12 +26,51 @@ class GreenView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        val save = canvas.save()
+        canvas.translate(width * ProductSessionRuntime.tvOffsetX, height * ProductSessionRuntime.tvOffsetY)
+        canvas.scale(
+            ProductSessionRuntime.tvScaleX,
+            ProductSessionRuntime.tvScaleY,
+            width / 2f,
+            height / 2f
+        )
         drawCourse(canvas)
         drawGreen(canvas)
         drawBrandRail(canvas)
         drawShotTelemetry(canvas)
         drawResult(canvas)
+        if (ProductSessionRuntime.tvCalibrationGuide) drawTvCalibrationGuide(canvas)
+        canvas.restoreToCount(save)
         postInvalidateOnAnimation()
+    }
+
+    private fun drawTvCalibrationGuide(c: Canvas) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val inset = max(8f, min(w, h) * .018f)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = max(3f, min(w, h) * .004f)
+        p.color = Pv.primary
+        c.drawRoundRect(RectF(inset, inset, w - inset, h - inset), inset, inset, p)
+        p.style = Paint.Style.FILL
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(18f, w * .014f)
+        p.color = Color.WHITE
+        c.drawText("TV SAFE AREA · 초록 테두리가 전부 보이게 맞추세요", inset * 1.6f, inset * 3.0f, p)
+        val arm = min(w, h) * .055f
+        p.strokeWidth = max(5f, min(w, h) * .006f)
+        p.color = Pv.primary
+        p.style = Paint.Style.STROKE
+        listOf(
+            floatArrayOf(inset, inset, inset + arm, inset, inset, inset + arm),
+            floatArrayOf(w - inset, inset, w - inset - arm, inset, w - inset, inset + arm),
+            floatArrayOf(inset, h - inset, inset + arm, h - inset, inset, h - inset - arm),
+            floatArrayOf(w - inset, h - inset, w - inset - arm, h - inset, w - inset, h - inset - arm)
+        ).forEach { a ->
+            c.drawLine(a[0], a[1], a[2], a[3], p)
+            c.drawLine(a[0], a[1], a[4], a[5], p)
+        }
+        p.style = Paint.Style.FILL
     }
 
     private fun drawCourse(c: Canvas) {

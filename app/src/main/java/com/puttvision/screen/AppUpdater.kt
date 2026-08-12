@@ -73,15 +73,14 @@ class AppUpdater(
     }
 
     private fun fetchInfo(): UpdateInfo {
+        val publicInfo = runCatching { fetchFallbackManifest() }.getOrNull()
         val token = tokenStore.loadToken()
-        if (!token.isNullOrBlank()) {
-            try {
-                return fetchGitHubRelease(token)
-            } catch (_: Throwable) {
-                // Keep the public manifest as a bootstrap fallback when GitHub auth/network fails.
-            }
-        }
-        return fetchFallbackManifest()
+        val privateInfo = if (!token.isNullOrBlank()) {
+            runCatching { fetchGitHubRelease(token) }.getOrNull()
+        } else null
+        return listOfNotNull(publicInfo, privateInfo)
+            .maxByOrNull { it.versionCode }
+            ?: error("업데이트 채널에 연결할 수 없습니다")
     }
 
     /**

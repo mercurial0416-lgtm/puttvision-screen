@@ -57,6 +57,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var putterProfileStore: PutterProfileStore
     private lateinit var matCalibrationManager: MatCalibrationManager
     private lateinit var voiceCoach: HandsFreeVoiceCoach
+    private lateinit var userProfileStore: UserProfileStore
+    private lateinit var tvCalibrationStore: TvCalibrationStore
+    private lateinit var accuracyValidationLab: AccuracyValidationLab
+    private lateinit var productBackupManager: ProductBackupManager
+    private lateinit var deviceReport: DeviceCapabilityReport
     private val cameraStability = CameraStabilityController()
 
     private val engine = GameEngine()
@@ -169,6 +174,20 @@ class MainActivity : AppCompatActivity() {
         PracticeGreenPreset("챔피언십 믹스", "EXPERT · CHAMPIONSHIP", -0.35, -0.25, 23)
     )
 
+    private val backupImport =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null || !::productBackupManager.isInitialized) return@registerForActivityResult
+            runCatching { productBackupManager.importBackup(uri) }
+                .onSuccess { message ->
+                    engine.seedHistory(statsRepository.recent(40))
+                    toast(message)
+                    sessionActive = false
+                    measurementSuspended = true
+                    showHomeMenu()
+                }
+                .onFailure { error -> toast("백업 복원 실패: ${error.message ?: "파일 오류"}") }
+        }
+
     private val permission =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -189,17 +208,29 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor =
             Executors.newSingleThreadExecutor()
 
-        statsRepository =
-            StatsRepository(this)
+        userProfileStore = UserProfileStore(this)
+        tvCalibrationStore = TvCalibrationStore(this)
+        deviceReport = DeviceDiagnostics.inspect(this)
+        statsRepository = StatsRepository(this)
 
         putterProfileStore = PutterProfileStore(this)
         matCalibrationManager = MatCalibrationManager(this)
         voiceCoach = HandsFreeVoiceCoach(this)
+        accuracyValidationLab = AccuracyValidationLab(this)
         appUpdater = AppUpdater(this)
-
-        engine.seedHistory(
-            statsRepository.all()
+        productBackupManager = ProductBackupManager(
+            this, statsRepository, userProfileStore, putterProfileStore, tvCalibrationStore
         )
+
+        engine.seedHistory(statsRepository.recent(40))
+        statsRepository.setOnLoaded {
+            runOnUiThread {
+                engine.seedHistory(statsRepository.recent(40))
+                if (::menuOverlay.isInitialized && menuOverlay.visibility == View.VISIBLE) {
+                    replaceMenuScreen(buildVideoHomeScreen(), null)
+                }
+            }
+        }
 
         engine.onRecordFinalized = { record ->
             statsRepository.add(record)
@@ -611,6 +642,7 @@ class MainActivity : AppCompatActivity() {
     }
     top.addView(topState(if (hfrHardwareAvailable) "240 FPS" else "CAMERA", hfrHardwareAvailable))
     top.addView(topState("CAL", homography != null), LinearLayout.LayoutParams(-2, -2).apply { marginStart = sdp(5) })
+    top.addView(topState(userProfileStore.current().name, true), LinearLayout.LayoutParams(-2, -2).apply { marginStart = sdp(5) })
     top.addView(pvButton("설정", PvButtonStyle.GHOST, textSp = if (compact) 6.5f else 7.5f, scaled = true, radiusDp = 100f) { showSettingsDialog() }, LinearLayout.LayoutParams(sdp(if (compact) 58 else 66), sdp(if (compact) 29 else 33)).apply { marginStart = sdp(6) })
 
     val content = LinearLayout(this).apply {
@@ -2183,10 +2215,29 @@ class MainActivity : AppCompatActivity() {
         tools.addView(tool("SESSION", "현재 세션 리포트") { closeThen { showSessionReport() } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     }
     tools.addView(tool("ANALYTICS", "샷 기록 / STATS") { closeThen { showStats(resumeAfter = wasActiveSession) } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("USER", "${userProfileStore.current().name} · 사용자 전환") {
+        showUserProfileManager(this, userProfileStore, allowChange = !sessionActive) { profile ->
+            engine.seedHistory(statsRepository.recent(40))
+            toast("사용자: ${profile.name}")
+        }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("PHONE ${deviceReport.grade}", "기기 호환성 진단") {
+        deviceReport = DeviceDiagnostics.inspect(this)
+        showDeviceDiagnostics(this, deviceReport, lastCalibrationQualityScore)
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("ACCURACY", "기준 센서 정확도 검증") {
+        showAccuracyValidationLab(this, accuracyValidationLab)
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("PRODUCT", "장비 · 매트 · 핸즈프리") {
         showProductSetupDialog(this, putterProfileStore, matCalibrationManager, voiceCoach)
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("DISPLAY", "TV 다시 연결") { displayController.refresh() }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("TV CAL", "TV 화면 크기 · 위치 보정") {
+        showTvCalibrationDialog(this, tvCalibrationStore)
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("BACKUP", "기록 · 설정 백업 / 복원") {
+        showBackupDialog(this, productBackupManager) { backupImport.launch("application/json") }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("TRAINING", "컵 가이드") {
         closeThen {
             if (sessionActive) {
@@ -2209,7 +2260,11 @@ class MainActivity : AppCompatActivity() {
         }
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
 
-    columns.addView(tools, LinearLayout.LayoutParams(0, -2, .78f))
+    val toolsScroll = ScrollView(this).apply {
+        isFillViewport = true
+        addView(tools, FrameLayout.LayoutParams(-1, -2))
+    }
+    columns.addView(toolsScroll, LinearLayout.LayoutParams(0, if (compact) pvDp(300) else pvDp(390), .78f))
     shell.addView(columns)
 
     val dialog = pvDialog(title = "설정", content = shell, dismissLabel = "완료")
@@ -3006,6 +3061,9 @@ class MainActivity : AppCompatActivity() {
         if (::matCalibrationManager.isInitialized) {
             matCalibrationManager.observe(processedMetrics)
         }
+        if (::accuracyValidationLab.isInitialized) {
+            accuracyValidationLab.capture(processedMetrics)
+        }
 
         engine.launch(
             processedMetrics
@@ -3016,7 +3074,8 @@ class MainActivity : AppCompatActivity() {
         replay?.let {
             replayView.play(
                 it,
-                processedMetrics
+                processedMetrics,
+                bestReferenceMetrics()
             )
         }
 
@@ -3038,6 +3097,15 @@ class MainActivity : AppCompatActivity() {
 
         overlay.invalidate()
         return true
+    }
+
+    private fun bestReferenceMetrics(): ShotMetrics? {
+        val distance = engine.settings.holeDistanceM
+        return statsRepository.all()
+            .asSequence()
+            .filter { kotlin.math.abs(it.targetDistanceM - distance) <= 0.75 }
+            .maxByOrNull { it.strokeScore.total }
+            ?.metrics
     }
 
     private fun startSimulationTicker() {
@@ -3250,7 +3318,7 @@ class MainActivity : AppCompatActivity() {
         val putterSummary = statsRepository.summary(statsRepository.all().filter { it.putterProfileName == currentPutterName })
 
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        box.addView(pvEyebrow("누적 기록 · CAREER TOTALS"))
+        box.addView(pvEyebrow("${userProfileStore.current().name} · 누적 기록 · CAREER TOTALS"))
 
         val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun statRow(vararg cells: Pair<String, String>) {
@@ -3410,6 +3478,7 @@ class MainActivity : AppCompatActivity() {
         if (::voiceCoach.isInitialized) voiceCoach.shutdown()
 
         if (::appUpdater.isInitialized) appUpdater.close()
+        if (::statsRepository.isInitialized) statsRepository.close()
         if (::cameraExecutor.isInitialized) cameraExecutor.shutdownNow()
         super.onDestroy()
     }
