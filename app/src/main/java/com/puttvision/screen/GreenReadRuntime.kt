@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 
 /**
@@ -14,22 +15,48 @@ object GreenReadRuntime {
     }
     private val ready = ConcurrentHashMap<GreenReadKey, GreenRead>()
     private val pending = ConcurrentHashMap.newKeySet<GreenReadKey>()
+    private val callbacks = ConcurrentHashMap<GreenReadKey, CopyOnWriteArrayList<(GreenRead) -> Unit>>()
 
     fun prefetch(settings: GreenSettings) {
         val snapshot = settings.copy()
         val key = GreenReadAdvisor.key(snapshot)
         GreenReadAdvisor.peekCached(snapshot)?.let {
             ready[key] = it
+            dispatch(key, it)
             return
         }
-        if (ready.containsKey(key) || !pending.add(key)) return
+        ready[key]?.let {
+            dispatch(key, it)
+            return
+        }
+        if (!pending.add(key)) return
         executor.execute {
             try {
-                ready[key] = GreenReadAdvisor.read(snapshot)
+                val solved = GreenReadAdvisor.read(snapshot)
+                ready[key] = solved
+                dispatch(key, solved)
             } finally {
                 pending.remove(key)
             }
         }
+    }
+
+    /** Callback runs on the solver worker; Android callers should hop to main. */
+    fun request(settings: GreenSettings, onReady: (GreenRead) -> Unit) {
+        val snapshot = settings.copy()
+        val key = GreenReadAdvisor.key(snapshot)
+        peek(snapshot)?.let {
+            onReady(it)
+            return
+        }
+        callbacks.computeIfAbsent(key) { CopyOnWriteArrayList() }.add(onReady)
+        // Re-check after registration to close the race where solving finished
+        // between the first peek and callback registration.
+        peek(snapshot)?.let {
+            dispatch(key, it)
+            return
+        }
+        prefetch(snapshot)
     }
 
     fun peek(settings: GreenSettings): GreenRead? {
@@ -49,8 +76,15 @@ object GreenReadRuntime {
         settings.forEach(::prefetch)
     }
 
+    private fun dispatch(key: GreenReadKey, read: GreenRead) {
+        callbacks.remove(key)?.forEach { callback ->
+            runCatching { callback(read) }
+        }
+    }
+
     fun clearRuntimeCache() {
         ready.clear()
-        pending.clear()
+        callbacks.clear()
+        // Running jobs are intentionally not cancelled; they can finish safely.
     }
 }
