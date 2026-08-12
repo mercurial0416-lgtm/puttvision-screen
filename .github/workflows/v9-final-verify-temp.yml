@@ -23,6 +23,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Distribution boundary audit
+        shell: bash
+        run: |
+          test ! -f app/src/main/java/com/puttvision/screen/DeployActivity.kt
+          ! grep -q 'DeployActivity' app/src/main/AndroidManifest.xml
+          grep -q 'DeployActivity' app/src/developer/AndroidManifest.xml
       - name: Regression tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
       - name: Compile consumer and developer
