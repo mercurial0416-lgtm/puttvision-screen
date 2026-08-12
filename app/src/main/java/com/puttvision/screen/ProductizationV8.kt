@@ -640,7 +640,7 @@ class ProductBackupManager(
 ) {
     fun exportBackup() {
         val root = JSONObject().apply {
-            put("schema", 2)
+            put("schema", 3)
             put("createdAt", System.currentTimeMillis())
             put("users", users.exportJson())
             put("shots", stats.exportJson())
@@ -654,6 +654,13 @@ class ProductBackupManager(
             put("matSamples", matPrefs.getString("samples", ""))
             val voicePrefs = activity.getSharedPreferences("puttvision_voice_v1", Context.MODE_PRIVATE)
             put("voiceEnabled", voicePrefs.getBoolean("enabled", true))
+            val tunePrefs = activity.getSharedPreferences("puttvision_accuracy_tune_v1", Context.MODE_PRIVATE)
+            put("accuracyTune", JSONObject().apply {
+                put("enabled", tunePrefs.getBoolean("enabled", true))
+                put("model", tunePrefs.getString("model", ""))
+            })
+            val setupPrefs = activity.getSharedPreferences("puttvision_first_run_v9", Context.MODE_PRIVATE)
+            put("setupV9Completed", setupPrefs.getBoolean("completed", false))
         }
         val dir = File(activity.cacheDir, "exports").apply { mkdirs() }
         val file = File(dir, "PuttVision-backup-${System.currentTimeMillis()}.json")
@@ -665,7 +672,7 @@ class ProductBackupManager(
         val text = activity.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
             ?: error("백업 파일을 열 수 없습니다")
         val root = JSONObject(text)
-        require(root.optInt("schema", 0) in 1..2) { "지원하지 않는 백업 형식입니다" }
+        require(root.optInt("schema", 0) in 1..3) { "지원하지 않는 백업 형식입니다" }
         root.optJSONObject("users")?.let { users.importJson(it) }
         root.optJSONArray("shots")?.let { stats.importJson(it, replace = true) }
         root.optJSONArray("putters")?.let { arr ->
@@ -686,6 +693,16 @@ class ProductBackupManager(
             .putString("samples", root.optString("matSamples", "")).apply()
         activity.getSharedPreferences("puttvision_voice_v1", Context.MODE_PRIVATE).edit()
             .putBoolean("enabled", root.optBoolean("voiceEnabled", true)).apply()
+        root.optJSONObject("accuracyTune")?.let { j ->
+            activity.getSharedPreferences("puttvision_accuracy_tune_v1", Context.MODE_PRIVATE).edit()
+                .putBoolean("enabled", j.optBoolean("enabled", true))
+                .putString("model", j.optString("model", ""))
+                .apply()
+        }
+        if (root.has("setupV9Completed")) {
+            activity.getSharedPreferences("puttvision_first_run_v9", Context.MODE_PRIVATE).edit()
+                .putBoolean("completed", root.optBoolean("setupV9Completed", false)).apply()
+        }
         return "백업 복원 완료 · ${stats.allProfiles().size}샷"
     }
 }

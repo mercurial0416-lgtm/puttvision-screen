@@ -13,23 +13,11 @@
     </queries>
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
         android:label="PuttVision Screen"
         android:supportsRtl="true"
         android:theme="@style/Theme.PuttVisionScreen">
-
-        <activity
-            android:name=".DeployActivity"
-            android:label="PuttVision Deploy"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/zip" />
-                <data android:mimeType="application/x-zip-compressed" />
-                <data android:mimeType="application/octet-stream" />
-            </intent-filter>
-        </activity>
 
         <activity
             android:name=".MainActivity"

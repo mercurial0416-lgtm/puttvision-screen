@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.kapt")
 }
 
+val licensePublicKey = (System.getenv("PV_LICENSE_PUBLIC_KEY_B64") ?: "")
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 android {
     namespace = "com.puttvision.screen"
     compileSdk = 36
@@ -14,8 +18,24 @@ android {
         targetSdk = 36
         versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 103
         versionName = System.getenv("PV_VERSION_NAME") ?: "1.0.3-build-fix"
+        buildConfigField("String", "LICENSE_PUBLIC_KEY_B64", "\"$licensePublicKey\"")
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("consumer") {
+            dimension = "distribution"
+            buildConfigField("boolean", "DEVELOPER_BUILD", "false")
+        }
+        create("developer") {
+            dimension = "distribution"
+            buildConfigField("boolean", "DEVELOPER_BUILD", "true")
+        }
+    }
 
     signingConfigs {
         create("release") {
@@ -49,6 +69,10 @@ android {
             "-opt-in=androidx.camera.camera2.interop.ExperimentalCamera2Interop"
         )
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -68,6 +92,6 @@ dependencies {
     implementation("androidx.room:room-ktx:$room")
     kapt("androidx.room:room-compiler:$room")
 
-    // Bundled/offline QR recognition for zero-touch calibration markers.
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    testImplementation("junit:junit:4.13.2")
 }

@@ -57,9 +57,10 @@ class DeployActivity : AppCompatActivity() {
             onReadyToPickZip = { consumeSharedOrPick() }
         )
 
-        // Share -> PuttVision Deploy is intentionally zero-navigation after the first GitHub setup.
-        if (pendingSharedZip != null && SecureTokenStore(this).hasToken()) {
-            consumeSharedOrPick()
+        // A shared ZIP is staged only. Never mutate GitHub without an explicit tap in this Activity.
+        if (pendingSharedZip != null) {
+            status.text = "공유 ZIP 수신 · 배포 버튼을 눌러 확인하세요"
+            deployButton.text = "수신 ZIP 확인 → 배포"
         }
     }
 
@@ -68,7 +69,8 @@ class DeployActivity : AppCompatActivity() {
         setIntent(intent)
         pendingSharedZip = extractSharedZip(intent)
         if (pendingSharedZip != null) {
-            if (SecureTokenStore(this).hasToken()) consumeSharedOrPick() else controller.showTokenSetup()
+            status.text = "공유 ZIP 수신 · 배포 버튼을 눌러 확인하세요"
+            deployButton.text = "수신 ZIP 확인 → 배포"
         }
     }
 

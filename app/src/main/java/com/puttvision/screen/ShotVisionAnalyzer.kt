@@ -19,15 +19,21 @@ class ShotVisionAnalyzer(
     private val homography: Homography,
     private val tracker: ShotTracker,
     private val onOverlay: (VisionOverlay) -> Unit,
+    private val onQuality: (LiveQualityGateSnapshot) -> Unit = {},
     private val onShotReady: (ShotMetrics) -> Unit
 ) : ImageAnalysis.Analyzer {
 
     private var lastBall: PointF? = null
     private var lastHeel: PointF? = null
     private var lastToe: PointF? = null
+    private val qualityEstimator = CameraQualityEstimator()
+    private var qualityFrame = 0
+    private var ballReadiness = 0.0
+    private var putterReadiness = 0.0
 
     override fun analyze(image: ImageProxy) {
         try {
+            val sampledQuality = if (++qualityFrame % 5 == 0) qualityEstimator.evaluate(image) else null
             val yPlane = image.planes[0]
             val uPlane = image.planes[1]
             val vPlane = image.planes[2]
@@ -65,6 +71,10 @@ class ShotVisionAnalyzer(
                 lastToe
             )
             if (toe != null) lastToe = toe
+
+            ballReadiness = ballReadiness * 0.82 + (if (ball != null) 1.0 else 0.0) * 0.18
+            putterReadiness = putterReadiness * 0.82 + (if (heel != null && toe != null) 1.0 else 0.0) * 0.18
+            sampledQuality?.let { onQuality(LiveQualityGate.build(it, ballReadiness, putterReadiness)) }
 
             val t = image.imageInfo.timestamp
 

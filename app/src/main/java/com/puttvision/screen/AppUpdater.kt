@@ -74,8 +74,8 @@ class AppUpdater(
 
     private fun fetchInfo(): UpdateInfo {
         val publicInfo = runCatching { fetchFallbackManifest() }.getOrNull()
-        val token = tokenStore.loadToken()
-        val privateInfo = if (!token.isNullOrBlank()) {
+        val token = if (BuildConfig.DEVELOPER_BUILD) tokenStore.loadToken() else null
+        val privateInfo = if (BuildConfig.DEVELOPER_BUILD && !token.isNullOrBlank()) {
             runCatching { fetchGitHubRelease(token) }.getOrNull()
         } else null
         return listOfNotNull(publicInfo, privateInfo)

@@ -62,6 +62,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var accuracyValidationLab: AccuracyValidationLab
     private lateinit var productBackupManager: ProductBackupManager
     private lateinit var deviceReport: DeviceCapabilityReport
+    private lateinit var accuracyAutoTuner: AccuracyAutoTuner
+    private lateinit var supportDiagnostics: SupportDiagnosticsExporter
+    private lateinit var offlineLicenseManager: OfflineLicenseManager
+    private var liveQualitySnapshot: LiveQualityGateSnapshot? = null
+    private var firstRunWizardShown = false
     private val cameraStability = CameraStabilityController()
 
     private val engine = GameEngine()
@@ -93,6 +98,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvStatus: TextView
     private lateinit var hfrStatus: TextView
+    private lateinit var qualityStatus: TextView
     private lateinit var metricText: TextView
     private lateinit var speedLabel: TextView
     private lateinit var distanceLabel: TextView
@@ -180,12 +186,21 @@ class MainActivity : AppCompatActivity() {
             runCatching { productBackupManager.importBackup(uri) }
                 .onSuccess { message ->
                     engine.seedHistory(statsRepository.recent(40))
+                    if (::accuracyAutoTuner.isInitialized) accuracyAutoTuner.reload()
                     toast(message)
                     sessionActive = false
                     measurementSuspended = true
                     showHomeMenu()
                 }
                 .onFailure { error -> toast("백업 복원 실패: ${error.message ?: "파일 오류"}") }
+        }
+
+    private val licenseImport =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null || !::offlineLicenseManager.isInitialized) return@registerForActivityResult
+            runCatching { offlineLicenseManager.importLicense(uri) }
+                .onSuccess { toast("라이선스 활성화 · ${it.state}") }
+                .onFailure { toast("라이선스 오류: ${it.message ?: "파일 오류"}") }
         }
 
     private val permission =
@@ -217,6 +232,9 @@ class MainActivity : AppCompatActivity() {
         matCalibrationManager = MatCalibrationManager(this)
         voiceCoach = HandsFreeVoiceCoach(this)
         accuracyValidationLab = AccuracyValidationLab(this)
+        accuracyAutoTuner = AccuracyAutoTuner(this, deviceReport.model)
+        supportDiagnostics = SupportDiagnosticsExporter(this)
+        offlineLicenseManager = OfflineLicenseManager(this)
         appUpdater = AppUpdater(this)
         productBackupManager = ProductBackupManager(
             this, statsRepository, userProfileStore, putterProfileStore, tvCalibrationStore
@@ -413,6 +431,10 @@ class MainActivity : AppCompatActivity() {
 
     hfrStatus = statusPill("HFR", Pv.primary) { toast(lastHfrStatusMessage) }
     topBar.addView(hfrStatus)
+    qualityStatus = statusPill("ENV --", Pv.textMid) {
+        toast(liveQualitySnapshot?.hint ?: "측정 환경 분석 중")
+    }
+    topBar.addView(qualityStatus, LinearLayout.LayoutParams(-2, -2).apply { marginStart = pvDp(4) })
     tvStatus = statusPill("TV", Pv.textMid) { toast(lastTvStatusMessage) }
     topBar.addView(tvStatus, LinearLayout.LayoutParams(-2, -2).apply { marginStart = pvDp(4) })
 
@@ -2225,8 +2247,17 @@ class MainActivity : AppCompatActivity() {
         deviceReport = DeviceDiagnostics.inspect(this)
         showDeviceDiagnostics(this, deviceReport, lastCalibrationQualityScore)
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("QUICK SETUP", "초기 설치 마법사 다시 실행") {
+        settingsDialog?.dismiss()
+        settingsDialog = null
+        maybeShowFirstRunWizard(force = true)
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("ACCURACY", "기준 센서 정확도 검증") {
         showAccuracyValidationLab(this, accuracyValidationLab)
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("AUTO TUNE", "기기별 측정 편향 자동 보정") {
+        accuracyAutoTuner.refresh(accuracyValidationLab.matched())
+        showAccuracyTuningDialog(this, accuracyAutoTuner, accuracyValidationLab)
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("PRODUCT", "장비 · 매트 · 핸즈프리") {
         showProductSetupDialog(this, putterProfileStore, matCalibrationManager, voiceCoach)
@@ -2237,6 +2268,24 @@ class MainActivity : AppCompatActivity() {
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("BACKUP", "기록 · 설정 백업 / 복원") {
         showBackupDialog(this, productBackupManager) { backupImport.launch("application/json") }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("SUPPORT", "고객지원 진단 ZIP 내보내기") {
+        supportDiagnostics.export(
+            report = deviceReport,
+            calibrationScore = lastCalibrationQualityScore,
+            calibrationGrade = lastCalibrationQualityGrade,
+            live = liveQualitySnapshot,
+            stats = statsRepository,
+            putter = putterProfileStore.current(),
+            mat = matCalibrationManager,
+            tv = tvCalibrationStore,
+            tuner = accuracyAutoTuner,
+            license = offlineLicenseManager,
+            hfrStatus = lastHfrStatusMessage
+        )
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("LICENSE", "기기 활성화 · 라이선스") {
+        showOfflineLicenseDialog(this, offlineLicenseManager) { licenseImport.launch("application/json") }
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("TRAINING", "컵 가이드") {
         closeThen {
@@ -2334,6 +2383,12 @@ class MainActivity : AppCompatActivity() {
         lastHfrStatusMessage = detail
         if (!::hfrStatus.isInitialized) return
         hfrStatus.text = short
+    }
+
+    private fun updateLiveQualityStatus(q: LiveQualityGateSnapshot) {
+        if (!::qualityStatus.isInitialized) return
+        qualityStatus.text = q.label
+        qualityStatus.setTextColor(if (q.blocked) Pv.amber else if (q.label.startsWith("READY")) Pv.primary else Pv.textMid)
     }
 
     private fun updateAutoButton() {
@@ -2518,6 +2573,7 @@ class MainActivity : AppCompatActivity() {
                         overlay.invalidate()
 
                         installNormalAnalyzer(result.homography)
+                        maybeShowFirstRunWizard()
                         maybeAutoStartAfterCalibration()
                     }
                 }
@@ -2567,6 +2623,12 @@ class MainActivity : AppCompatActivity() {
                         overlay.invalidate()
                     }
                 },
+                onQuality = { quality ->
+                    runOnUiThread {
+                        liveQualitySnapshot = quality
+                        updateLiveQualityStatus(quality)
+                    }
+                },
                 onShotReady = { metrics ->
                     runOnUiThread {
                         if (!sessionActive || measurementSuspended) return@runOnUiThread
@@ -2582,6 +2644,22 @@ class MainActivity : AppCompatActivity() {
         analysis.setAnalyzer(
             cameraExecutor,
             analyzer
+        )
+    }
+
+    private fun maybeShowFirstRunWizard(force: Boolean = false) {
+        if (!force && firstRunWizardShown) return
+        firstRunWizardShown = true
+        FirstRunSetupV9.showIfNeeded(
+            activity = this,
+            report = deviceReport,
+            calibrationScore = lastCalibrationQualityScore,
+            calibrationGrade = lastCalibrationQualityGrade,
+            putters = putterProfileStore,
+            mat = matCalibrationManager,
+            force = force,
+            onRecalibrate = { beginAutoCalibration() },
+            onTvCalibration = { showTvCalibrationDialog(this, tvCalibrationStore) }
         )
     }
 
@@ -2661,6 +2739,27 @@ class MainActivity : AppCompatActivity() {
             )
 
             return
+        }
+
+        if (::offlineLicenseManager.isInitialized) {
+            val license = offlineLicenseManager.status()
+            if (!license.usable) {
+                showOfflineLicenseDialog(this, offlineLicenseManager) { licenseImport.launch("application/json") }
+                return
+            }
+        }
+
+        liveQualitySnapshot?.let { q ->
+            if (q.blocked) {
+                shotPanelTitle.text = "ENVIRONMENT"
+                shotPanelTitle.setTextColor(Pv.amber)
+                metricText.text = q.hint
+                overlay.status = "${q.label} · WAIT"
+                overlay.invalidate()
+                if (::voiceCoach.isInitialized) voiceCoach.speakCalibrationProblem(q.hint)
+                if (autoPlayEnabled) mainHandler.postDelayed({ if (sessionActive && !measurementSuspended) armPrecision() }, 1100L)
+                return
+            }
         }
 
         measurementSuspended = false
@@ -3032,10 +3131,10 @@ class MainActivity : AppCompatActivity() {
             return false
         }
 
-        val processedMetrics = if (::matCalibrationManager.isInitialized) {
+        val baseMetrics = if (::matCalibrationManager.isInitialized) {
             matCalibrationManager.applyFallback(metrics)
         } else metrics
-        val confidence = processedMetrics.confidence
+        val confidence = baseMetrics.confidence
         val rejectThreshold = if (source.startsWith("PRECISION")) 0.65 else 0.38
         if (confidence != null && confidence < rejectThreshold) {
             replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
@@ -3057,13 +3156,17 @@ class MainActivity : AppCompatActivity() {
             shotPanelTitle.setTextColor(if (pct >= 80) Pv.primary else Pv.amber)
         }
 
-        updateMetricCards(processedMetrics)
         if (::matCalibrationManager.isInitialized) {
-            matCalibrationManager.observe(processedMetrics)
+            matCalibrationManager.observe(baseMetrics)
         }
         if (::accuracyValidationLab.isInitialized) {
-            accuracyValidationLab.capture(processedMetrics)
+            accuracyValidationLab.capture(baseMetrics)
         }
+        if (::accuracyAutoTuner.isInitialized && ::accuracyValidationLab.isInitialized) {
+            accuracyAutoTuner.refresh(accuracyValidationLab.matched())
+        }
+        val processedMetrics = if (::accuracyAutoTuner.isInitialized) accuracyAutoTuner.apply(baseMetrics) else baseMetrics
+        updateMetricCards(processedMetrics)
 
         engine.launch(
             processedMetrics
