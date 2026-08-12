@@ -10,6 +10,12 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
 data class ShotRecord(
@@ -25,6 +31,7 @@ data class ShotRecord(
     val putterProfileName: String? = null,
     val putterHeadWidthCm: Double? = null,
     val physicalMatStimpM: Double? = null,
+    val userProfileId: String = ProductSessionRuntime.userProfileId,
     val timestampMs: Long = System.currentTimeMillis()
 )
 
@@ -45,7 +52,8 @@ data class StatsSummary(
     indices = [
         Index(value = ["timestampMs"]),
         Index(value = ["mode"]),
-        Index(value = ["putterProfileName"])
+        Index(value = ["putterProfileName"]),
+        Index(value = ["userProfileId"])
     ]
 )
 data class ShotEntity(
@@ -60,6 +68,7 @@ data class ShotEntity(
     val putterProfileName: String?,
     val putterHeadWidthCm: Double?,
     val physicalMatStimpM: Double?,
+    val userProfileId: String,
 
     val ballSpeedMps: Double,
     val launchAngleDeg: Double,
@@ -98,13 +107,7 @@ data class ShotEntity(
 @Dao
 interface ShotDao {
     @Query("SELECT * FROM shots ORDER BY timestampMs ASC, id ASC")
-    fun all(): List<ShotEntity>
-
-    @Query("SELECT * FROM shots ORDER BY timestampMs DESC, id DESC LIMIT :count")
-    fun recent(count: Int): List<ShotEntity>
-
-    @Query("SELECT * FROM shots WHERE timestampMs >= :startMs AND timestampMs < :endMs ORDER BY timestampMs ASC")
-    fun between(startMs: Long, endMs: Long): List<ShotEntity>
+    fun allRaw(): List<ShotEntity>
 
     @Insert
     fun insert(entity: ShotEntity)
@@ -115,71 +118,116 @@ interface ShotDao {
     @Query("SELECT COUNT(*) FROM shots")
     fun count(): Int
 
+    @Query("DELETE FROM shots WHERE userProfileId = :profileId")
+    fun clearProfile(profileId: String)
+
     @Query("DELETE FROM shots")
-    fun clear()
+    fun clearAll()
 }
 
-@Database(entities = [ShotEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ShotEntity::class], version = 2, exportSchema = false)
 abstract class PuttVisionDatabase : RoomDatabase() {
     abstract fun shotDao(): ShotDao
 }
 
+private val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE shots ADD COLUMN userProfileId TEXT NOT NULL DEFAULT 'owner'")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_shots_userProfileId ON shots(userProfileId)")
+    }
+}
+
 class StatsRepository(context: Context) {
     private val appContext = context.applicationContext
-    private val legacyPrefs =
-        appContext.getSharedPreferences("puttvision_stats_v04", Context.MODE_PRIVATE)
+    private val legacyPrefs = appContext.getSharedPreferences("puttvision_stats_v04", Context.MODE_PRIVATE)
+    private val io = Executors.newSingleThreadExecutor()
+    private val loaded = AtomicBoolean(false)
+    private val lock = Any()
+    @Volatile private var cache: List<ShotRecord> = emptyList()
+    @Volatile private var onLoaded: (() -> Unit)? = null
 
     private val db = Room.databaseBuilder(
         appContext,
         PuttVisionDatabase::class.java,
         "puttvision_stats_room.db"
     )
-        .allowMainThreadQueries()
-        .fallbackToDestructiveMigration()
+        .addMigrations(MIGRATION_1_2)
         .build()
-
     private val dao = db.shotDao()
 
     init {
-        migrateLegacyOnce()
+        io.execute {
+            migrateLegacyOnce()
+            cache = dao.allRaw().map(::toRecord)
+            loaded.set(true)
+            onLoaded?.invoke()
+        }
     }
 
-    fun all(): List<ShotRecord> = dao.all().map(::toRecord)
+    fun setOnLoaded(listener: () -> Unit) {
+        onLoaded = listener
+        if (loaded.get()) listener()
+    }
+
+    fun isLoaded(): Boolean = loaded.get()
+
+    fun all(): List<ShotRecord> {
+        val id = ProductSessionRuntime.userProfileId
+        return cache.filter { it.userProfileId == id }
+    }
+
+    fun allProfiles(): List<ShotRecord> = cache.toList()
 
     fun recent(count: Int = 30): List<ShotRecord> =
-        dao.recent(count.coerceAtLeast(1)).asReversed().map(::toRecord)
+        all().takeLast(count.coerceAtLeast(1))
 
     fun between(startMs: Long, endMs: Long): List<ShotRecord> =
-        dao.between(startMs, endMs).map(::toRecord)
+        all().filter { it.timestampMs >= startMs && it.timestampMs < endMs }
 
     fun add(record: ShotRecord) {
-        dao.insert(toEntity(record))
+        val normalized = if (record.userProfileId.isBlank()) record.copy(userProfileId = ProductSessionRuntime.userProfileId) else record
+        synchronized(lock) { cache = cache + normalized }
+        io.execute { dao.insert(toEntity(normalized)) }
     }
 
+    /** Clears only the currently selected user profile. */
     fun clear() {
-        dao.clear()
-        legacyPrefs.edit().remove("records").apply()
+        val id = ProductSessionRuntime.userProfileId
+        synchronized(lock) { cache = cache.filterNot { it.userProfileId == id } }
+        io.execute { dao.clearProfile(id) }
+    }
+
+    fun clearAllProfiles() {
+        synchronized(lock) { cache = emptyList() }
+        io.execute { dao.clearAll() }
     }
 
     fun summary(): StatsSummary = summaryOf(all())
-
     fun summary(records: List<ShotRecord>): StatsSummary = summaryOf(records)
+
+    fun exportJson(): JSONArray = JSONArray().apply {
+        allProfiles().forEach { r -> put(recordToJson(r)) }
+    }
+
+    fun importJson(array: JSONArray, replace: Boolean) {
+        val restored = ArrayList<ShotRecord>()
+        for (i in 0 until array.length()) {
+            val j = array.optJSONObject(i) ?: continue
+            jsonToRecord(j)?.let(restored::add)
+        }
+        synchronized(lock) {
+            cache = if (replace) restored else (cache + restored)
+        }
+        io.execute {
+            if (replace) dao.clearAll()
+            if (restored.isNotEmpty()) dao.insertAll(restored.map(::toEntity))
+        }
+    }
 
     private fun summaryOf(records: List<ShotRecord>): StatsSummary {
         if (records.isEmpty()) {
-            return StatsSummary(
-                shots = 0,
-                made = 0,
-                makePct = 0.0,
-                avgScore = 0.0,
-                avgLaunch = 0.0,
-                launchStd = 0.0,
-                avgFace = null,
-                avgPath = null,
-                avgDistanceErrorCm = null
-            )
+            return StatsSummary(0, 0, 0.0, 0.0, 0.0, 0.0, null, null, null)
         }
-
         val made = records.count { it.result?.holed == true }
         val launches = records.map { it.metrics.launchAngleDeg }
         val mean = launches.average()
@@ -187,7 +235,6 @@ class StatsRepository(context: Context) {
         val faces = records.mapNotNull { it.metrics.faceAngleDeg }
         val paths = records.mapNotNull { it.metrics.pathAngleDeg }
         val errors = records.mapNotNull { it.result?.distanceToCupM }
-
         return StatsSummary(
             shots = records.size,
             made = made,
@@ -216,6 +263,7 @@ class StatsRepository(context: Context) {
             putterProfileName = r.putterProfileName,
             putterHeadWidthCm = r.putterHeadWidthCm,
             physicalMatStimpM = r.physicalMatStimpM,
+            userProfileId = r.userProfileId.ifBlank { "owner" },
             ballSpeedMps = m.ballSpeedMps,
             launchAngleDeg = m.launchAngleDeg,
             headSpeedMps = m.headSpeedMps,
@@ -271,26 +319,12 @@ class StatsRepository(context: Context) {
             confidence = e.confidence
         )
         val result = if (e.hasResult) {
-            SimResult(
-                holed = e.holed,
-                finishX = e.finishX ?: 0.0,
-                finishY = e.finishY ?: 0.0,
-                distanceToCupM = e.distanceToCupM ?: 0.0,
-                elapsedSec = e.elapsedSec ?: 0.0
-            )
+            SimResult(e.holed, e.finishX ?: 0.0, e.finishY ?: 0.0, e.distanceToCupM ?: 0.0, e.elapsedSec ?: 0.0)
         } else null
         return ShotRecord(
             metrics = metrics,
             result = result,
-            strokeScore = StrokeScore(
-                total = e.scoreTotal,
-                face = e.scoreFace,
-                path = e.scorePath,
-                tempo = e.scoreTempo,
-                impact = e.scoreImpact,
-                distance = e.scoreDistance,
-                consistency = e.scoreConsistency
-            ),
+            strokeScore = StrokeScore(e.scoreTotal, e.scoreFace, e.scorePath, e.scoreTempo, e.scoreImpact, e.scoreDistance, e.scoreConsistency),
             mode = runCatching { PracticeMode.valueOf(e.mode) }.getOrDefault(PracticeMode.PRACTICE),
             targetDistanceM = e.targetDistanceM,
             stimpMeters = e.stimpMeters,
@@ -300,6 +334,7 @@ class StatsRepository(context: Context) {
             putterProfileName = e.putterProfileName,
             putterHeadWidthCm = e.putterHeadWidthCm,
             physicalMatStimpM = e.physicalMatStimpM,
+            userProfileId = e.userProfileId.ifBlank { "owner" },
             timestampMs = e.timestampMs
         )
     }
@@ -343,37 +378,75 @@ class StatsRepository(context: Context) {
                     confidence = p.getOrNull(20)?.toDoubleOrNull()
                 )
                 val result = if (p[10].isNotBlank() && p[11].isNotBlank() && p[12].isNotBlank()) {
-                    SimResult(
-                        holed = p[9].toBoolean(),
-                        finishX = p[10].toDouble(),
-                        finishY = p[11].toDouble(),
-                        distanceToCupM = p[12].toDouble(),
-                        elapsedSec = 0.0
-                    )
+                    SimResult(p[9].toBoolean(), p[10].toDouble(), p[11].toDouble(), p[12].toDouble(), 0.0)
                 } else null
                 val total = p[8].toInt()
                 out += ShotRecord(
                     metrics = metrics,
                     result = result,
-                    strokeScore = StrokeScore(
-                        total = total,
-                        face = total,
-                        path = total,
-                        tempo = total,
-                        impact = total,
-                        distance = total,
-                        consistency = total
-                    ),
+                    strokeScore = StrokeScore(total, total, total, total, total, total, total),
                     mode = PracticeMode.valueOf(p[1]),
                     targetDistanceM = p.getOrNull(13)?.toDoubleOrNull() ?: 0.0,
                     stimpMeters = p.getOrNull(14)?.toDoubleOrNull() ?: 2.8,
                     sideSlopePct = p.getOrNull(15)?.toDoubleOrNull() ?: 0.0,
                     longSlopePct = p.getOrNull(16)?.toDoubleOrNull() ?: 0.0,
+                    userProfileId = "owner",
                     timestampMs = p[0].toLong()
                 )
-            } catch (_: Throwable) {
-            }
+            } catch (_: Throwable) { }
         }
         return out
     }
+
+    private fun recordToJson(r: ShotRecord): JSONObject = JSONObject().apply {
+        put("t", r.timestampMs); put("profile", r.userProfileId); put("mode", r.mode.name)
+        put("distance", r.targetDistanceM); put("stimp", r.stimpMeters); put("side", r.sideSlopePct); put("long", r.longSlopePct); put("terrain", r.terrainProfileId)
+        putNullable("putter", r.putterProfileName); putNullable("putterWidth", r.putterHeadWidthCm); putNullable("mat", r.physicalMatStimpM)
+        val m = r.metrics
+        put("ball", m.ballSpeedMps); put("launch", m.launchAngleDeg); putNullable("head", m.headSpeedMps); putNullable("face", m.faceAngleDeg); putNullable("path", m.pathAngleDeg)
+        putNullable("f2p", m.faceToPathDeg); putNullable("smash", m.smash); putNullable("impact", m.impactOffsetMm); putNullable("tempo", m.tempoRatio)
+        putNullable("backswingMs", m.backswingMs); putNullable("downswingMs", m.downswingMs); putNullable("backswingLength", m.backswingLengthCm); putNullable("accel", m.peakHeadAccelerationMps2)
+        putNullable("rawBall", m.rawBallSpeedMps); putNullable("matDecel", m.estimatedMatDecelMps2); putNullable("matStimp", m.estimatedMatStimpM); putNullable("confidence", m.confidence)
+        val s = r.strokeScore
+        put("score", JSONObject().apply { put("total", s.total); put("face", s.face); put("path", s.path); put("tempo", s.tempo); put("impact", s.impact); put("distance", s.distance); put("consistency", s.consistency) })
+        r.result?.let { result -> put("result", JSONObject().apply { put("holed", result.holed); put("x", result.finishX); put("y", result.finishY); put("cup", result.distanceToCupM); put("elapsed", result.elapsedSec) }) }
+    }
+
+    private fun jsonToRecord(j: JSONObject): ShotRecord? = runCatching {
+        val m = ShotMetrics(
+            ballSpeedMps = j.getDouble("ball"), launchAngleDeg = j.getDouble("launch"), headSpeedMps = j.optNullableDouble("head"), faceAngleDeg = j.optNullableDouble("face"), pathAngleDeg = j.optNullableDouble("path"), faceToPathDeg = j.optNullableDouble("f2p"), smash = j.optNullableDouble("smash"), impactOffsetMm = j.optNullableDouble("impact"), measuredAtNs = 0L,
+            backswingMs = j.optNullableDouble("backswingMs"), downswingMs = j.optNullableDouble("downswingMs"), tempoRatio = j.optNullableDouble("tempo"), backswingLengthCm = j.optNullableDouble("backswingLength"), peakHeadAccelerationMps2 = j.optNullableDouble("accel"), rawBallSpeedMps = j.optNullableDouble("rawBall"), estimatedMatDecelMps2 = j.optNullableDouble("matDecel"), estimatedMatStimpM = j.optNullableDouble("matStimp"), confidence = j.optNullableDouble("confidence")
+        )
+        val sj = j.optJSONObject("score") ?: JSONObject()
+        val total = sj.optInt("total", 0)
+        val score = StrokeScore(total, sj.optInt("face", total), sj.optInt("path", total), sj.optInt("tempo", total), sj.optInt("impact", total), sj.optInt("distance", total), sj.optInt("consistency", total))
+        val rj = j.optJSONObject("result")
+        val result = rj?.let { SimResult(it.optBoolean("holed", false), it.optDouble("x", 0.0), it.optDouble("y", 0.0), it.optDouble("cup", 0.0), it.optDouble("elapsed", 0.0)) }
+        ShotRecord(
+            metrics = m, result = result, strokeScore = score,
+            mode = runCatching { PracticeMode.valueOf(j.optString("mode", PracticeMode.PRACTICE.name)) }.getOrDefault(PracticeMode.PRACTICE),
+            targetDistanceM = j.optDouble("distance", 0.0), stimpMeters = j.optDouble("stimp", 2.8), sideSlopePct = j.optDouble("side", 0.0), longSlopePct = j.optDouble("long", 0.0), terrainProfileId = j.optInt("terrain", -1),
+            putterProfileName = j.optNullableString("putter"), putterHeadWidthCm = j.optNullableDouble("putterWidth"), physicalMatStimpM = j.optNullableDouble("mat"),
+            userProfileId = j.optString("profile", "owner").ifBlank { "owner" }, timestampMs = j.optLong("t", System.currentTimeMillis())
+        )
+    }.getOrNull()
+
+    fun close() {
+        io.execute { runCatching { db.close() } }
+        io.shutdown()
+    }
+}
+
+private fun JSONObject.putNullable(key: String, value: Any?) {
+    if (value == null) put(key, JSONObject.NULL) else put(key, value)
+}
+
+private fun JSONObject.optNullableDouble(key: String): Double? {
+    if (!has(key) || isNull(key)) return null
+    return optDouble(key).takeIf { it.isFinite() }
+}
+
+private fun JSONObject.optNullableString(key: String): String? {
+    if (!has(key) || isNull(key)) return null
+    return optString(key).takeIf { it.isNotBlank() }
 }
