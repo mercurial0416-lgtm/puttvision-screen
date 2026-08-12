@@ -16,7 +16,9 @@ data class GreenRead(
     val effectiveLongSlopePct: Double,
     val paceHint: String,
     val recommendedBallSpeedMps: Double,
-    val solverMissCm: Double
+    val recommendedLaunchAngleDeg: Double,
+    val solverMissCm: Double,
+    val predictedTrail: List<Pair<Double, Double>>
 )
 
 object GreenReadAdvisor {
@@ -29,9 +31,10 @@ object GreenReadAdvisor {
         val side100: Int, val long100: Int, val putter100: Int
     )
     private data class Candidate(val angleDeg: Double, val speed: Double, val result: SimResult, val objective: Double)
+    private data class Trace(val result: SimResult, val trail: List<Pair<Double, Double>>)
 
-    private val cache = object : LinkedHashMap<Key, GreenRead>(48, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, GreenRead>?): Boolean = size > 48
+    private val cache = object : LinkedHashMap<Key, GreenRead>(64, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, GreenRead>?): Boolean = size > 64
     }
 
     @Synchronized
@@ -71,10 +74,9 @@ object GreenReadAdvisor {
 
         val coarse = best ?: candidate(settings, 0.0, flatSpeed, flatSpeed)
         best = coarse
-        val refineAngleStep = .5
         val refineSpeedSpan = maxOf(.10, coarseSpeedStep * 1.25)
         for (ai in -6..6) {
-            val angle = (coarse.angleDeg + ai * refineAngleStep).coerceIn(-35.0, 35.0)
+            val angle = (coarse.angleDeg + ai * .5).coerceIn(-35.0, 35.0)
             for (si in -6..6) {
                 val speed = (coarse.speed + refineSpeedSpan * si / 6.0).coerceIn(.15, 5.0)
                 val c = candidate(settings, angle, speed, flatSpeed)
@@ -83,6 +85,7 @@ object GreenReadAdvisor {
         }
 
         val b = best!!
+        val trace = simulateTrace(settings, b.speed, b.angleDeg)
         val aimCm = tan(Math.toRadians(b.angleDeg)) * d * 100.0
         val magnitude = abs(aimCm)
         val straight = simulate(settings, b.speed, 0.0)
@@ -125,41 +128,56 @@ object GreenReadAdvisor {
             effectiveLongSlopePct = effectiveLong,
             paceHint = pace,
             recommendedBallSpeedMps = b.speed,
-            solverMissCm = b.result.distanceToCupM * 100.0
+            recommendedLaunchAngleDeg = b.angleDeg,
+            solverMissCm = trace.result.distanceToCupM * 100.0,
+            predictedTrail = trace.trail
         )
     }
 
     private fun candidate(settings: GreenSettings, angle: Double, speed: Double, flatSpeed: Double): Candidate {
         val result = simulate(settings, speed, angle)
-        val miss = result.distanceToCupM
         val regularizer = abs(angle) * .00015 + abs(speed - flatSpeed) * .00025
-        val objective = if (result.holed) -1.0 + regularizer else miss + regularizer
+        val objective = if (result.holed) -1.0 + regularizer else result.distanceToCupM + regularizer
         return Candidate(angle, speed, result, objective)
     }
 
-    private fun simulate(settings: GreenSettings, speed: Double, angle: Double): SimResult {
-        val metrics = ShotMetrics(
-            ballSpeedMps = speed,
-            launchAngleDeg = angle,
-            headSpeedMps = null,
-            faceAngleDeg = null,
-            pathAngleDeg = null,
-            faceToPathDeg = null,
-            smash = null,
-            impactOffsetMm = null,
-            measuredAtNs = 0L
-        )
-        val state = physics.launch(metrics, settings)
+    private fun shot(speed: Double, angle: Double) = ShotMetrics(
+        ballSpeedMps = speed,
+        launchAngleDeg = angle,
+        headSpeedMps = null,
+        faceAngleDeg = null,
+        pathAngleDeg = null,
+        faceToPathDeg = null,
+        smash = null,
+        impactOffsetMm = null,
+        measuredAtNs = 0L
+    )
+
+    private fun simulate(settings: GreenSettings, speed: Double, angle: Double): SimResult =
+        simulateTrace(settings, speed, angle, keepTrail = false).result
+
+    private fun simulateTrace(
+        settings: GreenSettings,
+        speed: Double,
+        angle: Double,
+        keepTrail: Boolean = true
+    ): Trace {
+        val state = physics.launch(shot(speed, angle), settings)
+        var result: SimResult? = null
         repeat(900) {
-            val result = physics.step(state, settings, .025)
-            if (result != null) return result
+            result = physics.step(state, settings, .025)
+            if (result != null) return@repeat
         }
-        return SimResult(
+        val final = result ?: SimResult(
             holed = state.holed,
             finishX = state.x,
             finishY = state.y,
             distanceToCupM = hypot(state.x, state.y - settings.holeDistanceM),
             elapsedSec = state.elapsed
         )
+        val trail = if (keepTrail) {
+            state.trail.toList().ifEmpty { listOf(0.0 to 0.0, state.x to state.y) }
+        } else emptyList()
+        return Trace(final, trail)
     }
 }

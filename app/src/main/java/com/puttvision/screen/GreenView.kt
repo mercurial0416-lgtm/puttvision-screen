@@ -2,6 +2,7 @@ package com.puttvision.screen
 
 import android.content.Context
 import android.graphics.*
+import android.os.SystemClock
 import android.view.View
 import kotlin.math.*
 
@@ -204,24 +205,85 @@ class GreenView(
         }
         p.style = Paint.Style.FILL
 
-        val read = GreenReadAdvisor.read(settings)
         val holeY = settings.holeDistanceM
-        val aimX = read.aimOffsetCm / 100.0
-        val guide = Path().apply {
-            moveTo(sx(0.0, 0.0), sy(0.0))
-            val midY = holeY * .56
-            val curveX = aimX * .55 + settings.sideSlopePct * .012
-            cubicTo(
-                sx(curveX * .16, holeY * .18), sy(holeY * .18),
-                sx(curveX, midY), sy(midY),
-                sx(aimX, holeY), sy(holeY)
-            )
+        val preShot = engine.state?.running != true && engine.lastResult == null
+        val read = if (preShot) GreenReadAdvisor.read(settings) else null
+
+        if (preShot && read != null) {
+            // V11 slope-flow field. Each particle follows the same local slope vector
+            // that GreenPhysics uses at this exact x/y location.
+            val flowSave = c.save()
+            c.clipPath(greenShape)
+            val nowSec = (SystemClock.uptimeMillis() % 60_000L) / 1000.0
+            for (row in 1..8) {
+                val yM = holeY * row / 9.0
+                for (lane in -4..4) {
+                    val xM = gridSideRange * lane / 4.5
+                    val slope = GreenTerrain.effectiveSlopeAt(settings, xM, yM)
+                    val mag = hypot(slope.sidePct, slope.longPct)
+                    if (mag < .14) continue
+                    val ux = slope.sidePct / mag
+                    val uy = slope.longPct / mag
+                    val travelM = .08 + min(.18, mag * .028)
+                    val speed = .42 + min(1.75, mag * .30)
+                    for (particle in 0..1) {
+                        var phase = (nowSec * speed + row * .173 + lane * .119 + particle * .5) % 1.0
+                        if (phase < 0.0) phase += 1.0
+                        val centered = phase - .5
+                        val pxM = xM + ux * travelM * centered
+                        val pyM = yM + uy * travelM * centered
+                        val px = sx(pxM, pyM)
+                        val py = sy(pyM)
+                        val alpha = (70 + 150 * (1.0 - abs(centered) * 1.45).coerceIn(.0, 1.0)).toInt()
+                        p.style = Paint.Style.FILL
+                        p.color = Color.argb(alpha, 218, 255, 226)
+                        c.drawCircle(px, py, max(1.8f, w * .00155f), p)
+                    }
+                }
+            }
+            c.restoreToCount(flowSave)
+
+            // No decorative Bezier: this line is literally the path GreenPhysics produced
+            // from the recommended launch angle and ball speed.
+            read.predictedTrail.takeIf { it.size >= 2 }?.let { trail ->
+                val guide = Path().apply {
+                    moveTo(sx(trail.first().first, trail.first().second), sy(trail.first().second))
+                    trail.drop(1).forEach { point ->
+                        lineTo(sx(point.first, point.second), sy(point.second))
+                    }
+                }
+                p.style = Paint.Style.STROKE
+                p.strokeCap = Paint.Cap.ROUND
+                p.strokeWidth = max(3f, w * .00205f)
+                p.pathEffect = DashPathEffect(floatArrayOf(max(8f, w * .008f), max(5f, w * .0045f)), 0f)
+                p.color = Color.argb(205, 238, 247, 239)
+                c.drawPath(guide, p)
+                p.pathEffect = null
+                p.strokeCap = Paint.Cap.BUTT
+            }
+
+            // Physical aim point at cup distance. This is the same lateral offset used
+            // to calculate cup/head counts, not a decorative HUD coordinate.
+            val aimX = read.aimOffsetCm / 100.0
+            val ax = sx(aimX, holeY)
+            val ay = sy(holeY)
+            val radius = max(8f, w * .0068f)
+            p.style = Paint.Style.FILL
+            p.color = Color.argb(205, 5, 9, 11)
+            c.drawCircle(ax, ay, radius * 1.45f, p)
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = max(2f, w * .0015f)
+            p.color = Pv.primary
+            c.drawCircle(ax, ay, radius, p)
+            c.drawLine(ax - radius * .62f, ay, ax + radius * .62f, ay, p)
+            c.drawLine(ax, ay - radius * .62f, ax, ay + radius * .62f, p)
+            p.style = Paint.Style.FILL
+            p.typeface = Typeface.DEFAULT_BOLD
+            p.textSize = max(8f, w * .0062f)
+            p.color = Pv.primary
+            val aimLabel = if (read.aimSideLabel == "센터") "AIM · CENTER" else "AIM · ${"%.1f".format(read.cupCount)} CUP"
+            c.drawText(aimLabel, ax + radius * 1.65f, ay - radius * .35f, p)
         }
-        p.style = Paint.Style.STROKE
-        p.strokeCap = Paint.Cap.ROUND
-        p.strokeWidth = max(3f, w * .0021f)
-        p.color = Color.argb(188, 238, 247, 239)
-        c.drawPath(guide, p)
 
         engine.state?.trail?.takeIf { it.size >= 2 }?.let { trail ->
             val actual = Path().apply {
@@ -258,7 +320,7 @@ class GreenView(
         p.color = Color.WHITE
         c.drawCircle(bx, by, max(8f, w * .0065f), p)
 
-        drawAimReadout(c, read)
+        read?.let { drawAimReadout(c, it) }
     }
 
     private fun drawAimReadout(c: Canvas, read: GreenRead) {

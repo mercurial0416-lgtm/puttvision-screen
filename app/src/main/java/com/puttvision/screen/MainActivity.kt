@@ -2393,6 +2393,9 @@ class MainActivity : AppCompatActivity() {
     tools.addView(tool("TV CAL", "TV 화면 크기 · 위치 보정") {
         showTvCalibrationDialog(this, tvCalibrationStore)
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("TV PREVIEW", "TV 화면을 이 기기에서 미리보기") {
+        closeThen { showTvPreview() }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("BACKUP", "기록 · 설정 백업 / 복원") {
         showBackupDialog(this, productBackupManager) { backupImport.launch("application/json") }
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
@@ -2453,6 +2456,37 @@ class MainActivity : AppCompatActivity() {
     }
     dialog.show()
 }
+
+    private fun showTvPreview() {
+        val resumeAfter = sessionActive && !measurementSuspended
+        if (resumeAfter) suspendMeasurementForOverlay()
+
+        val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        val tv = GreenView(this, engine)
+        root.addView(tv, FrameLayout.LayoutParams(-1, -1))
+
+        val close = pvButton("닫기", PvButtonStyle.GHOST) { dialog.dismiss() }
+        root.addView(close, FrameLayout.LayoutParams(pvDp(84), pvDp(42), Gravity.TOP or Gravity.END).apply {
+            topMargin = pvDp(12)
+            marginEnd = pvDp(12)
+        })
+        dialog.setContentView(root)
+        dialog.setOnShowListener {
+            dialog.window?.let { window ->
+                window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    hide(WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
+        }
+        dialog.setOnDismissListener {
+            if (resumeAfter && sessionActive) mainHandler.post { armPrecision() }
+        }
+        dialog.show()
+    }
 
     private fun openAccuracyValidationLab() {
         showAccuracyValidationLab(this, accuracyValidationLab) {
