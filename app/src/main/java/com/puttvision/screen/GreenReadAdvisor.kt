@@ -15,7 +15,6 @@ data class GreenRead(
 
 object GreenReadAdvisor {
     private const val CUP_DIAMETER_CM = 10.8
-    private const val PUTTER_HEAD_WIDTH_CM = 11.5
 
     fun read(settings: GreenSettings): GreenRead {
         val d = settings.holeDistanceM
@@ -81,11 +80,12 @@ object GreenReadAdvisor {
             else -> "기준 페이스"
         }
 
+        val putterWidth = ProductRuntime.putterHeadWidthCm.coerceIn(8.0, 15.0)
         return GreenRead(
             estimatedBreakCm = breakCm,
             aimOffsetCm = aim,
             cupCount = magnitude / CUP_DIAMETER_CM,
-            putterHeadCount = magnitude / PUTTER_HEAD_WIDTH_CM,
+            putterHeadCount = magnitude / putterWidth,
             aimSideLabel = side,
             effectiveSideSlopePct = effectiveSide,
             effectiveLongSlopePct = effectiveLong,
