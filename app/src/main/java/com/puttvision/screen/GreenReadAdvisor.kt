@@ -36,6 +36,7 @@ object GreenReadAdvisor {
     private const val STIMP_LAUNCH_MPS = 1.95072
     private const val RELIABLE_MISS_CM = 8.0
     private val physics = GreenPhysics()
+    private val cacheLock = Any()
 
     private data class Candidate(
         val angleDeg: Double,
@@ -61,18 +62,23 @@ object GreenReadAdvisor {
         )
     }
 
-    @Synchronized
     fun read(settings: GreenSettings): GreenRead {
         val putterWidth = ProductRuntime.putterHeadWidthCm.coerceIn(8.0, 15.0)
         val key = key(settings)
-        cache[key]?.let { return it }
+        synchronized(cacheLock) { cache[key]?.let { return it } }
+
+        // Never hold cacheLock during the expensive inverse simulation. This is
+        // what makes GreenReadRuntime.peek() genuinely non-blocking on the UI/TV.
         val solved = solve(settings.copy(), putterWidth)
-        cache[key] = solved
+        synchronized(cacheLock) {
+            cache[key]?.let { return it }
+            cache[key] = solved
+        }
         return solved
     }
 
-    @Synchronized
-    fun peekCached(settings: GreenSettings): GreenRead? = cache[key(settings)]
+    fun peekCached(settings: GreenSettings): GreenRead? =
+        synchronized(cacheLock) { cache[key(settings)] }
 
     private fun solve(settings: GreenSettings, putterWidth: Double): GreenRead {
         val d = settings.holeDistanceM.coerceIn(0.5, 20.0)
@@ -104,9 +110,7 @@ object GreenReadAdvisor {
             }
         }
 
-        // V12 final pass: 0.1 degree / 0.01 m/s local search around the best
-        // candidate. This is cheap after the coarse search and materially reduces
-        // the residual shown to the player on complex greens.
+        // V12 final pass: 0.1 degree / 0.01 m/s local search around the best.
         val refined = best!!
         for (ai in -5..5) {
             val angle = (refined.angleDeg + ai * .10).coerceIn(-35.0, 35.0)
