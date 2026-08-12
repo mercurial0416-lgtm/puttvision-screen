@@ -164,9 +164,12 @@ object GreenReadAdvisor {
     ): Trace {
         val state = physics.launch(shot(speed, angle), settings)
         var result: SimResult? = null
-        repeat(900) {
-            result = physics.step(state, settings, .025)
-            if (result != null) return@repeat
+        for (step in 0 until 900) {
+            val completed = physics.step(state, settings, .025)
+            if (completed != null) {
+                result = completed
+                break
+            }
         }
         val final = result ?: SimResult(
             holed = state.holed,
