@@ -54,6 +54,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var displayController: ExternalDisplayController
     private lateinit var statsRepository: StatsRepository
     private lateinit var appUpdater: AppUpdater
+    private lateinit var putterProfileStore: PutterProfileStore
+    private lateinit var matCalibrationManager: MatCalibrationManager
+    private lateinit var voiceCoach: HandsFreeVoiceCoach
+    private val cameraStability = CameraStabilityController()
 
     private val engine = GameEngine()
     private val tracker = ShotTracker()
@@ -188,6 +192,9 @@ class MainActivity : AppCompatActivity() {
         statsRepository =
             StatsRepository(this)
 
+        putterProfileStore = PutterProfileStore(this)
+        matCalibrationManager = MatCalibrationManager(this)
+        voiceCoach = HandsFreeVoiceCoach(this)
         appUpdater = AppUpdater(this)
 
         engine.seedHistory(
@@ -529,10 +536,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun replaceMenuScreen(view: View, backAction: (() -> Unit)? = null) {
         menuBackAction = backAction
+        menuOverlay.animate().cancel()
         menuOverlay.removeAllViews()
         menuOverlay.addView(view, FrameLayout.LayoutParams(-1, -1))
         menuOverlay.isClickable = true
         menuOverlay.visibility = View.VISIBLE
+        view.animateProductEnter()
     }
 
     private fun cyanButton(label: String, click: () -> Unit): Button =
@@ -550,6 +559,7 @@ class MainActivity : AppCompatActivity() {
             background = pvRounded(Pv.primary, Pv.rLg)
             isClickable = true
             isFocusable = true
+            installProductPressFeedback()
             setOnClickListener { click() }
         }
 
@@ -727,6 +737,7 @@ class MainActivity : AppCompatActivity() {
         })
         isClickable = true
         isFocusable = true
+        installProductPressFeedback()
         setOnClickListener { click() }
     }
 
@@ -2163,6 +2174,7 @@ class MainActivity : AppCompatActivity() {
         })
         isClickable = true
         isFocusable = true
+        installProductPressFeedback()
         setOnClickListener { click() }
     }
 
@@ -2171,6 +2183,9 @@ class MainActivity : AppCompatActivity() {
         tools.addView(tool("SESSION", "현재 세션 리포트") { closeThen { showSessionReport() } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     }
     tools.addView(tool("ANALYTICS", "샷 기록 / STATS") { closeThen { showStats(resumeAfter = wasActiveSession) } }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("PRODUCT", "장비 · 매트 · 핸즈프리") {
+        showProductSetupDialog(this, putterProfileStore, matCalibrationManager, voiceCoach)
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("DISPLAY", "TV 다시 연결") { displayController.refresh() }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("TRAINING", "컵 가이드") {
         closeThen {
@@ -2387,6 +2402,7 @@ class MainActivity : AppCompatActivity() {
         stopSimulation()
         stopHfrRecordingOnly()
 
+        cameraStability.release()
         provider.unbindAll()
 
         homography = null
@@ -2429,7 +2445,7 @@ class MainActivity : AppCompatActivity() {
                 },
                 onCalibrated = { result ->
                     runOnUiThread {
-                        val quality = CalibrationQuality.evaluate(result)
+                        val quality = ProductCalibrationQuality.evaluate(result)
                         lastCalibrationQualityScore = quality.score
                         lastCalibrationQualityGrade = quality.grade
                         overlay.calibrationImagePoints = result.imagePoints
@@ -2441,6 +2457,7 @@ class MainActivity : AppCompatActivity() {
                             shotPanelTitle.setTextColor(Pv.amber)
                             metricText.text = "${quality.score}점 · ${quality.hint}"
                             overlay.invalidate()
+                            if (::voiceCoach.isInitialized) voiceCoach.speakCalibrationProblem(quality.hint)
                             return@runOnUiThread
                         }
 
@@ -2463,12 +2480,13 @@ class MainActivity : AppCompatActivity() {
         )
 
         try {
-            provider.bindToLifecycle(
+            val camera = provider.bindToLifecycle(
                 this,
                 CameraSelector.DEFAULT_BACK_CAMERA,
                 preview,
                 analysis
             )
+            cameraStability.stabilize(camera, previewView)
 
             overlay.status =
                 "QR 마커 4개 자동 인식중"
@@ -2608,6 +2626,11 @@ class MainActivity : AppCompatActivity() {
         }
         applyPracticeTargetForNextShot()
         updateSettingLabels()
+
+        if (::voiceCoach.isInitialized) {
+            voiceCoach.speakReady(GreenReadAdvisor.read(engine.settings))
+        }
+        if (::previewView.isInitialized) previewView.productHaptic()
 
         engine.resetSimulation()
         tracker.cancel()
@@ -2960,8 +2983,12 @@ class MainActivity : AppCompatActivity() {
             return false
         }
 
-        val confidence = metrics.confidence
-        if (confidence != null && confidence < 0.65) {
+        val processedMetrics = if (::matCalibrationManager.isInitialized) {
+            matCalibrationManager.applyFallback(metrics)
+        } else metrics
+        val confidence = processedMetrics.confidence
+        val rejectThreshold = if (source.startsWith("PRECISION")) 0.65 else 0.38
+        if (confidence != null && confidence < rejectThreshold) {
             replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
             val pct = (confidence * 100.0).toInt().coerceIn(0, 100)
             overlay.status = "MEASURE $pct% · RETRY"
@@ -2970,6 +2997,7 @@ class MainActivity : AppCompatActivity() {
             metricText.text = "측정 신뢰도 ${pct}% · 조명/마커/퍼터 위치를 확인하세요"
             overlay.invalidate()
             setHfrStatus("재측정", "측정 신뢰도 ${pct}% · 자동 폐기")
+            if (::voiceCoach.isInitialized) voiceCoach.speakRetry(pct)
             scheduleAutoRetry(850L)
             return false
         }
@@ -2980,10 +3008,13 @@ class MainActivity : AppCompatActivity() {
             shotPanelTitle.setTextColor(if (pct >= 80) Pv.primary else Pv.amber)
         }
 
-        updateMetricCards(metrics)
+        updateMetricCards(processedMetrics)
+        if (::matCalibrationManager.isInitialized) {
+            matCalibrationManager.observe(processedMetrics)
+        }
 
         engine.launch(
-            metrics
+            processedMetrics
         )
 
         startSimulationTicker()
@@ -2991,7 +3022,7 @@ class MainActivity : AppCompatActivity() {
         replay?.let {
             replayView.play(
                 it,
-                metrics
+                processedMetrics
             )
         }
 
@@ -3140,6 +3171,11 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
             }
+
+        if (::voiceCoach.isInitialized) {
+            voiceCoach.speakResult(result, engine.currentShot?.launchAngleDeg)
+        }
+        if (::previewView.isInitialized) previewView.productHaptic()
     }
 
     private fun scheduleAutoNext() {
@@ -3208,6 +3244,16 @@ class MainActivity : AppCompatActivity() {
     private fun showStats(resumeAfter: Boolean = false) {
         val summary = statsRepository.summary()
         val recent = statsRepository.recent(10)
+        val nowMs = System.currentTimeMillis()
+        val zone = java.time.ZoneId.systemDefault()
+        val todayStart = LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli()
+        val weekStart = LocalDate.now().minusDays(6).atStartOfDay(zone).toInstant().toEpochMilli()
+        val monthStart = LocalDate.now().minusDays(29).atStartOfDay(zone).toInstant().toEpochMilli()
+        val todaySummary = statsRepository.summary(statsRepository.between(todayStart, nowMs + 1))
+        val weekSummary = statsRepository.summary(statsRepository.between(weekStart, nowMs + 1))
+        val monthSummary = statsRepository.summary(statsRepository.between(monthStart, nowMs + 1))
+        val currentPutterName = if (::putterProfileStore.isInitialized) putterProfileStore.current().name else ProductRuntime.putterProfileName
+        val putterSummary = statsRepository.summary(statsRepository.all().filter { it.putterProfileName == currentPutterName })
 
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.addView(pvEyebrow("누적 기록 · CAREER TOTALS"))
@@ -3224,6 +3270,14 @@ class MainActivity : AppCompatActivity() {
         statRow(
             "누적 샷" to "${summary.shots}구",
             "홀인" to "${summary.made} · ${"%.0f".format(summary.makePct)}%"
+        )
+        statRow(
+            "오늘" to "${todaySummary.shots}구 · ${"%.0f".format(todaySummary.makePct)}%",
+            "최근 7일" to "${weekSummary.shots}구 · ${"%.0f".format(weekSummary.makePct)}%"
+        )
+        statRow(
+            "최근 30일" to "${monthSummary.shots}구 · ${"%.0f".format(monthSummary.makePct)}%",
+            currentPutterName to "${putterSummary.shots}구 · ${"%.1f".format(putterSummary.avgScore)}"
         )
         statRow(
             "Perfect 평균" to "%.1f".format(summary.avgScore),
@@ -3358,6 +3412,8 @@ class MainActivity : AppCompatActivity() {
 
         calibrator?.close()
         calibrator = null
+        cameraStability.release()
+        if (::voiceCoach.isInitialized) voiceCoach.shutdown()
 
         if (::appUpdater.isInitialized) appUpdater.close()
         if (::cameraExecutor.isInitialized) cameraExecutor.shutdownNow()

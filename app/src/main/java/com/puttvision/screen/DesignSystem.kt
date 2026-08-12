@@ -174,6 +174,7 @@ fun Context.pvButton(
             background = pvRounded(Color.TRANSPARENT, radiusDp, Pv.line)
         }
     }
+    installProductPressFeedback()
     setOnClickListener { onClick() }
 }
 
@@ -204,6 +205,7 @@ fun Context.pvChip(
         setTextColor(Pv.textHi)
         background = pvRounded(Pv.surfaceHi, Pv.rMd, Pv.line)
     }
+    installProductPressFeedback()
     setOnClickListener { onClick() }
 }
 
@@ -271,6 +273,7 @@ fun Context.pvIconControl(
         })
     }
     setPadding(pvDp(2), pvDp(2), pvDp(2), pvDp(2))
+    installProductPressFeedback()
     setOnClickListener { onClick() }
 }
 
