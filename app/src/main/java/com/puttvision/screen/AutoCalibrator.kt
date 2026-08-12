@@ -14,7 +14,8 @@ data class CalibrationResult(
     val imagePoints: List<PointF>,
     val realPointsCm: List<PointF>,
     val frameInfo: FrameInfo,
-    val markerSource: String = "PV1"
+    val markerSource: String = "PV1",
+    val frameQuality: FrameQualitySnapshot? = null
 )
 
 class AutoCalibrator(
@@ -22,14 +23,13 @@ class AutoCalibrator(
     private val onCalibrated: (CalibrationResult) -> Unit
 ) : ImageAnalysis.Analyzer {
 
-    private val scanner: BarcodeScanner =
-        BarcodeScanning.getClient()
-
-    private val busy =
-        AtomicBoolean(false)
+    private val scanner: BarcodeScanner = BarcodeScanning.getClient()
+    private val busy = AtomicBoolean(false)
+    private val frameQualityEstimator = CameraQualityEstimator()
 
     private var stableHits = 0
     private var lastSignature = ""
+    private var latestFrameQuality: FrameQualitySnapshot? = null
 
     override fun analyze(image: ImageProxy) {
         if (!busy.compareAndSet(false, true)) {
@@ -45,94 +45,76 @@ class AutoCalibrator(
             return
         }
 
+        latestFrameQuality = runCatching { frameQualityEstimator.evaluate(image) }.getOrNull()
+
         // Raw-buffer orientation so camera-analysis and calibration coordinates
         // share the same coordinate system.
-        val input =
-            InputImage.fromMediaImage(
-                media,
-                0
-            )
+        val input = InputImage.fromMediaImage(media, 0)
 
         scanner.process(input)
             .addOnSuccessListener { codes ->
-                val resolved =
-                    resolveCodes(
-                        codes
-                    )
+                val resolved = resolveCodes(codes)
 
                 if (resolved != null) {
-                    val signature =
-                        resolved.imagePoints
-                            .joinToString("|") {
-                                "${it.x.toInt()},${it.y.toInt()}"
-                            }
+                    val signature = resolved.imagePoints
+                        .joinToString("|") { "${it.x.toInt()},${it.y.toInt()}" }
 
-                    stableHits =
-                        if (
-                            similarSignature(
-                                signature,
-                                lastSignature
-                            )
-                        ) {
-                            stableHits + 1
-                        } else {
-                            1
-                        }
+                    stableHits = if (similarSignature(signature, lastSignature)) {
+                        stableHits + 1
+                    } else {
+                        1
+                    }
 
-                    lastSignature =
-                        signature
-
+                    lastSignature = signature
+                    val q = latestFrameQuality?.overallScore
                     onStatus(
-                        "${resolved.source} 4개 · 안정화 $stableHits/3"
+                        buildString {
+                            append("${resolved.source} 4개 · 안정화 $stableHits/3")
+                            if (q != null) append(" · Q$q")
+                        }
                     )
 
                     if (stableHits >= 3) {
-                        val h =
-                            Homography.fromFourPoints(
-                                resolved.imagePoints,
-                                resolved.realPointsCm
-                            )
+                        val h = Homography.fromFourPoints(
+                            resolved.imagePoints,
+                            resolved.realPointsCm
+                        )
 
                         if (h != null) {
                             onCalibrated(
                                 CalibrationResult(
                                     homography = h,
-                                    imagePoints =
-                                        resolved.imagePoints,
-                                    realPointsCm =
-                                        resolved.realPointsCm,
-                                    frameInfo =
-                                        FrameInfo(
-                                            image.width,
-                                            image.height,
-                                            image.imageInfo.rotationDegrees
-                                        ),
-                                    markerSource =
-                                        resolved.source
+                                    imagePoints = resolved.imagePoints,
+                                    realPointsCm = resolved.realPointsCm,
+                                    frameInfo = FrameInfo(
+                                        image.width,
+                                        image.height,
+                                        image.imageInfo.rotationDegrees
+                                    ),
+                                    markerSource = resolved.source,
+                                    frameQuality = latestFrameQuality
                                 )
                             )
                             stableHits = 0
                             lastSignature = ""
                         } else {
                             stableHits = 0
-
-                            onStatus(
-                                "마커 배치가 찌그러짐 · 재인식"
-                            )
+                            onStatus("마커 배치가 찌그러짐 · 재인식")
                         }
                     }
                 } else {
                     stableHits = 0
-
+                    val q = latestFrameQuality?.overallScore
                     onStatus(
-                        "자동 캘 · QR 마커 ${codes.count { it.boundingBox != null }}/4"
+                        buildString {
+                            append("자동 캘 · QR 마커 ${codes.count { it.boundingBox != null }}/4")
+                            if (q != null) append(" · Q$q")
+                        }
                     )
                 }
             }
             .addOnFailureListener {
-                onStatus(
-                    "QR 인식 재시도중"
-                )
+                onStatus("QR 인식 재시도중")
             }
             .addOnCompleteListener {
                 busy.set(false)
@@ -150,222 +132,82 @@ class AutoCalibrator(
         val realCm: PointF
     )
 
-    private fun resolveCodes(
-        codes: List<Barcode>
-    ): ResolvedMarkerLayout? {
+    private fun resolveCodes(codes: List<Barcode>): ResolvedMarkerLayout? {
         // Preferred path: PuttVision QR markers carrying exact physical coords.
-        val parsed =
-            codes.mapNotNull(
-                ::parsePvMarker
-            ).associateBy {
-                it.role
-            }
+        val parsed = codes.mapNotNull(::parsePvMarker).associateBy { it.role }
+        val needed = listOf("BL", "BR", "TR", "TL")
 
-        val needed =
-            listOf(
-                "BL",
-                "BR",
-                "TR",
-                "TL"
-            )
-
-        if (
-            needed.all {
-                parsed.containsKey(it)
-            }
-        ) {
-            val markers =
-                needed.map {
-                    parsed.getValue(it)
-                }
-
+        if (needed.all { parsed.containsKey(it) }) {
+            val markers = needed.map { parsed.getValue(it) }
             return ResolvedMarkerLayout(
-                imagePoints =
-                    markers.map {
-                        it.image
-                    },
-                realPointsCm =
-                    markers.map {
-                        it.realCm
-                    },
-                source =
-                    "PV1"
+                imagePoints = markers.map { it.image },
+                realPointsCm = markers.map { it.realCm },
+                source = "PV1"
             )
         }
 
         // v0.4 fallback: four ordinary purchasable QR stickers can be used.
         // Put their centers at 45cm left-right and 100cm front-back.
         // We select the four visually largest QR codes if extras are visible.
-        val generic =
-            codes.mapNotNull { code ->
-                val box =
-                    code.boundingBox
-                        ?: return@mapNotNull null
-
-                val center =
-                    PointF(
-                        box.exactCenterX(),
-                        box.exactCenterY()
-                    )
-
-                val area =
-                    box.width()
-                        .toLong() *
-                        box.height()
-                        .toLong()
-
-                Triple(
-                    center,
-                    area,
-                    code.rawValue ?: ""
-                )
-            }
-                .sortedByDescending {
-                    it.second
-                }
-                .take(4)
-                .map {
-                    it.first
-                }
+        val generic = codes.mapNotNull { code ->
+            val box = code.boundingBox ?: return@mapNotNull null
+            val center = PointF(box.exactCenterX(), box.exactCenterY())
+            val area = box.width().toLong() * box.height().toLong()
+            Triple(center, area, code.rawValue ?: "")
+        }
+            .sortedByDescending { it.second }
+            .take(4)
+            .map { it.first }
 
         if (generic.size == 4) {
-            return MarkerLayoutResolver.fromGenericFour(
-                generic
-            )
+            return MarkerLayoutResolver.fromGenericFour(generic)
         }
 
         return null
     }
 
-    private fun parsePvMarker(
-        code: Barcode
-    ): Marker? {
-        val text =
-            code.rawValue
-                ?: return null
+    private fun parsePvMarker(code: Barcode): Marker? {
+        val text = code.rawValue ?: return null
+        val p = text.split("|")
 
-        val p =
-            text.split("|")
+        if (p.size != 4 || p[0] != "PV1") return null
 
-        if (
-            p.size != 4 ||
-            p[0] != "PV1"
-        ) {
-            return null
-        }
+        val role = p[1]
+        if (role !in setOf("BL", "BR", "TR", "TL")) return null
 
-        val role =
-            p[1]
-
-        if (
-            role !in setOf(
-                "BL",
-                "BR",
-                "TR",
-                "TL"
-            )
-        ) {
-            return null
-        }
-
-        val x =
-            p[2].toFloatOrNull()
-                ?: return null
-
-        val y =
-            p[3].toFloatOrNull()
-                ?: return null
-
-        val box =
-            code.boundingBox
-                ?: return null
-
-        val center =
-            PointF(
-                box.exactCenterX(),
-                box.exactCenterY()
-            )
+        val x = p[2].toFloatOrNull() ?: return null
+        val y = p[3].toFloatOrNull() ?: return null
+        val box = code.boundingBox ?: return null
+        val center = PointF(box.exactCenterX(), box.exactCenterY())
 
         return Marker(
             role = role,
             image = center,
-            realCm =
-                PointF(
-                    x,
-                    y
-                )
+            realCm = PointF(x, y)
         )
     }
 
-    private fun similarSignature(
-        a: String,
-        b: String
-    ): Boolean {
-        if (
-            a.isBlank() ||
-            b.isBlank()
-        ) {
-            return false
-        }
+    private fun similarSignature(a: String, b: String): Boolean {
+        if (a.isBlank() || b.isBlank()) return false
 
-        val ap =
-            a.split("|")
+        val ap = a.split("|")
+        val bp = b.split("|")
+        if (ap.size != bp.size || ap.size != 4) return false
 
-        val bp =
-            b.split("|")
-
-        if (
-            ap.size != bp.size ||
-            ap.size != 4
-        ) {
-            return false
-        }
-
-        fun parse(
-            value: String
-        ): Pair<Int, Int>? {
-            val xy =
-                value.split(",")
-
-            if (
-                xy.size != 2
-            ) {
-                return null
-            }
-
-            return (
-                xy[0].toIntOrNull()
-                    ?: return null
-                ) to (
-                xy[1].toIntOrNull()
-                    ?: return null
-                )
+        fun parse(value: String): Pair<Int, Int>? {
+            val xy = value.split(",")
+            if (xy.size != 2) return null
+            return (xy[0].toIntOrNull() ?: return null) to
+                (xy[1].toIntOrNull() ?: return null)
         }
 
         var totalMovement = 0.0
-
         for (i in 0 until 4) {
-            val aa =
-                parse(ap[i])
-                    ?: return false
-
-            val bb =
-                parse(bp[i])
-                    ?: return false
-
-            val dx =
-                aa.first -
-                    bb.first
-
-            val dy =
-                aa.second -
-                    bb.second
-
-            totalMovement +=
-                kotlin.math.hypot(
-                    dx.toDouble(),
-                    dy.toDouble()
-                )
+            val aa = parse(ap[i]) ?: return false
+            val bb = parse(bp[i]) ?: return false
+            val dx = aa.first - bb.first
+            val dy = aa.second - bb.second
+            totalMovement += kotlin.math.hypot(dx.toDouble(), dy.toDouble())
         }
 
         return totalMovement / 4.0 < 18.0
