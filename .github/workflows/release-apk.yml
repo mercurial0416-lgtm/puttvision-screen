@@ -36,6 +36,9 @@ jobs:
           echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
 
+      - name: Regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
       - name: Restore release keystore
         shell: bash
         env:
@@ -50,32 +53,36 @@ jobs:
             exit 1
           fi
 
-      - name: Build signed release APK
+      - name: Build signed consumer and developer APKs
         env:
           PUTTVISION_STORE_FILE: ${{ runner.temp }}/puttvision-release.jks
           PUTTVISION_STORE_PASSWORD: ${{ secrets.PUTTVISION_STORE_PASSWORD || 'PuttVision_2026_UpdateKey' }}
           PUTTVISION_KEY_ALIAS: ${{ secrets.PUTTVISION_KEY_ALIAS || 'puttvision' }}
           PUTTVISION_KEY_PASSWORD: ${{ secrets.PUTTVISION_KEY_PASSWORD || 'PuttVision_2026_UpdateKey' }}
-        run: gradle assembleRelease
+          PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
+        run: gradle assembleConsumerRelease assembleDeveloperRelease
 
       - name: Prepare verified assets
         shell: bash
         run: |
-          cp app/build/outputs/apk/release/app-release.apk puttvision.apk
+          cp app/build/outputs/apk/developer/release/app-developer-release.apk puttvision.apk
+          cp app/build/outputs/apk/consumer/release/app-consumer-release.apk puttvision-consumer.apk
           sha256sum puttvision.apk > puttvision.apk.sha256
+          sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
 
       - name: Publish private GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
           if gh release view "$PV_TAG" >/dev/null 2>&1; then
-            gh release upload "$PV_TAG" puttvision.apk puttvision.apk.sha256 --clobber
-            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "Automated PuttVision release $PV_VERSION_NAME" --latest
+            gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · consumer/developer verified release" --latest
           else
-            gh release create "$PV_TAG" puttvision.apk puttvision.apk.sha256 \
+            gh release create "$PV_TAG" "${ASSETS[@]}" \
               --title "PuttVision $PV_VERSION_NAME" \
-              --notes "Automated PuttVision release $PV_VERSION_NAME" \
+              --notes "PuttVision $PV_VERSION_NAME · consumer/developer verified release" \
               --latest
           fi
 
@@ -83,8 +90,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p public-update
-          cp puttvision.apk public-update/puttvision.apk
-          SHA=$(cut -d' ' -f1 puttvision.apk.sha256)
+          cp puttvision-consumer.apk public-update/puttvision.apk
+          SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)
           cat > public-update/update.json <<EOF
           {
             "versionCode": $PV_VERSION_CODE,
@@ -122,7 +129,14 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: PuttVision-${{ env.PV_VERSION_NAME }}
+          name: PuttVision-Developer-${{ env.PV_VERSION_NAME }}
           path: |
             puttvision.apk
             puttvision.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PuttVision-Consumer-${{ env.PV_VERSION_NAME }}
+          path: |
+            puttvision-consumer.apk
+            puttvision-consumer.apk.sha256
