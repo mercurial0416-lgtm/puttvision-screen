@@ -7,132 +7,140 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.view.View
+import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 
 class PracticeGreenPreviewView(context: Context) : View(context) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    var styleIndex: Int = 0
+    private val arrow = Path()
 
-    init {
-        isClickable = false
-        isFocusable = false
-    }
+    var styleIndex: Int = 0
+        set(value) { field = value; invalidate() }
+    var holeDistanceM: Double = 5.0
+        set(value) { field = value.coerceIn(2.0, 15.0); invalidate() }
+    var baseSideSlopePct: Double = 0.0
+        set(value) { field = value; invalidate() }
+    var baseLongSlopePct: Double = 0.0
+        set(value) { field = value; invalidate() }
+
+    init { isClickable = false; isFocusable = false }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val w = width.toFloat()
-        val h = height.toFloat()
+        val w = width.toFloat(); val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
+        p.style = Paint.Style.FILL
+        p.color = Color.rgb(8, 13, 15)
+        canvas.drawRoundRect(RectF(0f, 0f, w, h), min(w, h) * .10f, min(w, h) * .10f, p)
 
-        p.color = Color.rgb(103, 109, 132)
-        canvas.drawRoundRect(RectF(0f, 0f, w, h), 22f, 22f, p)
-
-        val inset = min(w, h) * .06f
-        val r = RectF(inset, inset, w - inset, h - inset)
+        val pad = min(w, h) * .065f
+        val r = RectF(pad, pad, w - pad, h - pad)
         val blob = buildBlob(styleIndex, r)
+        canvas.save(); canvas.clipPath(blob)
 
-        canvas.save()
-        canvas.clipPath(blob)
-        drawBands(canvas, r, styleIndex)
+        val settings = GreenSettings(
+            stimpMeters = 2.8,
+            holeDistanceM = holeDistanceM,
+            sideSlopePct = baseSideSlopePct,
+            longSlopePct = baseLongSlopePct,
+            terrainProfileId = styleIndex
+        )
+        val cols = 9; val rows = 12
+        val cellW = r.width() / cols; val cellH = r.height() / rows
+        for (row in 0 until rows) {
+            val yNorm = (rows - row - .5) / rows.toDouble()
+            val realY = yNorm * holeDistanceM
+            for (col in 0 until cols) {
+                val xNorm = (col + .5) / cols.toDouble() * 2.0 - 1.0
+                val realX = xNorm * max(.8, holeDistanceM * .22)
+                val s = GreenTerrain.effectiveSlopeAt(settings, realX, realY)
+                val mag = hypot(s.sidePct, s.longPct)
+                p.color = slopeColor(s.sidePct, s.longPct, mag)
+                val l = r.left + col * cellW
+                val t = r.top + row * cellH
+                canvas.drawRect(l, t, l + cellW + 1f, t + cellH + 1f, p)
+            }
+        }
+
+        // Actual downhill vectors. +long is toward the hole (screen up), +side is right.
+        p.style = Paint.Style.STROKE
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeWidth = max(1.2f, min(w, h) * .009f)
+        p.color = Color.argb(175, 245, 250, 248)
+        for (row in 1 until rows step 2) {
+            val yNorm = (rows - row - .5) / rows.toDouble()
+            val realY = yNorm * holeDistanceM
+            for (col in 1 until cols step 2) {
+                val xNorm = (col + .5) / cols.toDouble() * 2.0 - 1.0
+                val realX = xNorm * max(.8, holeDistanceM * .22)
+                val s = GreenTerrain.effectiveSlopeAt(settings, realX, realY)
+                val mag = hypot(s.sidePct, s.longPct)
+                if (mag < .12) continue
+                val cx = r.left + (col + .5f) * cellW
+                val cy = r.top + (row + .5f) * cellH
+                val len = (min(w, h) * (.035 + min(3.5, mag) * .009)).toFloat()
+                val dx = (s.sidePct / mag * len).toFloat()
+                val dy = (-s.longPct / mag * len).toFloat()
+                arrow.reset(); arrow.moveTo(cx - dx * .45f, cy - dy * .45f); arrow.lineTo(cx + dx * .45f, cy + dy * .45f)
+                canvas.drawPath(arrow, p)
+                val ex = cx + dx * .45f; val ey = cy + dy * .45f
+                arrow.reset(); arrow.moveTo(ex, ey); arrow.lineTo(ex - dx * .22f - dy * .16f, ey - dy * .22f + dx * .16f)
+                arrow.moveTo(ex, ey); arrow.lineTo(ex - dx * .22f + dy * .16f, ey - dy * .22f - dx * .16f)
+                canvas.drawPath(arrow, p)
+            }
+        }
         canvas.restore()
 
         p.style = Paint.Style.STROKE
-        p.strokeWidth = max(1.5f, min(w, h) * .012f)
-        p.color = Color.argb(115, 10, 18, 28)
+        p.strokeWidth = max(1.4f, min(w, h) * .012f)
+        p.color = Color.argb(140, 92, 120, 104)
         canvas.drawPath(blob, p)
         p.style = Paint.Style.FILL
+
+        // Start / cup anchors use the same orientation as GreenPhysics.
+        p.color = Color.WHITE
+        canvas.drawCircle(r.centerX(), r.bottom - r.height() * .08f, max(2.5f, min(w, h) * .018f), p)
+        p.color = Color.rgb(246, 190, 74)
+        canvas.drawCircle(r.centerX(), r.top + r.height() * .08f, max(2.5f, min(w, h) * .018f), p)
+    }
+
+    private fun slopeColor(side: Double, long: Double, magnitude: Double): Int {
+        val hot = (magnitude / 3.8).coerceIn(0.0, 1.0)
+        val directional = (abs(side) / (abs(side) + abs(long) + .01)).coerceIn(0.0, 1.0)
+        val r = (18 + hot * 210).toInt().coerceIn(0, 255)
+        val g = (126 + (1.0 - hot) * 82).toInt().coerceIn(0, 255)
+        val b = (52 + directional * 135 + (1.0 - hot) * 32).toInt().coerceIn(0, 255)
+        return Color.rgb(r, g, b)
     }
 
     private fun buildBlob(style: Int, r: RectF): Path = Path().apply {
         when (style % 6) {
-            0 -> addOval(RectF(r.left + r.width() * .08f, r.top + r.height() * .1f, r.right - r.width() * .08f, r.bottom - r.height() * .1f), Path.Direction.CW)
+            0 -> addOval(RectF(r.left + r.width() * .08f, r.top + r.height() * .05f, r.right - r.width() * .08f, r.bottom - r.height() * .05f), Path.Direction.CW)
             1 -> {
-                moveTo(r.left + r.width() * .18f, r.top + r.height() * .12f)
-                cubicTo(r.left, r.top + r.height() * .34f, r.left + r.width() * .1f, r.bottom - r.height() * .07f, r.left + r.width() * .34f, r.bottom - r.height() * .1f)
-                cubicTo(r.right - r.width() * .08f, r.bottom - r.height() * .14f, r.right - r.width() * .08f, r.top + r.height() * .18f, r.left + r.width() * .18f, r.top + r.height() * .12f)
-                close()
+                moveTo(r.left + r.width() * .18f, r.top + r.height() * .08f)
+                cubicTo(r.left, r.top + r.height() * .30f, r.left + r.width() * .08f, r.bottom - r.height() * .05f, r.left + r.width() * .34f, r.bottom - r.height() * .07f)
+                cubicTo(r.right - r.width() * .05f, r.bottom - r.height() * .12f, r.right - r.width() * .06f, r.top + r.height() * .15f, r.left + r.width() * .18f, r.top + r.height() * .08f); close()
             }
             2 -> {
-                moveTo(r.left + r.width() * .14f, r.top + r.height() * .18f)
-                cubicTo(r.left, r.top + r.height() * .4f, r.left + r.width() * .08f, r.bottom - r.height() * .05f, r.left + r.width() * .36f, r.bottom - r.height() * .03f)
-                cubicTo(r.right - r.width() * .08f, r.bottom, r.right, r.top + r.height() * .4f, r.right - r.width() * .12f, r.top + r.height() * .12f)
-                cubicTo(r.right - r.width() * .35f, r.top, r.left + r.width() * .3f, r.top + r.height() * .02f, r.left + r.width() * .14f, r.top + r.height() * .18f)
-                close()
+                moveTo(r.left + r.width() * .14f, r.top + r.height() * .14f)
+                cubicTo(r.left, r.top + r.height() * .38f, r.left + r.width() * .06f, r.bottom - r.height() * .02f, r.left + r.width() * .36f, r.bottom - r.height() * .02f)
+                cubicTo(r.right - r.width() * .06f, r.bottom, r.right, r.top + r.height() * .37f, r.right - r.width() * .10f, r.top + r.height() * .08f)
+                cubicTo(r.right - r.width() * .35f, r.top, r.left + r.width() * .30f, r.top, r.left + r.width() * .14f, r.top + r.height() * .14f); close()
             }
-            3 -> addOval(RectF(r.left + r.width() * .11f, r.top + r.height() * .08f, r.right - r.width() * .11f, r.bottom - r.height() * .08f), Path.Direction.CW)
+            3 -> addOval(RectF(r.left + r.width() * .11f, r.top + r.height() * .03f, r.right - r.width() * .11f, r.bottom - r.height() * .03f), Path.Direction.CW)
             4 -> {
-                moveTo(r.left + r.width() * .16f, r.top + r.height() * .12f)
-                cubicTo(r.left, r.top + r.height() * .3f, r.left + r.width() * .04f, r.bottom - r.height() * .06f, r.left + r.width() * .3f, r.bottom - r.height() * .08f)
-                cubicTo(r.right - r.width() * .08f, r.bottom - r.height() * .12f, r.right - r.width() * .06f, r.top + r.height() * .18f, r.left + r.width() * .46f, r.top + r.height() * .1f)
-                close()
+                moveTo(r.left + r.width() * .16f, r.top + r.height() * .08f)
+                cubicTo(r.left, r.top + r.height() * .28f, r.left + r.width() * .04f, r.bottom - r.height() * .04f, r.left + r.width() * .30f, r.bottom - r.height() * .05f)
+                cubicTo(r.right - r.width() * .06f, r.bottom - r.height() * .10f, r.right - r.width() * .04f, r.top + r.height() * .15f, r.left + r.width() * .46f, r.top + r.height() * .06f); close()
             }
             else -> {
-                moveTo(r.left + r.width() * .2f, r.top + r.height() * .08f)
-                cubicTo(r.left, r.top + r.height() * .3f, r.left + r.width() * .06f, r.bottom - r.height() * .08f, r.left + r.width() * .28f, r.bottom - r.height() * .04f)
-                cubicTo(r.right - r.width() * .1f, r.bottom, r.right, r.top + r.height() * .36f, r.right - r.width() * .12f, r.top + r.height() * .1f)
-                cubicTo(r.right - r.width() * .34f, r.top, r.left + r.width() * .34f, r.top + r.height() * .02f, r.left + r.width() * .2f, r.top + r.height() * .08f)
-                close()
+                moveTo(r.left + r.width() * .20f, r.top + r.height() * .05f)
+                cubicTo(r.left, r.top + r.height() * .28f, r.left + r.width() * .05f, r.bottom - r.height() * .05f, r.left + r.width() * .28f, r.bottom - r.height() * .02f)
+                cubicTo(r.right - r.width() * .08f, r.bottom, r.right, r.top + r.height() * .34f, r.right - r.width() * .10f, r.top + r.height() * .07f)
+                cubicTo(r.right - r.width() * .34f, r.top, r.left + r.width() * .34f, r.top, r.left + r.width() * .20f, r.top + r.height() * .05f); close()
             }
-        }
-    }
-
-    private fun drawBands(canvas: Canvas, r: RectF, style: Int) {
-        val palettes = listOf(
-            intArrayOf(Color.rgb(20, 246, 76), Color.rgb(31, 213, 239), Color.rgb(12, 29, 242), Color.rgb(31, 213, 239), Color.rgb(20, 246, 76)),
-            intArrayOf(Color.rgb(12, 29, 242), Color.rgb(31, 213, 239), Color.rgb(20, 246, 76), Color.rgb(31, 213, 239), Color.rgb(12, 29, 242)),
-            intArrayOf(Color.rgb(20, 246, 76), Color.rgb(31, 213, 239), Color.rgb(12, 29, 242), Color.rgb(31, 213, 239), Color.rgb(20, 246, 76)),
-            intArrayOf(Color.rgb(232, 38, 35), Color.rgb(241, 220, 32), Color.rgb(20, 246, 76), Color.rgb(31, 213, 239), Color.rgb(12, 29, 242), Color.rgb(31, 213, 239), Color.rgb(20, 246, 76), Color.rgb(241, 220, 32), Color.rgb(232, 38, 35)),
-            intArrayOf(Color.rgb(12, 29, 242), Color.rgb(31, 213, 239), Color.rgb(20, 246, 76), Color.rgb(241, 220, 32), Color.rgb(232, 38, 35)),
-            intArrayOf(Color.rgb(232, 38, 35), Color.rgb(241, 220, 32), Color.rgb(20, 246, 76), Color.rgb(31, 213, 239), Color.rgb(12, 29, 242))
-        )
-        val colors = palettes[style % palettes.size]
-        val w = r.width()
-        val h = r.height()
-
-        if (style % 6 in listOf(0, 1, 3, 4)) {
-            val stripes = colors.size * 2
-            for (i in 0 until stripes) {
-                val x0 = r.left + w * i / stripes
-                val x1 = r.left + w * (i + 1) / stripes
-                p.color = colors[i % colors.size]
-                canvas.drawRect(x0, r.top, x1, r.bottom, p)
-            }
-            p.style = Paint.Style.STROKE
-            p.strokeWidth = max(1f, min(w, h) * .01f)
-            p.color = Color.argb(70, 0, 0, 0)
-            for (i in 0..8) {
-                val x = r.left + w * i / 8f
-                val path = Path().apply {
-                    moveTo(x, r.top)
-                    for (step in 1..24) {
-                        val yy = r.top + h * step / 24f
-                        val drift = sin(step / 24f * 4f + i * .7f + style) * w * .015f
-                        lineTo(x + drift, yy)
-                    }
-                }
-                canvas.drawPath(path, p)
-            }
-            p.style = Paint.Style.FILL
-        } else {
-            val variant = (style / 6).coerceIn(0, 3)
-            val cx = r.centerX() + w * (.045f + variant * .024f)
-            val cy = r.centerY() + h * (.035f + (3 - variant) * .024f)
-            val maxRadius = min(w, h) * (.50f + variant * .018f)
-            for (i in colors.indices.reversed()) {
-                val f = (i + 1) / colors.size.toFloat()
-                p.color = colors[i]
-                canvas.drawOval(RectF(cx - maxRadius * f, cy - maxRadius * f * .86f, cx + maxRadius * f, cy + maxRadius * f * .86f), p)
-            }
-            p.style = Paint.Style.STROKE
-            p.strokeWidth = max(1f, min(w, h) * .01f)
-            p.color = Color.argb(72, 0, 0, 0)
-            for (i in 1..8) {
-                val f = i / 8f
-                canvas.drawOval(RectF(cx - maxRadius * f, cy - maxRadius * f * .86f, cx + maxRadius * f, cy + maxRadius * f * .86f), p)
-            }
-            p.style = Paint.Style.FILL
         }
     }
 }

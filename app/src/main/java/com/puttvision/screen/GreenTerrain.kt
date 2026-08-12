@@ -15,6 +15,14 @@ data class TerrainSlope(
  * break can evolve during the roll instead of behaving like one uniform plane.
  */
 object GreenTerrain {
+    fun effectiveSlopeAt(settings: GreenSettings, x: Double, y: Double): TerrainSlope {
+        val local = slopeAt(settings.terrainProfileId, x, y, settings.holeDistanceM)
+        return TerrainSlope(
+            sidePct = settings.sideSlopePct + local.sidePct,
+            longPct = settings.longSlopePct + local.longPct
+        )
+    }
+
     fun slopeAt(
         profileId: Int,
         x: Double,

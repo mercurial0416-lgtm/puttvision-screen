@@ -65,6 +65,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var accuracyAutoTuner: AccuracyAutoTuner
     private lateinit var supportDiagnostics: SupportDiagnosticsExporter
     private lateinit var offlineLicenseManager: OfflineLicenseManager
+    private lateinit var thermalHfrPolicy: ThermalHfrPolicy
+    private lateinit var sessionRecoveryStore: SessionRecoveryStore
     private var liveQualitySnapshot: LiveQualityGateSnapshot? = null
     private var firstRunWizardShown = false
     private val cameraStability = CameraStabilityController()
@@ -90,6 +92,7 @@ class MainActivity : AppCompatActivity() {
     private var impactPolling = false
     private var recordingStartedAtMs = 0L
     private var hfrRecordingGeneration = 0
+    private var hfrRetryAfterMs = 0L
 
     private var autoPlayEnabled = true
     private var simulationTicking = false
@@ -195,6 +198,18 @@ class MainActivity : AppCompatActivity() {
                 .onFailure { error -> toast("백업 복원 실패: ${error.message ?: "파일 오류"}") }
         }
 
+    private val accuracyCsvImport =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null || !::accuracyValidationLab.isInitialized) return@registerForActivityResult
+            runCatching { accuracyValidationLab.importReferenceCsv(uri) }
+                .onSuccess { result ->
+                    accuracyAutoTuner.refresh(accuracyValidationLab.matched(), force = true)
+                    toast(result.label())
+                    mainHandler.post { openAccuracyValidationLab() }
+                }
+                .onFailure { error -> toast("CSV 가져오기 실패: ${error.message ?: "형식 오류"}") }
+        }
+
     private val licenseImport =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri == null || !::offlineLicenseManager.isInitialized) return@registerForActivityResult
@@ -217,6 +232,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashJournal.install(this)
+        RuntimeJanitor.cleanup(this)
         applyImmersiveMode()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -226,6 +243,8 @@ class MainActivity : AppCompatActivity() {
         userProfileStore = UserProfileStore(this)
         tvCalibrationStore = TvCalibrationStore(this)
         deviceReport = DeviceDiagnostics.inspect(this)
+        thermalHfrPolicy = ThermalHfrPolicy(this)
+        sessionRecoveryStore = SessionRecoveryStore(this)
         statsRepository = StatsRepository(this)
 
         putterProfileStore = PutterProfileStore(this)
@@ -255,6 +274,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         buildUi()
+        maybeOfferSessionRecovery()
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -312,6 +332,11 @@ class MainActivity : AppCompatActivity() {
         if (::appUpdater.isInitialized) {
             appUpdater.resumePendingInstallIfPossible()
         }
+    }
+
+    override fun onPause() {
+        if (::sessionRecoveryStore.isInitialized && sessionActive) saveSessionRecovery()
+        super.onPause()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -889,7 +914,7 @@ class MainActivity : AppCompatActivity() {
         background = pvRounded(Color.rgb(5, 9, 10), Pv.rXl, Pv.lineSoft)
         clipToOutline = true
         if (practiceEntranceMode == 2) {
-            addView(PracticeGreenPreviewView(this@MainActivity).apply { styleIndex = selectedGreen.previewStyle }, FrameLayout.LayoutParams(-1, -1))
+            addView(PracticeGreenPreviewView(this@MainActivity).apply { styleIndex = selectedGreen.previewStyle; holeDistanceM = practiceDistanceM.toDouble(); baseSideSlopePct = selectedGreen.sideSlopePct; baseLongSlopePct = selectedGreen.longSlopePct }, FrameLayout.LayoutParams(-1, -1))
             isClickable = true
             isFocusable = true
             setOnClickListener { showPracticeGreenPicker() }
@@ -1019,7 +1044,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             background = pvRounded(Pv.surfaceLo, Pv.rLg, Pv.lineSoft)
             setPadding(sdp(8), sdp(5), sdp(10), sdp(5))
-            addView(PracticeGreenPreviewView(this@MainActivity).apply { styleIndex = selectedGreen.previewStyle }, LinearLayout.LayoutParams(sdp(if (compact) 68 else 82), -1))
+            addView(PracticeGreenPreviewView(this@MainActivity).apply { styleIndex = selectedGreen.previewStyle; holeDistanceM = practiceDistanceM.toDouble(); baseSideSlopePct = selectedGreen.sideSlopePct; baseLongSlopePct = selectedGreen.longSlopePct }, LinearLayout.LayoutParams(sdp(if (compact) 68 else 82), -1))
             val copy = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(sdp(9), 0, 0, 0)
@@ -1149,6 +1174,9 @@ class MainActivity : AppCompatActivity() {
             setPadding(sdp(if (compact) 12 else 16), sdp(if (compact) 10 else 14), sdp(if (compact) 12 else 16), sdp(if (compact) 10 else 14))
             addView(PracticeGreenPreviewView(this@MainActivity).apply {
                 styleIndex = selected.previewStyle
+                holeDistanceM = practiceDistanceM.toDouble()
+                baseSideSlopePct = selected.sideSlopePct
+                baseLongSlopePct = selected.longSlopePct
             }, LinearLayout.LayoutParams(-1, 0, .48f))
             addView(TextView(this@MainActivity).apply {
                 text = selected.title
@@ -1215,6 +1243,9 @@ class MainActivity : AppCompatActivity() {
                     }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(2) })
                     addView(PracticeGreenPreviewView(this@MainActivity).apply {
                         styleIndex = preset.previewStyle
+                        holeDistanceM = practiceDistanceM.toDouble()
+                        baseSideSlopePct = preset.sideSlopePct
+                        baseLongSlopePct = preset.longSlopePct
                     }, LinearLayout.LayoutParams(-1, sdp(if (compact) 58 else 72)).apply { topMargin = sdp(5) })
                     addView(TextView(this@MainActivity).apply {
                         text = "B ${if (preset.sideSlopePct >= 0) "+" else ""}${"%.1f".format(preset.sideSlopePct)}%  ·  G ${if (preset.longSlopePct >= 0) "+" else ""}${"%.1f".format(preset.longSlopePct)}%"
@@ -1763,6 +1794,7 @@ class MainActivity : AppCompatActivity() {
         menuBackAction = null
         menuOverlay.isClickable = false
         menuOverlay.visibility = View.GONE
+        saveSessionRecovery()
 
         // Measurement/recording starts only after explicit entry. If camera permission/provider
         // is not ready yet, request/initialize it instead of leaving a dead measurement screen.
@@ -1789,6 +1821,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pauseSessionForMenu() {
+        if (::sessionRecoveryStore.isInitialized) sessionRecoveryStore.clear()
         sessionActive = false
         suspendMeasurementForOverlay()
     }
@@ -1862,6 +1895,99 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    private fun saveSessionRecovery() {
+        if (!::sessionRecoveryStore.isInitialized || !sessionActive) return
+        sessionRecoveryStore.save(
+            SessionRecoverySnapshot(
+                savedAtMs = System.currentTimeMillis(),
+                sessionStartedAtMs = sessionStartedAtMs,
+                activeSessionIsGame = activeSessionIsGame,
+                practiceEntranceMode = practiceEntranceMode,
+                practiceCount = practiceCount,
+                practiceDistanceM = practiceDistanceM,
+                practiceGreenSpeed = practiceGreenSpeed,
+                practicePatternIndex = practicePatternIndex,
+                practiceGreenPresetIndex = practiceGreenPresetIndex,
+                practiceShotsTaken = practiceShotsTaken,
+                practicePatternShotIndex = practicePatternShotIndex,
+                gamePlayers = gamePlayers,
+                gameModeIndex = gameModeIndex,
+                gameDistanceM = gameDistanceM,
+                holeDistanceM = engine.settings.holeDistanceM,
+                stimpMeters = engine.settings.stimpMeters,
+                sideSlopePct = engine.settings.sideSlopePct,
+                longSlopePct = engine.settings.longSlopePct,
+                terrainProfileId = engine.settings.terrainProfileId,
+                gameMode = engine.gameModes.snapshot()
+            )
+        )
+    }
+
+    private fun checkpointSessionRecovery() {
+        if (!::sessionRecoveryStore.isInitialized) return
+        val completed = if (activeSessionIsGame) engine.gameModes.status.completed else practiceShotsTaken >= practiceCount
+        if (completed) sessionRecoveryStore.clear() else saveSessionRecovery()
+    }
+
+    private fun maybeOfferSessionRecovery() {
+        if (!::sessionRecoveryStore.isInitialized) return
+        val recovered = sessionRecoveryStore.load() ?: return
+        firstRunWizardShown = true
+        val kind = if (recovered.activeSessionIsGame) "게임" else "연습"
+        val progress = if (recovered.activeSessionIsGame) {
+            val g = recovered.gameMode
+            if (g.totalHoles > 0) "${g.hole}/${g.totalHoles}홀 · ${g.shots}샷" else "${g.shots}샷"
+        } else {
+            "${recovered.practiceShotsTaken}/${recovered.practiceCount}구"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("이전 세션 이어하기")
+            .setMessage("강제 종료 전에 저장된 $kind 세션이 있습니다.\n$progress · ${"%.1f".format(recovered.holeDistanceM)}m")
+            .setNegativeButton("새로 시작") { _, _ -> sessionRecoveryStore.clear() }
+            .setPositiveButton("이어하기") { _, _ -> resumeRecoveredSession(recovered) }
+            .show()
+    }
+
+    private fun resumeRecoveredSession(s: SessionRecoverySnapshot) {
+        activeSessionIsGame = s.activeSessionIsGame
+        sessionActive = true
+        measurementSuspended = false
+        sessionStartedAtMs = s.sessionStartedAtMs
+        practiceEntranceMode = s.practiceEntranceMode.coerceIn(0, 2)
+        practiceCount = s.practiceCount.coerceIn(5, 20)
+        practiceDistanceM = s.practiceDistanceM.coerceIn(2, 15)
+        practiceGreenSpeed = s.practiceGreenSpeed.coerceIn(2.4, 3.6)
+        practicePatternIndex = s.practicePatternIndex.coerceIn(0, 3)
+        practiceGreenPresetIndex = s.practiceGreenPresetIndex.coerceIn(0, practiceGreenPresets.lastIndex)
+        practiceShotsTaken = s.practiceShotsTaken.coerceIn(0, practiceCount)
+        practicePatternShotIndex = s.practicePatternShotIndex.coerceAtLeast(0)
+        gamePlayers = s.gamePlayers.coerceIn(1, 4)
+        gameModeIndex = s.gameModeIndex.coerceIn(0, 3)
+        gameDistanceM = s.gameDistanceM.coerceIn(1, 15)
+        engine.settings.holeDistanceM = s.holeDistanceM
+        engine.settings.stimpMeters = s.stimpMeters
+        engine.settings.sideSlopePct = s.sideSlopePct
+        engine.settings.longSlopePct = s.longSlopePct
+        engine.settings.terrainProfileId = s.terrainProfileId
+        engine.gameModes.restore(s.gameMode)
+        modeButton.text = "메뉴"
+        metricText.text = "이전 세션 복구 · ${engine.gameModes.status.mode.label}"
+        updateSettingLabels()
+        menuBackAction = null
+        menuOverlay.isClickable = false
+        menuOverlay.visibility = View.GONE
+        saveSessionRecovery()
+
+        if (!::provider.isInitialized) {
+            val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            if (granted) openProvider() else permission.launch(Manifest.permission.CAMERA)
+        } else if (homography != null) {
+            mainHandler.post { armPrecision() }
+        } else {
+            beginAutoCalibration()
+        }
+    }
+
     private fun currentSessionRecords(): List<ShotRecord> {
         if (sessionStartedAtMs <= 0L) return emptyList()
         return statsRepository.all().filter { it.timestampMs >= sessionStartedAtMs }
@@ -1873,6 +1999,7 @@ class MainActivity : AppCompatActivity() {
         cancelPendingAuto()
         stopSimulation()
         stopHfrRecordingOnly()
+        if (::sessionRecoveryStore.isInitialized) sessionRecoveryStore.clear()
         practiceEntranceMode = plan.entranceMode
         practicePatternIndex = plan.patternIndex
         practiceDistanceM = plan.distanceM.coerceIn(2, 15)
@@ -2253,7 +2380,7 @@ class MainActivity : AppCompatActivity() {
         maybeShowFirstRunWizard(force = true)
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("ACCURACY", "기준 센서 정확도 검증") {
-        showAccuracyValidationLab(this, accuracyValidationLab)
+        openAccuracyValidationLab()
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("AUTO TUNE", "기기별 측정 편향 자동 보정") {
         accuracyAutoTuner.refresh(accuracyValidationLab.matched())
@@ -2326,6 +2453,12 @@ class MainActivity : AppCompatActivity() {
     }
     dialog.show()
 }
+
+    private fun openAccuracyValidationLab() {
+        showAccuracyValidationLab(this, accuracyValidationLab) {
+            accuracyCsvImport.launch("text/*")
+        }
+    }
 
     private fun updateMetricCards(m: ShotMetrics) {
         fun set(key: String, value: String) { metricCards[key]?.text = value }
@@ -2786,25 +2919,54 @@ class MainActivity : AppCompatActivity() {
         impactDetected = false
         impactDetector.reset()
 
-        if (!hfrHardwareAvailable) {
+        val hfrCoolingDown = System.currentTimeMillis() < hfrRetryAfterMs
+        if (!hfrHardwareAvailable || hfrCoolingDown) {
             tracker.arm()
 
-            overlay.status =
+            overlay.status = if (hfrCoolingDown)
+                "NORMAL AUTO READY · HFR 재시도 대기"
+            else
                 "NORMAL AUTO READY · HFR 미지원"
 
-            metricText.text =
+            metricText.text = if (hfrCoolingDown)
+                "HFR 파이프라인 오류 보호 · 일반 추적으로 계속 측정합니다"
+            else
                 "HFR 미지원이라 일반 추적. 공 놓고 그냥 치면 됨."
 
             overlay.invalidate()
-
             return
         }
 
+        val thermal = thermalHfrPolicy.current()
+        if (thermal.maxFps < 120) {
+            val switchingFromHfr = hfrController != null
+            hfrController?.close()
+            hfrController = null
+            setHfrStatus("THERMAL SAFE", thermal.detail)
+            if (switchingFromHfr) {
+                overlay.status = "THERMAL SAFE · NORMAL 전환중"
+                metricText.text = "${thermal.detail} · 카메라 파이프라인 전환중"
+                overlay.invalidate()
+                beginAutoCalibration()
+            } else {
+                tracker.arm()
+                overlay.status = "THERMAL SAFE · NORMAL AUTO"
+                metricText.text = thermal.detail
+                overlay.invalidate()
+            }
+            return
+        }
+
+        val desiredHfrCap = min(
+            thermal.maxFps,
+            deviceReport.maxHfrFps.takeIf { it >= 120 } ?: thermal.maxFps
+        ).coerceIn(120, 240)
+
         overlay.status =
-            "240/120fps PRECISION 준비중"
+            "${desiredHfrCap}fps PRECISION 준비중"
 
         metricText.text =
-            "240fps 우선 → 120fps fallback · 자동 녹화 준비"
+            "${thermal.label} · ${desiredHfrCap}fps 목표 · 자동 녹화 준비"
 
         overlay.invalidate()
 
@@ -2820,7 +2982,7 @@ class MainActivity : AppCompatActivity() {
 
         if (
             existing != null &&
-            existing.fps() >= 120
+            existing.fps() == desiredHfrCap
         ) {
             startHfrRecording()
             return
@@ -2851,18 +3013,16 @@ class MainActivity : AppCompatActivity() {
             controller
 
         val session =
-            controller.bindBest()
+            controller.bindBest(maxFps = desiredHfrCap)
 
         if (session == null) {
-            hfrHardwareAvailable = false
-
-            setHfrStatus("HFR 오류", "HFR 바인딩 실패 · NORMAL fallback")
-
+            hfrRetryAfterMs = System.currentTimeMillis() + 60_000L
+            setHfrStatus("HFR fallback", "${thermal.label} · HFR 바인딩 실패 · 60초 NORMAL 보호")
             beginAutoCalibration()
-
             return
         }
 
+        hfrRetryAfterMs = 0L
         setHfrStatus("HFR ${session.fps}fps", "PRECISION ${session.fps}fps 준비")
 
         mainHandler.postDelayed(
@@ -3245,6 +3405,7 @@ class MainActivity : AppCompatActivity() {
                         simulationTicking = false
 
                         onSessionShotFinished()
+                        checkpointSessionRecovery()
                         showFinalShotSummary(result)
 
                         if (activeSessionIsGame && engine.gameModes.status.completed) {

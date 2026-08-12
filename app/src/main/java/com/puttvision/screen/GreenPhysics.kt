@@ -61,14 +61,9 @@ class GreenPhysics {
         // The selected practice green may add a position-dependent terrain slope
         // on top of the preset's base break/grade. Non-green practice and game
         // modes use terrainProfileId=-1 and therefore retain the uniform plane.
-        val localTerrain = GreenTerrain.slopeAt(
-            profileId = settings.terrainProfileId,
-            x = state.x,
-            y = state.y,
-            holeDistanceM = settings.holeDistanceM
-        )
-        val effectiveSideSlopePct = settings.sideSlopePct + localTerrain.sidePct
-        val effectiveLongSlopePct = settings.longSlopePct + localTerrain.longPct
+        val effectiveSlope = GreenTerrain.effectiveSlopeAt(settings, state.x, state.y)
+        val effectiveSideSlopePct = effectiveSlope.sidePct
+        val effectiveLongSlopePct = effectiveSlope.longPct
 
         val slopeAx = ROLLING_GRAVITY_FACTOR * G * (effectiveSideSlopePct / 100.0)
         val slopeAy = ROLLING_GRAVITY_FACTOR * G * (effectiveLongSlopePct / 100.0)

@@ -530,6 +530,7 @@ class SupportDiagnosticsExporter(private val activity: Activity) {
             put("autoTune", tuner.summary())
             put("licenseState", license.status().state)
             put("hfrStatus", hfrStatus)
+            put("lastCrashPresent", CrashJournal.lastCrash(activity) != null)
             put("shotCount", stats.all().size)
         }
 
@@ -551,6 +552,7 @@ class SupportDiagnosticsExporter(private val activity: Activity) {
                 }
             }
             textEntry("recent-shots.csv", csv)
+            CrashJournal.lastCrash(activity)?.let { textEntry("last-crash.txt", it) }
             textEntry("README.txt", "PuttVision support diagnostics. No camera images, GitHub token, license payload, or Android ID are included.\n")
         }
 

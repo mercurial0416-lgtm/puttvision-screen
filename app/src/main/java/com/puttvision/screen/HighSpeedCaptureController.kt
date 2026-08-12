@@ -39,7 +39,7 @@ class HighSpeedCaptureController(
     fun isRecording(): Boolean = recording != null
     fun fps(): Int = selectedFps
 
-    fun bindBest(): ActiveHfrSession? {
+    fun bindBest(maxFps: Int = 240): ActiveHfrSession? {
         stability.release()
         provider.unbindAll()
 
@@ -77,11 +77,16 @@ class HighSpeedCaptureController(
             .setPreview(preview)
             .setSlowMotionEnabled(false)
 
+        val cap = maxFps.coerceIn(0, 240)
+        if (cap < 120) {
+            status("THERMAL SAFE · NORMAL")
+            return null
+        }
         val ranges = info.getSupportedFrameRateRanges(builder.build())
-            .filter { it.upper >= 120 }
+            .filter { it.upper >= 120 && it.upper <= cap }
 
         if (ranges.isEmpty()) {
-            status("HFR FPS range 없음")
+            status("${cap}fps 이하 HFR range 없음")
             return null
         }
 

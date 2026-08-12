@@ -302,7 +302,7 @@ class GreenView(
     p.textSize = max(9f, w * .0068f)
     p.color = Pv.textMid
     val head = if (read.aimSideLabel == "센터") "헤드 0.0개" else "헤드 ${"%.1f".format(read.putterHeadCount)}개"
-    c.drawText("$head  ·  ${read.paceHint}", left + pad, bottom - h * .014f, p)
+    c.drawText("$head  ·  ${read.paceHint}  ·  ${"%.2f".format(read.recommendedBallSpeedMps)}m/s", left + pad, bottom - h * .014f, p)
 }
 
         private fun drawBrandRail(c: Canvas) {

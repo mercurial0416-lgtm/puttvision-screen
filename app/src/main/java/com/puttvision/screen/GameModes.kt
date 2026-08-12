@@ -29,6 +29,25 @@ data class GameStatus(
     var playerScores: List<Int> = listOf(0)
 )
 
+data class GameModeSnapshot(
+    val mode: PracticeMode,
+    val hole: Int,
+    val totalHoles: Int,
+    val gameScore: Int,
+    val streak: Int,
+    val bestStreak: Int,
+    val shots: Int,
+    val made: Int,
+    val lastPoints: Int,
+    val completed: Boolean,
+    val playerCount: Int,
+    val activePlayer: Int,
+    val pendingPrepare: Boolean,
+    val scores: List<Int>,
+    val streaks: List<Int>,
+    val bestStreaks: List<Int>
+)
+
 class GameModeEngine(
     private val settings: GreenSettings
 ) {
@@ -212,6 +231,36 @@ class GameModeEngine(
             }
             else -> pendingPrepare = true
         }
+    }
+
+    fun snapshot(): GameModeSnapshot = GameModeSnapshot(
+        mode = status.mode, hole = status.hole, totalHoles = status.totalHoles, gameScore = status.gameScore,
+        streak = status.streak, bestStreak = status.bestStreak, shots = status.shots, made = status.made,
+        lastPoints = status.lastPoints, completed = status.completed, playerCount = status.playerCount,
+        activePlayer = status.activePlayer, pendingPrepare = pendingPrepare, scores = scores.toList(),
+        streaks = streaks.toList(), bestStreaks = bestStreaks.toList()
+    )
+
+    fun restore(snapshot: GameModeSnapshot) {
+        val count = snapshot.playerCount.coerceIn(1, 4)
+        fun normalized(values: List<Int>): IntArray = IntArray(count) { i -> values.getOrElse(i) { 0 } }
+        scores = normalized(snapshot.scores)
+        streaks = normalized(snapshot.streaks)
+        bestStreaks = normalized(snapshot.bestStreaks)
+        pendingPrepare = snapshot.pendingPrepare
+        status.mode = snapshot.mode
+        status.hole = snapshot.hole.coerceAtLeast(1)
+        status.totalHoles = snapshot.totalHoles.coerceAtLeast(0)
+        status.gameScore = snapshot.gameScore
+        status.streak = snapshot.streak
+        status.bestStreak = snapshot.bestStreak
+        status.shots = snapshot.shots.coerceAtLeast(0)
+        status.made = snapshot.made.coerceAtLeast(0)
+        status.lastPoints = snapshot.lastPoints
+        status.completed = snapshot.completed
+        status.playerCount = count
+        status.activePlayer = snapshot.activePlayer.coerceIn(1, count)
+        status.playerScores = scores.toList()
     }
 
     private fun syncActivePlayerState() {

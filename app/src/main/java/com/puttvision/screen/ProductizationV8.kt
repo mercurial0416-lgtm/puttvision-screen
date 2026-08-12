@@ -480,6 +480,60 @@ class AccuracyValidationLab(private val context: Context) {
         persist()
     }
 
+    fun importReferenceCsv(uri: Uri): AccuracyCsvImportResult {
+        val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            ?: error("CSV 파일을 열 수 없습니다")
+        val rows = AccuracyCsvParser.parse(text)
+        if (rows.isEmpty()) return AccuracyCsvImportResult(0, 0, 0, 0, 0)
+
+        val used = linkedSetOf<Int>()
+        var timeMatched = 0
+        var orderMatched = 0
+
+        fun apply(index: Int, row: AccuracyCsvReferenceRow) {
+            val old = samples[index]
+            samples[index] = old.copy(
+                refBall = row.ball ?: old.refBall,
+                refLaunch = row.launch ?: old.refLaunch,
+                refHead = row.head ?: old.refHead,
+                refFace = row.face ?: old.refFace,
+                refPath = row.path ?: old.refPath
+            )
+            used += index
+        }
+
+        // First choice: nearest timestamp within 10 seconds. This handles simultaneous
+        // exports from another launch monitor without relying on row order.
+        val deferred = ArrayList<AccuracyCsvReferenceRow>()
+        rows.forEach { row ->
+            val t = row.timestampMs
+            if (t == null) { deferred += row; return@forEach }
+            val best = samples.indices
+                .filter { it !in used }
+                .map { it to kotlin.math.abs(samples[it].timestampMs - t) }
+                .minByOrNull { it.second }
+            if (best != null && best.second <= 10_000L) {
+                apply(best.first, row); timeMatched++
+            } else deferred += row
+        }
+
+        // Fallback: align unmatched CSV rows to the most recent unmatched PuttVision shots.
+        // This is useful for sensors that export no timestamp column.
+        val remainingSamples = samples.indices.filter { it !in used }.takeLast(deferred.size)
+        val rowOffset = (deferred.size - remainingSamples.size).coerceAtLeast(0)
+        deferred.drop(rowOffset).zip(remainingSamples).forEach { (row, index) ->
+            apply(index, row); orderMatched++
+        }
+        if (used.isNotEmpty()) persist()
+        return AccuracyCsvImportResult(
+            rows = rows.size,
+            matched = used.size,
+            timestampMatched = timeMatched,
+            orderMatched = orderMatched,
+            skipped = (rows.size - used.size).coerceAtLeast(0)
+        )
+    }
+
     fun summaryText(): String {
         val m = matched()
         if (m.isEmpty()) return "기준 센서와 매칭된 샷이 없습니다."
@@ -554,7 +608,7 @@ class AccuracyValidationLab(private val context: Context) {
     }
 }
 
-fun showAccuracyValidationLab(activity: Activity, lab: AccuracyValidationLab) {
+fun showAccuracyValidationLab(activity: Activity, lab: AccuracyValidationLab, onImportCsv: (() -> Unit)? = null) {
     val root = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(activity.pvDp(16), activity.pvDp(8), activity.pvDp(16), activity.pvDp(4))
@@ -576,7 +630,7 @@ fun showAccuracyValidationLab(activity: Activity, lab: AccuracyValidationLab) {
         lab.enabled = !lab.enabled
         refresh()
         dialog.dismiss()
-        showAccuracyValidationLab(activity, lab)
+        showAccuracyValidationLab(activity, lab, onImportCsv)
     }, LinearLayout.LayoutParams(0, activity.pvDp(42), 1f))
     actions.addView(activity.pvButton("최근 샷 기준값", PvButtonStyle.PRIMARY) {
         val latest = lab.latest()
@@ -590,7 +644,10 @@ fun showAccuracyValidationLab(activity: Activity, lab: AccuracyValidationLab) {
 
     val secondary = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
     secondary.addView(activity.pvButton("CSV 내보내기", PvButtonStyle.GHOST) { lab.exportCsv(activity) }, LinearLayout.LayoutParams(0, activity.pvDp(38), 1f))
-    secondary.addView(activity.pvButton("검증 기록 초기화", PvButtonStyle.GHOST) { lab.clear(); refresh() }, LinearLayout.LayoutParams(0, activity.pvDp(38), 1f).apply { marginStart = activity.pvDp(6) })
+    if (onImportCsv != null) {
+        secondary.addView(activity.pvButton("CSV 가져오기", PvButtonStyle.SECONDARY) { onImportCsv() }, LinearLayout.LayoutParams(0, activity.pvDp(38), 1f).apply { marginStart = activity.pvDp(6) })
+    }
+    secondary.addView(activity.pvButton("기록 초기화", PvButtonStyle.GHOST) { lab.clear(); refresh() }, LinearLayout.LayoutParams(0, activity.pvDp(38), 1f).apply { marginStart = activity.pvDp(6) })
     root.addView(secondary, LinearLayout.LayoutParams(-1, -2).apply { topMargin = activity.pvDp(6) })
 
     dialog = AlertDialog.Builder(activity).setTitle("ACCURACY LAB").setView(root).setNegativeButton("닫기", null).create()

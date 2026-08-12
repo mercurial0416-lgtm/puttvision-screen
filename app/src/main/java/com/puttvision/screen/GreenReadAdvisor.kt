@@ -1,6 +1,10 @@
 package com.puttvision.screen
 
 import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.sqrt
+import kotlin.math.tan
+
 
 data class GreenRead(
     val estimatedBreakCm: Double,
@@ -10,86 +14,152 @@ data class GreenRead(
     val aimSideLabel: String,
     val effectiveSideSlopePct: Double,
     val effectiveLongSlopePct: Double,
-    val paceHint: String
+    val paceHint: String,
+    val recommendedBallSpeedMps: Double,
+    val solverMissCm: Double
 )
 
 object GreenReadAdvisor {
     private const val CUP_DIAMETER_CM = 10.8
+    private const val STIMP_LAUNCH_MPS = 1.95072
+    private val physics = GreenPhysics()
 
+    private data class Key(
+        val profile: Int, val distance100: Int, val stimp100: Int,
+        val side100: Int, val long100: Int, val putter100: Int
+    )
+    private data class Candidate(val angleDeg: Double, val speed: Double, val result: SimResult, val objective: Double)
+
+    private val cache = object : LinkedHashMap<Key, GreenRead>(48, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, GreenRead>?): Boolean = size > 48
+    }
+
+    @Synchronized
     fun read(settings: GreenSettings): GreenRead {
-        val d = settings.holeDistanceM
-        val speedFactor = settings.stimpMeters / 2.8
+        val putterWidth = ProductRuntime.putterHeadWidthCm.coerceIn(8.0, 15.0)
+        val key = Key(
+            settings.terrainProfileId,
+            (settings.holeDistanceM * 100.0).toInt(),
+            (settings.stimpMeters * 100.0).toInt(),
+            (settings.sideSlopePct * 100.0).toInt(),
+            (settings.longSlopePct * 100.0).toInt(),
+            (putterWidth * 100.0).toInt()
+        )
+        cache[key]?.let { return it }
+        val solved = solve(settings, putterWidth)
+        cache[key] = solved
+        return solved
+    }
 
-        // Sample the actual selected terrain along the intended roll corridor.
-        // GreenPhysics is still the source of truth for the final ball path.
-        val terrainSamples = if (settings.terrainProfileId >= 0) {
-            (1..11).map { i ->
-                val y = d * i / 12.0
-                val center = GreenTerrain.slopeAt(
-                    profileId = settings.terrainProfileId,
-                    x = 0.0,
-                    y = y,
-                    holeDistanceM = d
-                )
-                val left = GreenTerrain.slopeAt(
-                    profileId = settings.terrainProfileId,
-                    x = -0.12,
-                    y = y,
-                    holeDistanceM = d
-                )
-                val right = GreenTerrain.slopeAt(
-                    profileId = settings.terrainProfileId,
-                    x = 0.12,
-                    y = y,
-                    holeDistanceM = d
-                )
-                TerrainSlope(
-                    sidePct = center.sidePct * 0.60 + left.sidePct * 0.20 + right.sidePct * 0.20,
-                    longPct = center.longPct * 0.60 + left.longPct * 0.20 + right.longPct * 0.20
-                )
+    private fun solve(settings: GreenSettings, putterWidth: Double): GreenRead {
+        val d = settings.holeDistanceM.coerceIn(0.5, 20.0)
+        val stimp = settings.stimpMeters.coerceIn(1.5, 5.0)
+        val flatSpeed = (STIMP_LAUNCH_MPS * sqrt(d / stimp)).coerceIn(.20, 5.0)
+        val minSpeed = (flatSpeed * .45).coerceIn(.15, 4.7)
+        val maxSpeed = (flatSpeed * 1.55).coerceIn(minSpeed + .05, 5.0)
+
+        var best: Candidate? = null
+        val coarseSpeedStep = (maxSpeed - minSpeed) / 14.0
+        for (angleStep in -10..10) {
+            val angle = angleStep * 3.0
+            for (speedStep in 0..14) {
+                val speed = minSpeed + coarseSpeedStep * speedStep
+                val c = candidate(settings, angle, speed, flatSpeed)
+                if (best == null || c.objective < best!!.objective) best = c
             }
-        } else {
-            emptyList()
         }
 
-        val terrainSide = terrainSamples.map { it.sidePct }.average().takeIf { !it.isNaN() } ?: 0.0
-        val terrainLong = terrainSamples.map { it.longPct }.average().takeIf { !it.isNaN() } ?: 0.0
-        val effectiveSide = settings.sideSlopePct + terrainSide
-        val effectiveLong = settings.longSlopePct + terrainLong
-
-        // A practical green-reading estimate. Faster greens and longer putts
-        // require more start-line allowance. The TV UI labels this as a guide,
-        // while the actual rendered roll is always produced by GreenPhysics.
-        val breakCm = effectiveSide * d * d * 1.85 * speedFactor
-        val aim = -breakCm * 0.72
-        val magnitude = abs(aim)
-
-        val side = when {
-            magnitude < 1.5 -> "센터"
-            aim < 0.0 -> "홀 왼쪽"
-            else -> "홀 오른쪽"
+        val coarse = best ?: candidate(settings, 0.0, flatSpeed, flatSpeed)
+        best = coarse
+        val refineAngleStep = .5
+        val refineSpeedSpan = maxOf(.10, coarseSpeedStep * 1.25)
+        for (ai in -6..6) {
+            val angle = (coarse.angleDeg + ai * refineAngleStep).coerceIn(-35.0, 35.0)
+            for (si in -6..6) {
+                val speed = (coarse.speed + refineSpeedSpan * si / 6.0).coerceIn(.15, 5.0)
+                val c = candidate(settings, angle, speed, flatSpeed)
+                if (c.objective < best!!.objective) best = c
+            }
         }
 
+        val b = best!!
+        val aimCm = tan(Math.toRadians(b.angleDeg)) * d * 100.0
+        val magnitude = abs(aimCm)
+        val straight = simulate(settings, b.speed, 0.0)
+        val breakCm = straight.finishX * 100.0
+
+        val corridor = (1..11).map { i ->
+            val y = d * i / 12.0
+            val center = GreenTerrain.effectiveSlopeAt(settings, 0.0, y)
+            val left = GreenTerrain.effectiveSlopeAt(settings, -0.12, y)
+            val right = GreenTerrain.effectiveSlopeAt(settings, 0.12, y)
+            TerrainSlope(
+                center.sidePct * .60 + left.sidePct * .20 + right.sidePct * .20,
+                center.longPct * .60 + left.longPct * .20 + right.longPct * .20
+            )
+        }
+        val effectiveSide = corridor.map { it.sidePct }.average()
+        val effectiveLong = corridor.map { it.longPct }.average()
+        val ratio = b.speed / flatSpeed.coerceAtLeast(.1)
         val pace = when {
-            effectiveLong >= 2.2 -> "강한 내리막 · 매우 약하게"
-            effectiveLong >= 1.2 -> "내리막 · 약하게"
-            effectiveLong <= -2.2 -> "강한 오르막 · 강하게"
-            effectiveLong <= -1.2 -> "오르막 · 강하게"
+            ratio <= .78 -> "강한 내리막 · 매우 약하게"
+            ratio <= .91 -> "내리막 · 약하게"
+            ratio >= 1.22 -> "강한 오르막 · 강하게"
+            ratio >= 1.08 -> "오르막 · 조금 강하게"
             abs(effectiveSide) >= 3.0 -> "브레이크 큼 · 끝까지 읽기"
             abs(effectiveSide) >= 1.6 -> "브레이크 중간"
             else -> "기준 페이스"
         }
-
-        val putterWidth = ProductRuntime.putterHeadWidthCm.coerceIn(8.0, 15.0)
+        val side = when {
+            magnitude < 1.5 -> "센터"
+            aimCm < 0.0 -> "홀 왼쪽"
+            else -> "홀 오른쪽"
+        }
         return GreenRead(
             estimatedBreakCm = breakCm,
-            aimOffsetCm = aim,
+            aimOffsetCm = aimCm,
             cupCount = magnitude / CUP_DIAMETER_CM,
             putterHeadCount = magnitude / putterWidth,
             aimSideLabel = side,
             effectiveSideSlopePct = effectiveSide,
             effectiveLongSlopePct = effectiveLong,
-            paceHint = pace
+            paceHint = pace,
+            recommendedBallSpeedMps = b.speed,
+            solverMissCm = b.result.distanceToCupM * 100.0
+        )
+    }
+
+    private fun candidate(settings: GreenSettings, angle: Double, speed: Double, flatSpeed: Double): Candidate {
+        val result = simulate(settings, speed, angle)
+        val miss = result.distanceToCupM
+        val regularizer = abs(angle) * .00015 + abs(speed - flatSpeed) * .00025
+        val objective = if (result.holed) -1.0 + regularizer else miss + regularizer
+        return Candidate(angle, speed, result, objective)
+    }
+
+    private fun simulate(settings: GreenSettings, speed: Double, angle: Double): SimResult {
+        val metrics = ShotMetrics(
+            ballSpeedMps = speed,
+            launchAngleDeg = angle,
+            headSpeedMps = null,
+            faceAngleDeg = null,
+            pathAngleDeg = null,
+            faceToPathDeg = null,
+            smash = null,
+            impactOffsetMm = null,
+            measuredAtNs = 0L
+        )
+        val state = physics.launch(metrics, settings)
+        repeat(900) {
+            val result = physics.step(state, settings, .025)
+            if (result != null) return result
+        }
+        return SimResult(
+            holed = state.holed,
+            finishX = state.x,
+            finishY = state.y,
+            distanceToCupM = hypot(state.x, state.y - settings.holeDistanceM),
+            elapsedSec = state.elapsed
         )
     }
 }
