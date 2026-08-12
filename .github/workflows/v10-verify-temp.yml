@@ -31,7 +31,7 @@ jobs:
       - name: Apply V10 patch
         run: python .v10/apply_v10.py
       - name: V10 patch fixups
-        run: sed -i 's/snap.playerScores/snap.scores/' app/src/test/java/com/puttvision/screen/GameModeRecoveryRegressionTest.kt
+        run: python .v10/fixups_v10.py
       - name: Diff sanity
         run: git diff --check
       - name: Unit regression tests
