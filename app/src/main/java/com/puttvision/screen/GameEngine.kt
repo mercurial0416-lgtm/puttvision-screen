@@ -114,7 +114,11 @@ class GameEngine {
                     targetDistanceM = targetDistance,
                     stimpMeters = stimp,
                     sideSlopePct = sideSlope,
-                    longSlopePct = longSlope
+                    longSlopePct = longSlope,
+                    terrainProfileId = settings.terrainProfileId,
+                    putterProfileName = ProductRuntime.putterProfileName,
+                    putterHeadWidthCm = ProductRuntime.putterHeadWidthCm,
+                    physicalMatStimpM = ProductRuntime.physicalMatStimpM
                 )
 
                 latestRecord = record
