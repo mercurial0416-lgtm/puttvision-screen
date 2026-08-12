@@ -24,7 +24,9 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Apply V11 source patch
-        run: python .v11/apply_v11.py
+        run: |
+          python .v11/apply_v11.py
+          python .v11/fix_perf.py
       - name: Diff sanity
         run: git diff --check
       - name: V11 unit regression
