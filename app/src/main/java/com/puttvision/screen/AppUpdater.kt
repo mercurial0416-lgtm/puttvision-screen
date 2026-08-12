@@ -3,6 +3,7 @@ package com.puttvision.screen
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -175,6 +176,11 @@ class AppUpdater(
                     }
                 }
 
+                // SHA protects the downloaded bytes against the manifest value. The package/signing
+                // check below independently prevents a compromised update endpoint from replacing
+                // PuttVision with a differently signed APK.
+                verifyApkIdentity(apk)
+
                 onUi { install(apk) }
             } catch (t: Throwable) {
                 onUi {
@@ -269,6 +275,54 @@ class AppUpdater(
             setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
             setRequestProperty("User-Agent", "PuttVision-Screen-Updater")
         }
+
+    private fun verifyApkIdentity(apk: File) {
+        val pm = activity.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+
+        val installed = pm.getPackageInfo(activity.packageName, flags)
+        @Suppress("DEPRECATION")
+        val candidate = pm.getPackageArchiveInfo(apk.absolutePath, flags)
+            ?: error("다운로드 APK 패키지 정보를 읽을 수 없습니다")
+
+        require(candidate.packageName == activity.packageName) {
+            "업데이트 APK 패키지명이 PuttVision과 다릅니다"
+        }
+
+        fun signerDigests(info: android.content.pm.PackageInfo): Set<String> {
+            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val signing = info.signingInfo ?: return emptySet()
+                val current = signing.apkContentsSigners?.toList().orEmpty()
+                val history = if (signing.hasMultipleSigners()) {
+                    emptyList()
+                } else {
+                    signing.signingCertificateHistory?.toList().orEmpty()
+                }
+                (current + history).distinctBy { it.toCharsString() }
+            } else {
+                @Suppress("DEPRECATION")
+                info.signatures?.toList().orEmpty()
+            }
+            return signatures.mapTo(linkedSetOf()) { signature ->
+                val md = MessageDigest.getInstance("SHA-256")
+                md.digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
+            }
+        }
+
+        val installedSigners = signerDigests(installed)
+        val candidateSigners = signerDigests(candidate)
+        require(installedSigners.isNotEmpty() && candidateSigners.isNotEmpty()) {
+            "APK 서명 정보를 읽을 수 없습니다"
+        }
+        require(installedSigners.any { it in candidateSigners }) {
+            "업데이트 APK 서명이 현재 PuttVision과 다릅니다"
+        }
+    }
 
     private fun install(apk: File) {
         if (!apk.exists()) return
