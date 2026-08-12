@@ -34,11 +34,13 @@ class HighSpeedCaptureController(
     private var recording: Recording? = null
     private var activeFile: File? = null
     private var selectedFps: Int = 0
+    private val stability = CameraStabilityController()
 
     fun isRecording(): Boolean = recording != null
     fun fps(): Int = selectedFps
 
     fun bindBest(): ActiveHfrSession? {
+        stability.release()
         provider.unbindAll()
 
         val selector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -97,12 +99,13 @@ class HighSpeedCaptureController(
         builder.setFrameRateRange(chosen)
 
         return try {
-            provider.bindToLifecycle(lifecycleOwner, selector, builder.build())
+            val camera = provider.bindToLifecycle(lifecycleOwner, selector, builder.build())
+            stability.stabilize(camera, previewView)
             recorder = rec
             videoCapture = capture
             selectedFps = chosen.upper
             val desc = "$quality @ ${chosen.upper}fps"
-            status("PRECISION ${chosen.upper}fps 준비")
+            status("PRECISION ${chosen.upper}fps 준비 · AF/AE LOCK")
             ActiveHfrSession(chosen.upper, desc)
         } catch (t: Throwable) {
             recorder = null
@@ -170,6 +173,7 @@ class HighSpeedCaptureController(
             activeFile?.let { runCatching { it.delete() } }
             activeFile = null
         }
+        stability.release()
         recorder = null
         videoCapture = null
     }
