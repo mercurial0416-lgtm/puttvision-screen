@@ -36,9 +36,6 @@ jobs:
           echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
 
-      # Bootstrap compatibility: keeps the signing identity already used by v0.5.
-      # After v0.6 is installed, migrate this key to GitHub Actions secrets and rotate only
-      # if you are willing to reinstall the app once.
       - name: Restore release keystore
         shell: bash
         env:
@@ -81,6 +78,47 @@ jobs:
               --notes "Automated PuttVision release $PV_VERSION_NAME" \
               --latest
           fi
+
+      - name: Prepare consumer update bundle
+        shell: bash
+        run: |
+          mkdir -p public-update
+          cp puttvision.apk public-update/puttvision.apk
+          SHA=$(cut -d' ' -f1 puttvision.apk.sha256)
+          cat > public-update/update.json <<EOF
+          {
+            "versionCode": $PV_VERSION_CODE,
+            "versionName": "$PV_VERSION_NAME",
+            "apkUrl": "https://puttvision-update.vercel.app/puttvision.apk",
+            "sha256": "$SHA"
+          }
+          EOF
+          cat > public-update/vercel.json <<'EOF'
+          {
+            "headers": [
+              {"source": "/update.json", "headers": [{"key": "Cache-Control", "value": "public, max-age=0, must-revalidate"}]},
+              {"source": "/puttvision.apk", "headers": [{"key": "Cache-Control", "value": "public, max-age=60"}]}
+            ]
+          }
+          EOF
+
+      - name: Publish consumer updater to Vercel when configured
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        shell: bash
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "Consumer updater hosting is not configured; public-update artifact is still available."
+            exit 0
+          fi
+          npx --yes vercel@latest deploy public-update --prod --yes --token "$VERCEL_TOKEN"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PuttVision-Public-Update-${{ env.PV_VERSION_NAME }}
+          path: public-update/
 
       - uses: actions/upload-artifact@v4
         with:
