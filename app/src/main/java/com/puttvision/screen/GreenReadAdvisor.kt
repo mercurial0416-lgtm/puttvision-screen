@@ -6,6 +6,15 @@ import kotlin.math.sqrt
 import kotlin.math.tan
 
 
+data class GreenReadKey(
+    val profile: Int,
+    val distance100: Int,
+    val stimp100: Int,
+    val side100: Int,
+    val long100: Int,
+    val putter100: Int
+)
+
 data class GreenRead(
     val estimatedBreakCm: Double,
     val aimOffsetCm: Double,
@@ -18,29 +27,31 @@ data class GreenRead(
     val recommendedBallSpeedMps: Double,
     val recommendedLaunchAngleDeg: Double,
     val solverMissCm: Double,
+    val solverReliable: Boolean,
     val predictedTrail: List<Pair<Double, Double>>
 )
 
 object GreenReadAdvisor {
     private const val CUP_DIAMETER_CM = 10.8
     private const val STIMP_LAUNCH_MPS = 1.95072
+    private const val RELIABLE_MISS_CM = 8.0
     private val physics = GreenPhysics()
 
-    private data class Key(
-        val profile: Int, val distance100: Int, val stimp100: Int,
-        val side100: Int, val long100: Int, val putter100: Int
+    private data class Candidate(
+        val angleDeg: Double,
+        val speed: Double,
+        val result: SimResult,
+        val objective: Double
     )
-    private data class Candidate(val angleDeg: Double, val speed: Double, val result: SimResult, val objective: Double)
     private data class Trace(val result: SimResult, val trail: List<Pair<Double, Double>>)
 
-    private val cache = object : LinkedHashMap<Key, GreenRead>(64, .75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, GreenRead>?): Boolean = size > 64
+    private val cache = object : LinkedHashMap<GreenReadKey, GreenRead>(96, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<GreenReadKey, GreenRead>?): Boolean = size > 96
     }
 
-    @Synchronized
-    fun read(settings: GreenSettings): GreenRead {
+    fun key(settings: GreenSettings): GreenReadKey {
         val putterWidth = ProductRuntime.putterHeadWidthCm.coerceIn(8.0, 15.0)
-        val key = Key(
+        return GreenReadKey(
             settings.terrainProfileId,
             (settings.holeDistanceM * 100.0).toInt(),
             (settings.stimpMeters * 100.0).toInt(),
@@ -48,11 +59,20 @@ object GreenReadAdvisor {
             (settings.longSlopePct * 100.0).toInt(),
             (putterWidth * 100.0).toInt()
         )
+    }
+
+    @Synchronized
+    fun read(settings: GreenSettings): GreenRead {
+        val putterWidth = ProductRuntime.putterHeadWidthCm.coerceIn(8.0, 15.0)
+        val key = key(settings)
         cache[key]?.let { return it }
-        val solved = solve(settings, putterWidth)
+        val solved = solve(settings.copy(), putterWidth)
         cache[key] = solved
         return solved
     }
+
+    @Synchronized
+    fun peekCached(settings: GreenSettings): GreenRead? = cache[key(settings)]
 
     private fun solve(settings: GreenSettings, putterWidth: Double): GreenRead {
         val d = settings.holeDistanceM.coerceIn(0.5, 20.0)
@@ -79,6 +99,19 @@ object GreenReadAdvisor {
             val angle = (coarse.angleDeg + ai * .5).coerceIn(-35.0, 35.0)
             for (si in -6..6) {
                 val speed = (coarse.speed + refineSpeedSpan * si / 6.0).coerceIn(.15, 5.0)
+                val c = candidate(settings, angle, speed, flatSpeed)
+                if (c.objective < best!!.objective) best = c
+            }
+        }
+
+        // V12 final pass: 0.1 degree / 0.01 m/s local search around the best
+        // candidate. This is cheap after the coarse search and materially reduces
+        // the residual shown to the player on complex greens.
+        val refined = best!!
+        for (ai in -5..5) {
+            val angle = (refined.angleDeg + ai * .10).coerceIn(-35.0, 35.0)
+            for (si in -5..5) {
+                val speed = (refined.speed + si * .010).coerceIn(.15, 5.0)
                 val c = candidate(settings, angle, speed, flatSpeed)
                 if (c.objective < best!!.objective) best = c
             }
@@ -118,6 +151,7 @@ object GreenReadAdvisor {
             aimCm < 0.0 -> "홀 왼쪽"
             else -> "홀 오른쪽"
         }
+        val missCm = trace.result.distanceToCupM * 100.0
         return GreenRead(
             estimatedBreakCm = breakCm,
             aimOffsetCm = aimCm,
@@ -129,7 +163,8 @@ object GreenReadAdvisor {
             paceHint = pace,
             recommendedBallSpeedMps = b.speed,
             recommendedLaunchAngleDeg = b.angleDeg,
-            solverMissCm = trace.result.distanceToCupM * 100.0,
+            solverMissCm = missCm,
+            solverReliable = trace.result.holed || missCm <= RELIABLE_MISS_CM,
             predictedTrail = trace.trail
         )
     }
