@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.kapt")
 }
 
 android {
@@ -44,7 +45,8 @@ android {
         jvmTarget = "17"
         freeCompilerArgs += listOf(
             "-opt-in=androidx.camera.core.ExperimentalSessionConfig",
-            "-opt-in=androidx.camera.video.ExperimentalHighSpeedVideo"
+            "-opt-in=androidx.camera.video.ExperimentalHighSpeedVideo",
+            "-opt-in=androidx.camera.camera2.interop.ExperimentalCamera2Interop"
         )
     }
 }
@@ -60,6 +62,11 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraX")
     implementation("androidx.camera:camera-view:$cameraX")
     implementation("androidx.camera:camera-video:$cameraX")
+
+    val room = "2.7.2"
+    implementation("androidx.room:room-runtime:$room")
+    implementation("androidx.room:room-ktx:$room")
+    kapt("androidx.room:room-compiler:$room")
 
     // Bundled/offline QR recognition for zero-touch calibration markers.
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
