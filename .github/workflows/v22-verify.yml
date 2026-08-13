@@ -20,15 +20,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Wire V22 UI integrations
+      - name: Wire V22 integrations
         run: |
           python3 ci/v22_apply.py
-          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt; then
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt; then
             git config user.name "puttvision-v22-bot"
             git config user.email "actions@users.noreply.github.com"
-            git add app/src/main/java/com/puttvision/screen/MainActivity.kt
+            git add app/src/main/java/com/puttvision/screen/MainActivity.kt \
+                    app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt
             git diff --cached --check
-            git commit -m "feat: wire V22 reports custom green and audio"
+            git commit -m "feat: wire V22 reports custom green audio and TV thermal tuning"
             git push origin HEAD:agent/v22-reports-custom-green-audio
           fi
 
