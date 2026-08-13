@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 data class CoachFeedback(
     val headline: String,
@@ -15,6 +16,7 @@ object CoachEngine {
         score: StrokeScore,
         recent: List<ShotRecord>
     ): CoachFeedback {
+        val snapshot = V15PerformanceAnalyzer.analyze(metrics, recent)
         val face = metrics.faceAngleDeg
         val path = metrics.pathAngleDeg
         val launch = metrics.launchAngleDeg
@@ -23,7 +25,7 @@ object CoachEngine {
             val direction = if (face > 0) "열림" else "닫힘"
             return CoachFeedback(
                 headline = "페이스 $direction ${"%+.2f".format(face)}°",
-                detail = "출발 방향에 가장 큰 영향. 임팩트 직전 페이스를 먼저 안정화.",
+                detail = "출발 방향의 1순위 원인 · ${snapshot.training.drill} · 목표 ${snapshot.training.target}",
                 priority = 100
             )
         }
@@ -32,8 +34,8 @@ object CoachEngine {
             val direction = if (path > 0) "우측" else "좌측"
             return CoachFeedback(
                 headline = "패스가 $direction ${"%+.2f".format(path)}°",
-                detail = "헤드 궤적 편차가 큼. 백스윙-임팩트 구간을 목표선에 더 일정하게.",
-                priority = 90
+                detail = "헤드 궤적 편차가 큼 · ${snapshot.signature.arcType.label} 타입 · 페이스보다 패스 재현성을 먼저 안정화",
+                priority = 94
             )
         }
 
@@ -42,8 +44,26 @@ object CoachEngine {
                 val side = if (it > 0) "토 쪽" else "힐 쪽"
                 return CoachFeedback(
                     headline = "임팩트 $side ${"%.1f".format(abs(it))}mm",
-                    detail = "정타 편차가 큼. 어드레스 거리와 손 위치를 고정.",
-                    priority = 85
+                    detail = "정타 편차가 큼 · ${snapshot.training.drill} · 목표 ${snapshot.training.target}",
+                    priority = 92
+                )
+            }
+        }
+
+        if (snapshot.signature.decelerationRisk) {
+            return CoachFeedback(
+                headline = "임팩트 구간 감속 패턴",
+                detail = "백스윙 크기보다 임팩트 이후 가속 유지가 우선 · ${snapshot.training.drill}",
+                priority = 90
+            )
+        }
+
+        snapshot.roll?.let { roll ->
+            if (roll.rollEfficiency < 72) {
+                return CoachFeedback(
+                    headline = "롤 효율 ${roll.grade} · ${roll.rollEfficiency}점",
+                    detail = roll.hint + " · 마킹볼 기준 스키드 " + (roll.skidDistanceCm?.let { "%.1fcm".format(it) } ?: "측정 부족"),
+                    priority = 88
                 )
             }
         }
@@ -52,47 +72,72 @@ object CoachEngine {
             if (it < 1.45 || it > 2.75) {
                 return CoachFeedback(
                     headline = "템포 편차 ${"%.2f".format(it)}:1",
-                    detail = "백스윙과 다운스윙 리듬이 불안정. 힘보다 동일한 템포 반복이 우선.",
-                    priority = 80
+                    detail = "백스윙과 다운스윙 리듬이 불안정 · ${snapshot.training.drill}",
+                    priority = 84
                 )
             }
+        }
+
+        if (recent.size >= 6) {
+            persistentPattern(recent)?.let { return it }
         }
 
         if (abs(launch) >= 0.8) {
             val side = if (launch > 0) "우측" else "좌측"
             return CoachFeedback(
                 headline = "출발이 $side ${"%.2f".format(abs(launch))}°",
-                detail = "페이스/패스는 크게 무너지지 않았지만 출발선 편차가 남아있음.",
-                priority = 75
+                detail = "페이스/패스가 크게 무너지진 않았지만 출발선 편차가 남음 · 반복성 ${snapshot.signature.repeatability}점",
+                priority = 78
             )
         }
 
-        if (recent.size >= 5) {
-            val launchSigns = recent.takeLast(8).map { it.metrics.launchAngleDeg }
-            val right = launchSigns.count { it > 0.45 }
-            val left = launchSigns.count { it < -0.45 }
-
-            if (right >= 5) {
-                return CoachFeedback(
-                    headline = "최근 미스가 우측으로 반복",
-                    detail = "단발성보다 패턴 문제. 페이스 오픈 또는 어드레스 정렬을 우선 확인.",
-                    priority = 70
-                )
-            }
-
-            if (left >= 5) {
-                return CoachFeedback(
-                    headline = "최근 미스가 좌측으로 반복",
-                    detail = "단발성보다 패턴 문제. 페이스 닫힘 또는 당겨치는 패스를 확인.",
-                    priority = 70
-                )
-            }
+        if (snapshot.signature.repeatability < 78) {
+            return CoachFeedback(
+                headline = "단발 수치는 좋지만 반복성 ${snapshot.signature.repeatability}점",
+                detail = "최근 샷 분산이 큼 · ${snapshot.training.drill} · 목표 ${snapshot.training.target}",
+                priority = 72
+            )
         }
 
         return CoachFeedback(
-            headline = "스트로크 안정적 · ${score.total}점",
-            detail = "큰 결함 없음. 지금은 거리감과 반복성 편차를 줄이는 구간.",
+            headline = "${snapshot.signature.arcType.label} · 스트로크 안정적 · ${score.total}점",
+            detail = "큰 결함 없음 · ${snapshot.training.title}: ${snapshot.training.drill}",
             priority = 20
         )
+    }
+
+    private fun persistentPattern(recent: List<ShotRecord>): CoachFeedback? {
+        val last = recent.takeLast(10)
+        val launch = last.map { it.metrics.launchAngleDeg }
+        val right = launch.count { it > .45 }
+        val left = launch.count { it < -.45 }
+        if (right >= 6) {
+            return CoachFeedback(
+                "최근 우측 미스 ${right}/${last.size}",
+                "단발성이 아님 · 페이스 오픈/어드레스 정렬을 먼저 확인하고 1.5m 스타트라인 드릴 권장",
+                76
+            )
+        }
+        if (left >= 6) {
+            return CoachFeedback(
+                "최근 좌측 미스 ${left}/${last.size}",
+                "단발성이 아님 · 페이스 닫힘/당겨치는 패스를 확인하고 1.5m 스타트라인 드릴 권장",
+                76
+            )
+        }
+
+        val impacts = last.mapNotNull { it.metrics.impactOffsetMm }
+        if (impacts.size >= 6) {
+            val avg = impacts.average()
+            val std = sqrt(impacts.sumOf { (it - avg) * (it - avg) } / impacts.size)
+            if (abs(avg) >= 4.5 && std <= 4.0) {
+                return CoachFeedback(
+                    "정타가 계속 ${if (avg > 0) "토" else "힐"} 쪽",
+                    "평균 ${"%.1f".format(abs(avg))}mm · 우연한 미스보다 셋업/퍼터 길이 적합성을 같이 확인",
+                    74
+                )
+            }
+        }
+        return null
     }
 }
