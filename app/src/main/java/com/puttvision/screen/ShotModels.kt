@@ -60,11 +60,13 @@ class ShotTracker {
         impactNs = null
         armed = true
         finalized = false
+        V19StrokeTraceRuntime.begin()
         V15AutoFlowRuntime.ready()
     }
 
     fun cancel() {
         armed = false
+        V19StrokeTraceRuntime.begin()
         V15AutoFlowRuntime.idle()
     }
     fun isArmed(): Boolean = armed
@@ -73,6 +75,7 @@ class ShotTracker {
     fun addHead(sample: HeadSample) {
         if (!armed || finalized) return
         heads += sample
+        V19StrokeTraceRuntime.add(sample)
         while (heads.size > 180) heads.removeAt(0)
     }
 
@@ -101,6 +104,7 @@ class ShotTracker {
             )
             if (d >= 1.2) {
                 impactNs = sample.tNs
+                V19StrokeTraceRuntime.impact(sample.tNs)
                 V15AutoFlowRuntime.impact()
             }
         }
@@ -117,6 +121,7 @@ class ShotTracker {
         V15AutoFlowRuntime.analyzing()
         val result = calculate()
         if (result != null) {
+            V19StrokeTraceRuntime.finish()
             finalized = true
             armed = false
         }
