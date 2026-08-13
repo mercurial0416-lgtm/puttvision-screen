@@ -1,5 +1,6 @@
 package com.puttvision.screen
 
+import android.content.Context
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -8,6 +9,7 @@ import java.util.concurrent.Executors
  * Non-blocking runtime cache for the expensive physics inverse solver.
  * UI/rendering code only peeks at completed results; settings changes schedule
  * work on a single background worker so the TV and phone stay responsive.
+ * V13 adds a persistent solved-read layer so common greens survive app restarts.
  */
 object GreenReadRuntime {
     private val executor = Executors.newSingleThreadExecutor { runnable ->
@@ -16,6 +18,15 @@ object GreenReadRuntime {
     private val ready = ConcurrentHashMap<GreenReadKey, GreenRead>()
     private val pending = ConcurrentHashMap.newKeySet<GreenReadKey>()
     private val callbacks = ConcurrentHashMap<GreenReadKey, CopyOnWriteArrayList<(GreenRead) -> Unit>>()
+    @Volatile private var diskCache: GreenReadDiskCache? = null
+
+    fun install(context: Context) {
+        if (diskCache == null) {
+            synchronized(this) {
+                if (diskCache == null) diskCache = GreenReadDiskCache(context.applicationContext)
+            }
+        }
+    }
 
     fun prefetch(settings: GreenSettings) {
         val snapshot = settings.copy()
@@ -29,11 +40,17 @@ object GreenReadRuntime {
             dispatch(key, it)
             return
         }
+        diskCache?.get(key)?.let {
+            ready[key] = it
+            dispatch(key, it)
+            return
+        }
         if (!pending.add(key)) return
         executor.execute {
             try {
                 val solved = GreenReadAdvisor.read(snapshot)
                 ready[key] = solved
+                runCatching { diskCache?.put(key, solved) }
                 dispatch(key, solved)
             } finally {
                 pending.remove(key)
@@ -61,7 +78,16 @@ object GreenReadRuntime {
 
     fun peek(settings: GreenSettings): GreenRead? {
         val key = GreenReadAdvisor.key(settings)
-        return ready[key] ?: GreenReadAdvisor.peekCached(settings)?.also { ready[key] = it }
+        ready[key]?.let { return it }
+        GreenReadAdvisor.peekCached(settings)?.let {
+            ready[key] = it
+            return it
+        }
+        diskCache?.get(key)?.let {
+            ready[key] = it
+            return it
+        }
+        return null
     }
 
     fun peekOrSchedule(settings: GreenSettings): GreenRead? {
@@ -86,5 +112,10 @@ object GreenReadRuntime {
         ready.clear()
         callbacks.clear()
         // Running jobs are intentionally not cancelled; they can finish safely.
+    }
+
+    fun clearPersistentCache() {
+        clearRuntimeCache()
+        runCatching { diskCache?.clear() }
     }
 }
