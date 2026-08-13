@@ -106,6 +106,10 @@ fun showProductSetupDialog(
         showV26GreenVisualSettingsDialog(context)
     })
 
+    addAction(action("HOLE PACE", V27CupPaceRuntime.label()) {
+        showV27CupPaceDialog(context)
+    })
+
     addAction(action("MOVE BALL", V26BallStartRuntime.label(V26ProductSettingsRuntime.settings)) {
         showV26MoveBallDialog(context, V26ProductSettingsRuntime.settings)
     })

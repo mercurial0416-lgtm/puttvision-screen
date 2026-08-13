@@ -78,7 +78,11 @@
     "pace_changes_green_read_line_and_speed": true,
     "hfr_manual_line_circle_angle_annotations": true,
     "hfr_manual_frame_scrub": true,
-    "hfr_annotation_undo_clear": true
+    "hfr_annotation_undo_clear": true,
+    "hfr_frame_scoped_manual_annotations": true,
+    "cup_entry_pace_presets": true,
+    "pace_dependent_ideal_line": true,
+    "pace_dependent_green_read_cache": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -93,6 +97,8 @@
     "v26_contour_regression_test": true,
     "v26_virtual_start_physics_test": true,
     "v27_pace_solver_regression_test": true,
-    "v27_replay_geometry_test": true
+    "v27_replay_geometry_test": true,
+    "v27_frame_annotation_test": true,
+    "v27_pace_regression_test": true
   }
 }

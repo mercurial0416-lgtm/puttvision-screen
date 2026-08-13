@@ -21,6 +21,7 @@ class ImpactReplayView(context: Context) : View(context) {
     private var loops = 0
     private var paused = false
     private val annotations = V27ReplayAnnotationSession()
+    private val annotationBook = V27FrameAnnotationBook()
     private val mediaRect = RectF()
     private val progressRect = RectF()
     private val toolbarButtons = mutableListOf<Pair<String, RectF>>()
@@ -29,6 +30,7 @@ class ImpactReplayView(context: Context) : View(context) {
         override fun run() {
             val r = replay ?: return
             if (paused) return
+            annotationBook.save(frame, annotations)
             frame++
             if (frame >= r.frames.size) {
                 frame = 0
@@ -40,6 +42,7 @@ class ImpactReplayView(context: Context) : View(context) {
                     return
                 }
             }
+            annotationBook.load(frame, annotations)
             invalidate()
             if (!paused) handler.postDelayed(this, 55L)
         }
@@ -61,6 +64,7 @@ class ImpactReplayView(context: Context) : View(context) {
         loops = 0
         paused = false
         annotations.clear()
+        annotationBook.clear()
         annotations.selectTool(V27ReplayTool.NONE)
         visibility = VISIBLE
         invalidate()
@@ -77,6 +81,7 @@ class ImpactReplayView(context: Context) : View(context) {
         loops = 0
         paused = false
         annotations.clear()
+        annotationBook.clear()
         annotations.selectTool(V27ReplayTool.NONE)
         visibility = GONE
         if (recycleFrames) {
@@ -344,6 +349,7 @@ class ImpactReplayView(context: Context) : View(context) {
             "UNDO" -> { setPaused(true); annotations.undo() }
             "CLEAR" -> { setPaused(true); annotations.clear() }
         }
+        annotationBook.save(frame, annotations)
         invalidate()
     }
 
@@ -353,14 +359,19 @@ class ImpactReplayView(context: Context) : View(context) {
             toolbarButtons.firstOrNull { it.second.contains(event.x,event.y) }?.let { handleToolbar(it.first); return true }
             if (progressRect.contains(event.x,event.y) && r.frames.isNotEmpty()) {
                 val ratio=((event.x-progressRect.left)/progressRect.width()).coerceIn(0f,1f)
+                annotationBook.save(frame, annotations)
                 frame=(ratio*(r.frames.size-1)).roundToInt().coerceIn(0,r.frames.lastIndex)
+                annotationBook.load(frame, annotations)
                 setPaused(true); invalidate(); return true
             }
         }
         if (annotations.tool != V27ReplayTool.NONE && mediaRect.contains(event.x,event.y)) {
             setPaused(true)
             val handled=annotations.handle(event,mediaRect)
-            if (handled) invalidate()
+            if (handled) {
+                if (event.actionMasked == MotionEvent.ACTION_UP) annotationBook.save(frame, annotations)
+                invalidate()
+            }
             return handled
         }
         return true
