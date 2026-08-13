@@ -25,7 +25,18 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Apply V14 integration
-        run: python .v14/apply_v14.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.v14/apply_v14.py')
+          s=p.read_text()
+          s=s.replace(
+              "needle = 'root.addView(pvButton(\"자동 시나리오 전체검사\", PvButtonStyle.PRIMARY) {'",
+              "needle = 'root.addView(pvButton(\"자동 시나리오 전체검사\", PvButtonStyle.PRIMARY, textSp = 7f) {'"
+          )
+          p.write_text(s)
+          PY
+          python .v14/apply_v14.py
       - name: Static V14 guards
         shell: bash
         run: |
