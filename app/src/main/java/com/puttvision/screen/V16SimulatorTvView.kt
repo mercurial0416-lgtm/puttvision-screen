@@ -141,7 +141,8 @@ class V16SimulatorTvView(
         val w = width.toFloat()
         val h = height.toFloat()
         val horizonY = h * .405f
-        val bottomY = h * 1.02f
+        val projectionBottomY = h * .74f
+        val greenBottomY = h * 1.02f
         val centerX = w * .50f
         val maxY = max(settings.holeDistanceM * 1.24, 3.5)
         val sideRange = max(1.35, settings.holeDistanceM * .18)
@@ -149,10 +150,10 @@ class V16SimulatorTvView(
 
         fun syBase(y: Double): Float {
             val t = (y / maxY).coerceIn(0.0, 1.0).toFloat()
-            return bottomY - (bottomY - horizonY) * t
+            return projectionBottomY - (projectionBottomY - horizonY) * t
         }
         fun halfWidthAt(yPix: Float): Float {
-            val t = ((yPix - horizonY) / (bottomY - horizonY)).coerceIn(0f, 1f)
+            val t = ((yPix - horizonY) / (projectionBottomY - horizonY)).coerceIn(0f, 1f)
             return w * (.17f + .46f * t)
         }
         fun sx(x: Double, y: Double): Float {
@@ -166,14 +167,14 @@ class V16SimulatorTvView(
 
         val green = Path().apply {
             moveTo(w * .28f, horizonY)
-            cubicTo(w * .16f, h * .60f, w * .04f, h * .87f, -w * .03f, bottomY)
-            lineTo(w * 1.03f, bottomY)
+            cubicTo(w * .16f, h * .60f, w * .04f, h * .87f, -w * .03f, greenBottomY)
+            lineTo(w * 1.03f, greenBottomY)
             cubicTo(w * .96f, h * .87f, w * .84f, h * .60f, w * .72f, horizonY)
             close()
         }
 
         p.shader = LinearGradient(
-            0f, horizonY, 0f, bottomY,
+            0f, horizonY, 0f, greenBottomY,
             intArrayOf(Color.rgb(108, 188, 75), Color.rgb(88, 171, 68), Color.rgb(66, 148, 59)),
             floatArrayOf(0f, .50f, 1f), Shader.TileMode.CLAMP
         )
