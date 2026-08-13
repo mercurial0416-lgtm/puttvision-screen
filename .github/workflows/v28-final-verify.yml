@@ -1,0 +1,57 @@
+name: Final verify V28 sharing sync and render cache
+
+on:
+  push:
+    branches: [ agent/v28-sharing-sync-hardening ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v28-final-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wire final V28 systems
+        shell: bash
+        run: |
+          python ci/v28_patch_product.py
+          python ci/v28_patch_transport.py
+          python ci/v28_patch_companion_ui.py
+          python ci/v28_patch_render_cache.py
+          python ci/v28_add_tests.py
+          if ! git diff --quiet; then
+            git diff --check
+            git config user.name "puttvision-v28-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add FEATURE_MATRIX.json \
+              app/src/main/java/com/puttvision/screen/GreenReadAdvisor.kt \
+              app/src/main/java/com/puttvision/screen/V13Reliability.kt \
+              app/src/main/java/com/puttvision/screen/V22CustomGreen.kt \
+              app/src/main/java/com/puttvision/screen/V26GreenVisuals.kt \
+              app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt \
+              app/src/main/java/com/puttvision/screen/ProductSetupDialog.kt \
+              app/src/main/java/com/puttvision/screen/ImpactReplayView.kt \
+              app/src/main/java/com/puttvision/screen/V15CompanionLink.kt \
+              app/src/main/java/com/puttvision/screen/V16CompanionUi.kt \
+              app/src/test/java/com/puttvision/screen/V28CompanionProtocolTest.kt
+            git commit -m "feat: finalize V28 sharing sync and render cache"
+            git push
+          fi
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
