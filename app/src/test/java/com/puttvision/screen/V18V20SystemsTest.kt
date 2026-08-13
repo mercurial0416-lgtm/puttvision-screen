@@ -18,7 +18,7 @@ class V18V20SystemsTest {
         assertEquals(41, model.current.size)
         assertEquals(41, model.ideal.size)
         assertEquals(41, model.ghost.size)
-        assertTrue(model.corridorCm in .42..85)
+        assertTrue(model.corridorCm in .42..0.85)
         assertTrue(model.quality in 35..99)
     }
 
