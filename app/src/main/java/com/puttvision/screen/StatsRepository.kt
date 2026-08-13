@@ -94,6 +94,11 @@ data class ShotEntity(
     val uncertaintyPathDeg: Double?,
     val uncertaintyImpactMm: Double?,
     val uncertaintyBasis: String?,
+    val rollSpinRpm: Double?,
+    val rollSkidDistanceCm: Double?,
+    val rollStartDistanceCm: Double?,
+    val rollMarkedBall: Boolean,
+    val rollConfidence: Double?,
 
     val scoreTotal: Int,
     val scoreFace: Int,
@@ -134,7 +139,7 @@ interface ShotDao {
     fun clearAll()
 }
 
-@Database(entities = [ShotEntity::class], version = 3, exportSchema = false)
+@Database(entities = [ShotEntity::class], version = 4, exportSchema = false)
 abstract class PuttVisionDatabase : RoomDatabase() {
     abstract fun shotDao(): ShotDao
 }
@@ -160,6 +165,16 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE shots ADD COLUMN rollSpinRpm REAL")
+        db.execSQL("ALTER TABLE shots ADD COLUMN rollSkidDistanceCm REAL")
+        db.execSQL("ALTER TABLE shots ADD COLUMN rollStartDistanceCm REAL")
+        db.execSQL("ALTER TABLE shots ADD COLUMN rollMarkedBall INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE shots ADD COLUMN rollConfidence REAL")
+    }
+}
+
 class StatsRepository(context: Context) {
     private val appContext = context.applicationContext
     private val legacyPrefs = appContext.getSharedPreferences("puttvision_stats_v04", Context.MODE_PRIVATE)
@@ -174,7 +189,7 @@ class StatsRepository(context: Context) {
         PuttVisionDatabase::class.java,
         "puttvision_stats_room.db"
     )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()
     private val dao = db.shotDao()
 
@@ -311,6 +326,11 @@ class StatsRepository(context: Context) {
             uncertaintyPathDeg = m.uncertainty?.pathDeg,
             uncertaintyImpactMm = m.uncertainty?.impactMm,
             uncertaintyBasis = m.uncertainty?.basis,
+            rollSpinRpm = m.roll?.spinRpm,
+            rollSkidDistanceCm = m.roll?.skidDistanceCm,
+            rollStartDistanceCm = m.roll?.rollStartDistanceCm,
+            rollMarkedBall = m.roll?.markedBall ?: false,
+            rollConfidence = m.roll?.confidence,
             scoreTotal = score.total,
             scoreFace = score.face,
             scorePath = score.path,
@@ -349,6 +369,9 @@ class StatsRepository(context: Context) {
             estimatedMatDecelMps2 = e.estimatedMatDecelMps2,
             estimatedMatStimpM = e.estimatedMatStimpM,
             confidence = e.confidence,
+            roll = if (e.rollMarkedBall || e.rollSpinRpm != null || e.rollStartDistanceCm != null) {
+                BallRollMetrics(e.rollSpinRpm, e.rollSkidDistanceCm, e.rollStartDistanceCm, e.rollMarkedBall, e.rollConfidence ?: 0.0)
+            } else null,
             uncertainty = if (e.uncertaintyBallSpeedMps != null && e.uncertaintyLaunchDeg != null) {
                 MeasurementUncertainty(
                     ballSpeedMps = e.uncertaintyBallSpeedMps,
@@ -458,6 +481,7 @@ class StatsRepository(context: Context) {
         putNullable("f2p", m.faceToPathDeg); putNullable("smash", m.smash); putNullable("impact", m.impactOffsetMm); putNullable("tempo", m.tempoRatio)
         putNullable("backswingMs", m.backswingMs); putNullable("downswingMs", m.downswingMs); putNullable("backswingLength", m.backswingLengthCm); putNullable("accel", m.peakHeadAccelerationMps2)
         putNullable("rawBall", m.rawBallSpeedMps); putNullable("matDecel", m.estimatedMatDecelMps2); putNullable("matStimp", m.estimatedMatStimpM); putNullable("confidence", m.confidence)
+        m.roll?.let { rr -> put("roll", JSONObject().apply { putNullable("rpm", rr.spinRpm); putNullable("skid", rr.skidDistanceCm); putNullable("start", rr.rollStartDistanceCm); put("marked", rr.markedBall); put("confidence", rr.confidence) }) }
         m.uncertainty?.let { u ->
             put("uncertainty", JSONObject().apply {
                 put("ball", u.ballSpeedMps); put("launch", u.launchDeg); putNullable("head", u.headSpeedMps); putNullable("face", u.faceDeg); putNullable("path", u.pathDeg); putNullable("impact", u.impactMm); put("basis", u.basis)
@@ -481,9 +505,11 @@ class StatsRepository(context: Context) {
                 basis = it.optString("basis", "RESTORED")
             )
         }
+        val rollJ = j.optJSONObject("roll")
+        val roll = rollJ?.let { BallRollMetrics(it.optNullableDouble("rpm"), it.optNullableDouble("skid"), it.optNullableDouble("start"), it.optBoolean("marked", false), it.optDouble("confidence", 0.0)) }
         val m = ShotMetrics(
             ballSpeedMps = j.getDouble("ball"), launchAngleDeg = j.getDouble("launch"), headSpeedMps = j.optNullableDouble("head"), faceAngleDeg = j.optNullableDouble("face"), pathAngleDeg = j.optNullableDouble("path"), faceToPathDeg = j.optNullableDouble("f2p"), smash = j.optNullableDouble("smash"), impactOffsetMm = j.optNullableDouble("impact"), measuredAtNs = 0L,
-            backswingMs = j.optNullableDouble("backswingMs"), downswingMs = j.optNullableDouble("downswingMs"), tempoRatio = j.optNullableDouble("tempo"), backswingLengthCm = j.optNullableDouble("backswingLength"), peakHeadAccelerationMps2 = j.optNullableDouble("accel"), rawBallSpeedMps = j.optNullableDouble("rawBall"), estimatedMatDecelMps2 = j.optNullableDouble("matDecel"), estimatedMatStimpM = j.optNullableDouble("matStimp"), confidence = j.optNullableDouble("confidence"), uncertainty = uncertainty
+            backswingMs = j.optNullableDouble("backswingMs"), downswingMs = j.optNullableDouble("downswingMs"), tempoRatio = j.optNullableDouble("tempo"), backswingLengthCm = j.optNullableDouble("backswingLength"), peakHeadAccelerationMps2 = j.optNullableDouble("accel"), rawBallSpeedMps = j.optNullableDouble("rawBall"), estimatedMatDecelMps2 = j.optNullableDouble("matDecel"), estimatedMatStimpM = j.optNullableDouble("matStimp"), confidence = j.optNullableDouble("confidence"), roll = roll, uncertainty = uncertainty
         )
         val sj = j.optJSONObject("score") ?: JSONObject()
         val total = sj.optInt("total", 0)

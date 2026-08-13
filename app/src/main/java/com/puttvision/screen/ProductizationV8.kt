@@ -555,6 +555,7 @@ class AccuracyValidationLab(private val context: Context) {
             headPct?.let { append(" · HEAD ${"%.1f".format(it)}%") }
             face?.let { append(" · FACE ${"%.2f".format(it)}°") }
             path?.let { append(" · PATH ${"%.2f".format(it)}°") }
+            if (m.size >= 20) append(" · LAB P95 READY")
         }
     }
 

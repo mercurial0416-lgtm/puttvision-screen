@@ -210,21 +210,14 @@ class TvImpactReplayView(context: Context) : View(context) {
     private var payload: TvImpactReplayPayload? = null
     private var frame = 0
     private var loops = 0
-
     private val listener: (TvImpactReplayPayload?) -> Unit = { next ->
         payload = next
         frame = 0
         loops = 0
         handler.removeCallbacks(tick)
-        if (next != null) {
-            visibility = VISIBLE
-            handler.post(tick)
-        } else {
-            visibility = GONE
-            invalidate()
-        }
+        if (next != null) { visibility = VISIBLE; handler.post(tick) }
+        else { visibility = GONE; invalidate() }
     }
-
     private val tick = object : Runnable {
         override fun run() {
             val data = payload ?: return
@@ -234,89 +227,41 @@ class TvImpactReplayView(context: Context) : View(context) {
             if (frame >= data.replay.frames.size) {
                 frame = 0
                 loops++
-                if (loops >= 2) {
-                    handler.postDelayed({ listener(null) }, 650L)
-                    return
-                }
+                if (loops >= 2) { handler.postDelayed({ listener(null) }, 420L); return }
             }
-            handler.postDelayed(this, 58L)
+            handler.postDelayed(this, 52L)
         }
     }
-
-    init {
-        visibility = GONE
-        setBackgroundColor(Color.TRANSPARENT)
-        isClickable = false
-    }
-
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        TvImpactReplayBus.subscribe(listener)
-    }
-
-    override fun onDetachedFromWindow() {
-        TvImpactReplayBus.unsubscribe(listener)
-        handler.removeCallbacksAndMessages(null)
-        payload = null
-        super.onDetachedFromWindow()
-    }
-
+    init { visibility = GONE; setBackgroundColor(Color.TRANSPARENT); isClickable = false }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); TvImpactReplayBus.subscribe(listener) }
+    override fun onDetachedFromWindow() { TvImpactReplayBus.unsubscribe(listener); handler.removeCallbacksAndMessages(null); payload = null; super.onDetachedFromWindow() }
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val data = payload ?: return
         val bmp = data.replay.frames.getOrNull(frame) ?: return
         if (bmp.isRecycled || width <= 0 || height <= 0) return
-        val w = width.toFloat()
-        val h = height.toFloat()
-        p.color = Color.argb(185, 0, 0, 0)
-        canvas.drawRect(0f, 0f, w, h, p)
-
-        val card = RectF(w * .11f, h * .09f, w * .89f, h * .88f)
-        p.color = Color.rgb(5, 9, 11)
-        canvas.drawRoundRect(card, h * .026f, h * .026f, p)
-        p.style = Paint.Style.STROKE
-        p.strokeWidth = max(2f, w * .0014f)
-        p.color = Color.argb(145, 78, 209, 121)
-        canvas.drawRoundRect(card, h * .026f, h * .026f, p)
-        p.style = Paint.Style.FILL
-
-        val media = RectF(card.left + w * .02f, card.top + h * .095f, card.right - w * .02f, card.bottom - h * .16f)
-        p.color = Color.BLACK
-        canvas.drawRoundRect(media, h * .014f, h * .014f, p)
-        val srcAspect = bmp.width.toFloat() / bmp.height.coerceAtLeast(1)
-        val dstAspect = media.width() / media.height().coerceAtLeast(1f)
+        val w = width.toFloat(); val h = height.toFloat()
+        // Screen-putting style PiP: green and rolling ball remain fully visible underneath.
+        val cardW = w * .285f
+        val cardH = h * .285f
+        val right = w * .965f
+        val top = h * .105f
+        val card = RectF(right - cardW, top, right, top + cardH)
+        p.color = Color.argb(225, 4, 9, 8)
+        canvas.drawRoundRect(card, h * .018f, h * .018f, p)
+        p.style = Paint.Style.STROKE; p.strokeWidth = max(2f, w * .0012f); p.color = Color.argb(150, 78, 209, 121)
+        canvas.drawRoundRect(card, h * .018f, h * .018f, p); p.style = Paint.Style.FILL
+        val media = RectF(card.left + w*.009f, card.top + h*.052f, card.right - w*.009f, card.bottom - h*.067f)
+        val srcAspect = bmp.width.toFloat()/bmp.height.coerceAtLeast(1)
+        val dstAspect = media.width()/media.height().coerceAtLeast(1f)
         val target = if (srcAspect > dstAspect) {
-            val fitH = media.width() / srcAspect
-            RectF(media.left, media.centerY() - fitH / 2f, media.right, media.centerY() + fitH / 2f)
-        } else {
-            val fitW = media.height() * srcAspect
-            RectF(media.centerX() - fitW / 2f, media.top, media.centerX() + fitW / 2f, media.bottom)
-        }
-        canvas.drawBitmap(bmp, null, target, p)
-
-        val impact = frame == data.replay.impactIndex
-        p.typeface = Typeface.DEFAULT_BOLD
-        p.textSize = max(18f, w * .015f)
-        p.color = if (impact) Color.rgb(246, 190, 74) else Color.WHITE
-        canvas.drawText(if (impact) "IMPACT" else if (data.synthetic) "SIM CAMERA REPLAY" else "PRECISION REPLAY", card.left + w * .022f, card.top + h * .057f, p)
-        p.textSize = max(10f, w * .0075f)
-        p.color = Color.argb(180, 190, 205, 196)
-        canvas.drawText("${data.replay.fps} FPS · ${frame + 1}/${data.replay.frames.size}", card.left + w * .022f, card.top + h * .081f, p)
-
-        val m = data.metrics
-        val railY = card.bottom - h * .09f
-        p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        p.textSize = max(20f, w * .016f)
-        p.color = Color.rgb(78, 209, 121)
-        canvas.drawText("BALL ${"%.2f".format(m.ballSpeedMps)}", card.left + w * .025f, railY, p)
-        p.color = Color.WHITE
-        canvas.drawText("START ${"%+.2f".format(m.launchAngleDeg)}°", card.left + w * .25f, railY, p)
-        canvas.drawText("HEAD ${m.headSpeedMps?.let { "%.2f".format(it) } ?: "--"}", card.left + w * .49f, railY, p)
-        m.uncertainty?.let {
-            p.textSize = max(9f, w * .0072f)
-            p.color = Color.argb(175, 190, 205, 196)
-            canvas.drawText(it.compact(), card.left + w * .025f, card.bottom - h * .035f, p)
-        }
+            val fitH=media.width()/srcAspect; RectF(media.left,media.centerY()-fitH/2,media.right,media.centerY()+fitH/2)
+        } else { val fitW=media.height()*srcAspect; RectF(media.centerX()-fitW/2,media.top,media.centerX()+fitW/2,media.bottom) }
+        canvas.drawBitmap(bmp,null,target,p)
+        p.typeface=Typeface.DEFAULT_BOLD; p.textSize=max(11f,w*.0074f); p.color=if(frame==data.replay.impactIndex) Color.rgb(246,190,74) else Color.WHITE
+        canvas.drawText(if(frame==data.replay.impactIndex) "IMPACT" else "IMPACT REPLAY",card.left+w*.012f,card.top+h*.034f,p)
+        p.textSize=max(9f,w*.0058f); p.color=Color.rgb(78,209,121)
+        canvas.drawText("BALL ${"%.2f".format(data.metrics.ballSpeedMps)} · START ${"%+.2f".format(data.metrics.launchAngleDeg)}°",card.left+w*.012f,card.bottom-h*.025f,p)
     }
 }
 

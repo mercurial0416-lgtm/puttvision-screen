@@ -24,17 +24,22 @@ data class HfrAnalysisResult(
 
 class HfrVideoAnalyzer {
 
+    private val v14Vision = V14BitmapVisionTracker()
+    private val frameCache = LinkedHashMap<Int, Bitmap>()
+
     private data class Detection(
         val ballPx: PointF?,
         val heelPx: PointF?,
-        val toePx: PointF?
+        val toePx: PointF?,
+        val markerAngleDeg: Double? = null
     )
 
     private data class Sample(
         val frame: Int,
         val ballCm: PointF?,
         val heelCm: PointF?,
-        val toeCm: PointF?
+        val toeCm: PointF?,
+        val markerAngleDeg: Double? = null
     )
 
     private data class HeadFrame(
@@ -71,6 +76,8 @@ class HfrVideoAnalyzer {
 
         try {
             mmr.setDataSource(file.absolutePath)
+            clearFrameCache()
+            v14Vision.reset()
 
             val frameCount = mmr.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT
@@ -138,6 +145,7 @@ class HfrVideoAnalyzer {
 
             val samples = ArrayList<Sample>(end - start + 1)
             var prevBall = startBall
+            v14Vision.reset()
 
             for (frame in start..end) {
                 val bmp = safeFrame(mmr, frame) ?: continue
@@ -156,7 +164,7 @@ class HfrVideoAnalyzer {
                 }
 
                 if (ballCm != null) prevBall = ballCm
-                samples += Sample(frame, ballCm, heelCm, toeCm)
+                samples += Sample(frame, ballCm, heelCm, toeCm, d.markerAngleDeg)
             }
 
             val calculated = calculate(samples, startBall, fps) ?: return null
@@ -168,19 +176,60 @@ class HfrVideoAnalyzer {
                 analyzedFrames = samples.size
             )
         } finally {
+            clearFrameCache()
             mmr.release()
         }
+    }
+
+    /** SIM CAMERA 2.0: runs the same adaptive detector and kinematics without camera hardware. */
+    fun analyzeSynthetic(
+        frames: List<Bitmap>,
+        fps: Int,
+        homography: Homography
+    ): HfrAnalysisResult? {
+        if (frames.size < 20 || fps < 60) return null
+        val tracker = V14BitmapVisionTracker()
+        var origin: PointF? = null
+        var impact = -1
+        val samples = ArrayList<Sample>(frames.size)
+        frames.forEachIndexed { index, bmp ->
+            val d = tracker.detect(bmp, wantPutter = true)
+            val ball = d.ballPx?.let(homography::map)?.takeIf { it.x.isFinite() && it.y.isFinite() }
+            val heel = d.heelPx?.let(homography::map)?.takeIf { it.x.isFinite() && it.y.isFinite() }
+            val toe = d.toePx?.let(homography::map)?.takeIf { it.x.isFinite() && it.y.isFinite() }
+            if (origin == null && ball != null && abs(ball.x) < 30f && ball.y in -20f..40f) origin = PointF(ball.x, ball.y)
+            val o = origin
+            if (impact < 0 && o != null && ball != null && hypot((ball.x-o.x).toDouble(), (ball.y-o.y).toDouble()) >= .8) impact = index
+            samples += Sample(index, ball, heel, toe, d.markerAngleDeg)
+        }
+        val o = origin ?: return null
+        if (impact < 0) return null
+        val calculated = calculate(samples, o, fps) ?: return null
+        return HfrAnalysisResult(calculated.first, fps, calculated.second, samples.size)
+    }
+
+    private fun clearFrameCache() {
+        frameCache.values.forEach { if (!it.isRecycled) it.recycle() }
+        frameCache.clear()
     }
 
     private fun safeFrame(
         mmr: MediaMetadataRetriever,
         index: Int
-    ): Bitmap? =
-        try {
-            mmr.getFrameAtIndex(index)
-        } catch (_: Throwable) {
-            null
+    ): Bitmap? {
+        frameCache[index]?.let { if (!it.isRecycled) return it }
+        val batch = runCatching { mmr.getFramesAtIndex(index, 6) }.getOrNull()
+        if (!batch.isNullOrEmpty()) {
+            batch.forEachIndexed { offset, bitmap -> frameCache[index + offset] = bitmap }
+            while (frameCache.size > 24) {
+                val key = frameCache.keys.firstOrNull() ?: break
+                val old = frameCache.remove(key)
+                if (old != null && !old.isRecycled) old.recycle()
+            }
+            frameCache[index]?.let { if (!it.isRecycled) return it }
         }
+        return runCatching { mmr.getFrameAtIndex(index) }.getOrNull()
+    }
 
 
 private fun findVideoHomography(
@@ -206,9 +255,10 @@ private fun findVideoHomography(
                 bmp
             ) ?: continue
 
-        Homography.fromFourPoints(
-            layout.imagePoints,
-            layout.realPointsCm
+        Homography.fromPoints(
+            layout.fitImagePoints,
+            layout.fitRealPointsCm,
+            FrameInfo(bmp.width, bmp.height, 0)
         )?.let {
             return it
         }
@@ -237,130 +287,15 @@ private fun scanMarkerLayoutBlocking(
             )
         )
             .addOnSuccessListener { codes ->
-                val pv =
-                    HashMap<
-                        String,
-                        Pair<PointF, PointF>
-                        >()
-
-                val generic =
-                    ArrayList<
-                        Pair<PointF, Long>
-                        >()
-
-                for (code in codes) {
-                    val box =
-                        code.boundingBox
-                            ?: continue
-
-                    val center =
-                        PointF(
-                            box.exactCenterX(),
-                            box.exactCenterY()
-                        )
-
-                    val area =
-                        box.width()
-                            .toLong() *
-                            box.height()
-                            .toLong()
-
-                    generic +=
-                        center to area
-
-                    val text =
-                        code.rawValue
-                            ?: continue
-
-                    val parts =
-                        text.split("|")
-
-                    if (
-                        parts.size == 4 &&
-                        parts[0] == "PV1" &&
-                        parts[1] in setOf(
-                            "BL",
-                            "BR",
-                            "TR",
-                            "TL"
-                        )
-                    ) {
-                        val x =
-                            parts[2]
-                                .toFloatOrNull()
-
-                        val y =
-                            parts[3]
-                                .toFloatOrNull()
-
-                        if (
-                            x != null &&
-                            y != null
-                        ) {
-                            pv[parts[1]] =
-                                center to
-                                    PointF(
-                                        x,
-                                        y
-                                    )
-                        }
-                    }
-                }
-
-                val roles =
-                    listOf(
-                        "BL",
-                        "BR",
-                        "TR",
-                        "TL"
+                val observations = codes.mapNotNull { code ->
+                    val box = code.boundingBox ?: return@mapNotNull null
+                    V14QrObservation(
+                        code.rawValue,
+                        PointF(box.exactCenterX(), box.exactCenterY()),
+                        box.width().toLong() * box.height().toLong()
                     )
-
-                resolved =
-                    if (
-                        roles.all {
-                            pv.containsKey(
-                                it
-                            )
-                        }
-                    ) {
-                        ResolvedMarkerLayout(
-                            imagePoints =
-                                roles.map {
-                                    pv.getValue(
-                                        it
-                                    ).first
-                                },
-                            realPointsCm =
-                                roles.map {
-                                    pv.getValue(
-                                        it
-                                    ).second
-                                },
-                            source =
-                                "PV1"
-                        )
-                    } else {
-                        val centers =
-                            generic
-                                .sortedByDescending {
-                                    it.second
-                                }
-                                .take(4)
-                                .map {
-                                    it.first
-                                }
-
-                        if (
-                            centers.size == 4
-                        ) {
-                            MarkerLayoutResolver
-                                .fromGenericFour(
-                                    centers
-                                )
-                        } else {
-                            null
-                        }
-                    }
+                }
+                resolved = V14MarkerResolver.resolve(observations)
             }
             .addOnCompleteListener {
                 latch.countDown()
@@ -383,177 +318,8 @@ private fun scanMarkerLayoutBlocking(
         previousBallCm: PointF?,
         wantPutter: Boolean
     ): Detection {
-        val maxWidth = 960
-        val scale =
-            if (source.width > maxWidth) maxWidth.toFloat() / source.width else 1f
-
-        val bmp =
-            if (scale < 1f) {
-                Bitmap.createScaledBitmap(
-                    source,
-                    (source.width * scale).toInt(),
-                    (source.height * scale).toInt(),
-                    false
-                )
-            } else source
-
-        val width = bmp.width
-        val height = bmp.height
-        val pixels = IntArray(width * height)
-        bmp.getPixels(pixels, 0, width, 0, 0, width, height)
-
-        fun originalPoint(x: Float, y: Float): PointF =
-            PointF(x / scale, y / scale)
-
-        var bestBall: PointF? = null
-        var bestBallScore = -1.0
-
-        var y = 6
-
-        while (y < height - 6) {
-            var x = 6
-
-            while (x < width - 6) {
-                val c = pixels[y * width + x]
-                val r = (c shr 16) and 255
-                val g = (c shr 8) and 255
-                val b = c and 255
-
-                if (
-                    min(r, min(g, b)) > 205 &&
-                    abs(r - g) < 30 &&
-                    abs(g - b) < 30
-                ) {
-                    var hit = 0
-                    var total = 0
-                    var oy = -5
-
-                    while (oy <= 5) {
-                        var ox = -5
-
-                        while (ox <= 5) {
-                            if (ox * ox + oy * oy <= 25) {
-                                val cc = pixels[(y + oy) * width + (x + ox)]
-                                val rr = (cc shr 16) and 255
-                                val gg = (cc shr 8) and 255
-                                val bb = cc and 255
-
-                                if (
-                                    min(rr, min(gg, bb)) > 190 &&
-                                    abs(rr - gg) < 42 &&
-                                    abs(gg - bb) < 42
-                                ) {
-                                    hit++
-                                }
-
-                                total++
-                            }
-
-                            ox += 2
-                        }
-
-                        oy += 2
-                    }
-
-                    val ratio = hit.toDouble() / max(1, total)
-
-                    if (ratio > 0.42) {
-                        val imagePoint = originalPoint(x.toFloat(), y.toFloat())
-                        val real = h.map(imagePoint)
-
-                        if (real.x.isFinite() && real.y.isFinite()) {
-                            var score = ratio
-
-                            if (previousBallCm != null) {
-                                val distance = hypot(
-                                    (real.x - previousBallCm.x).toDouble(),
-                                    (real.y - previousBallCm.y).toDouble()
-                                )
-
-                                score += max(
-                                    0.0,
-                                    1.0 - distance / 35.0
-                                ) * 1.7
-                            } else if (
-                                abs(real.x) < 30 &&
-                                real.y in -20f..55f
-                            ) {
-                                score += 1.0
-                            }
-
-                            if (score > bestBallScore) {
-                                bestBallScore = score
-                                bestBall = imagePoint
-                            }
-                        }
-                    }
-                }
-
-                x += 3
-            }
-
-            y += 3
-        }
-
-        if (!wantPutter) {
-            return Detection(bestBall, null, null)
-        }
-
-        fun colorCentroid(orange: Boolean): PointF? {
-            var sumX = 0.0
-            var sumY = 0.0
-            var count = 0
-
-            var yy = 0
-
-            while (yy < height) {
-                var xx = 0
-
-                while (xx < width) {
-                    val c = pixels[yy * width + xx]
-                    val r = (c shr 16) and 255
-                    val g = (c shr 8) and 255
-                    val b = c and 255
-
-                    val match =
-                        if (orange) {
-                            r > 155 &&
-                                g in 55..205 &&
-                                b < 135 &&
-                                r > g * 1.10 &&
-                                g > b * 1.02
-                        } else {
-                            b > 135 &&
-                                r < 160 &&
-                                b > r * 1.12 &&
-                                b > g * 1.02
-                        }
-
-                    if (match) {
-                        sumX += xx
-                        sumY += yy
-                        count++
-                    }
-
-                    xx += 3
-                }
-
-                yy += 3
-            }
-
-            if (count < 5) return null
-
-            return originalPoint(
-                (sumX / count).toFloat(),
-                (sumY / count).toFloat()
-            )
-        }
-
-        return Detection(
-            ballPx = bestBall,
-            heelPx = colorCentroid(true),
-            toePx = colorCentroid(false)
-        )
+        val d = v14Vision.detect(source, wantPutter)
+        return Detection(d.ballPx, d.heelPx, d.toePx, d.markerAngleDeg)
     }
 
     private fun calculate(
@@ -582,34 +348,20 @@ private fun scanMarkerLayoutBlocking(
 
         val impactFrame = samples[impactPos].frame
 
-        // Ball speed at roughly 10cm. Then estimate mat deceleration from
-        // subsequent high-speed positions and back-extrapolate to impact.
-        var launchSample: Sample? = null
-
-        for (i in impactPos until samples.size) {
-            val ball = samples[i].ballCm ?: continue
-            val d = hypot(
-                (ball.x - origin.x).toDouble(),
-                (ball.y - origin.y).toDouble()
+        // V14: fit multiple early post-impact centroids instead of trusting one 10cm frame.
+        val fitPoints = samples.drop(impactPos).mapNotNull { sample ->
+            val ball = sample.ballCm ?: return@mapNotNull null
+            val d = hypot((ball.x-origin.x).toDouble(), (ball.y-origin.y).toDouble())
+            if (d !in .5..19.0) return@mapNotNull null
+            V14TimedPoint(
+                (sample.frame - impactFrame).toDouble() / fps,
+                (ball.x-origin.x).toDouble(),
+                (ball.y-origin.y).toDouble()
             )
-
-            if (d >= 10.0) {
-                launchSample = samples[i]
-                break
-            }
-        }
-
-        val target = launchSample ?: return null
-        val targetBall = target.ballCm ?: return null
-        val frameDelta =
-            (target.frame - impactFrame).coerceAtLeast(1)
-
-        val dt = frameDelta.toDouble() / fps
-        val dx = (targetBall.x - origin.x).toDouble()
-        val dy = (targetBall.y - origin.y).toDouble()
-        val rawSpeed = (hypot(dx, dy) / 100.0) / dt
-        val launchAngle = Math.toDegrees(atan2(dx, dy))
-
+        }.take(28)
+        val robust = V14RobustKinematics.fit(fitPoints) ?: return null
+        val rawSpeed = robust.speedMps
+        val launchAngle = robust.launchAngleDeg
         val matData = estimateMat(samples, impactPos, fps, rawSpeed)
         val correctedBallSpeed = matData.correctedImpactSpeedMps
 
@@ -700,6 +452,14 @@ private fun scanMarkerLayoutBlocking(
                     (if (matData.decelMps2 != null) 0.05 else 0.0)
                 ).coerceIn(0.0, 1.0)
 
+        val rollSamples = samples.drop(impactPos).mapNotNull { sample ->
+            val ball = sample.ballCm ?: return@mapNotNull null
+            val marker = sample.markerAngleDeg ?: return@mapNotNull null
+            val d = hypot((ball.x-origin.x).toDouble(), (ball.y-origin.y).toDouble())
+            V14BallRollAnalyzer.MarkerSample(sample.frame, d, marker)
+        }
+        val roll = V14BallRollAnalyzer.analyze(rollSamples, fps, correctedBallSpeed)
+
         val uncertainty = MeasurementUncertaintyEstimator.forHfr(
             fps = fps,
             ballDetectionRatio = ballDetected,
@@ -729,6 +489,7 @@ private fun scanMarkerLayoutBlocking(
             estimatedMatDecelMps2 = matData.decelMps2,
             estimatedMatStimpM = matData.stimpM,
             confidence = confidence,
+            roll = roll,
             uncertainty = uncertainty
         ) to impactFrame
     }

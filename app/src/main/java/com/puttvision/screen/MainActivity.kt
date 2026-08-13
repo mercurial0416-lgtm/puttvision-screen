@@ -2641,6 +2641,26 @@ class MainActivity : AppCompatActivity() {
         }, LinearLayout.LayoutParams(0, pvDp(36), 1f).apply { marginStart = pvDp(5) })
         controls.addView(targetRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(7) })
 
+        controls.addView(pvButton("SIM CAMERA 2.0 · 영상인식 검사", PvButtonStyle.SECONDARY) {
+            metricText.text = "합성 240fps 영상 · 공/퍼터 추적 분석중"
+            cameraExecutor.execute {
+                val seq = V14SyntheticCamera.build()
+                val result = runCatching { hfrAnalyzer.analyzeSynthetic(seq.frames, seq.fps, seq.homography) }.getOrNull()
+                val truth = seq.truth
+                val measured = result?.metrics
+                val pass = measured != null &&
+                    kotlin.math.abs(measured.ballSpeedMps - truth.ballSpeedMps) <= .14 &&
+                    kotlin.math.abs(measured.launchAngleDeg - truth.launchAngleDeg) <= .65 &&
+                    measured.headSpeedMps != null
+                seq.recycle()
+                runOnUiThread {
+                    metricText.text = if (pass) {
+                        "SIM CAMERA PASS · BALL ${"%.2f".format(measured!!.ballSpeedMps)} · START ${"%+.2f".format(measured.launchAngleDeg)}° · 실제 검출/피팅 경로"
+                    } else "SIM CAMERA FAIL · 영상 검출 파이프라인 확인"
+                }
+            }
+        }, LinearLayout.LayoutParams(-1, pvDp(42)).apply { bottomMargin = pvDp(6) })
+
         controls.addView(pvButton("자동 시나리오 전체검사", PvButtonStyle.PRIMARY, textSp = 7f) {
             val token = ++suiteToken
             val cases = listOf(
@@ -3254,6 +3274,7 @@ class MainActivity : AppCompatActivity() {
 
         measurementSuspended = false
         stopSimulation()
+        TvInstantRollRuntime.clear()
 
         engine.gameModes
             .prepareNextIfNeeded()
@@ -3533,13 +3554,14 @@ class MainActivity : AppCompatActivity() {
             !impactDetected &&
             elapsed > 250
         ) {
-            if (
-                impactDetector.sampleMoved()
-            ) {
+            val quickImpact = impactDetector.sampleImpact(homography)
+            if (quickImpact != null) {
                 impactDetected = true
+                val read = GreenReadRuntime.peekOrSchedule(engine.settings)
+                TvInstantRollRuntime.begin(engine.settings, quickImpact, read)
 
                 overlay.status =
-                    "IMPACT · +700ms HFR 캡처"
+                    "IMPACT · TV LIVE · +700ms HFR"
 
                 overlay.invalidate()
 
@@ -3614,6 +3636,7 @@ class MainActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 if (result == null) {
+                    TvInstantRollRuntime.clear()
                     overlay.status =
                         "분석 실패 · 카메라 정렬을 확인하세요"
 
@@ -3670,6 +3693,7 @@ class MainActivity : AppCompatActivity() {
         val confidence = baseMetrics.confidence
         val rejectThreshold = if (source.startsWith("PRECISION")) 0.65 else 0.38
         if (confidence != null && confidence < rejectThreshold) {
+            TvInstantRollRuntime.clear()
             replay?.frames?.forEach { if (!it.isRecycled) it.recycle() }
             val pct = (confidence * 100.0).toInt().coerceIn(0, 100)
             overlay.status = "MEASURE $pct% · RETRY"
@@ -3693,18 +3717,36 @@ class MainActivity : AppCompatActivity() {
             matCalibrationManager.observe(baseMetrics)
         }
         if (!offlineTestMode && ::accuracyValidationLab.isInitialized) {
-            accuracyValidationLab.capture(baseMetrics)
+            accuracyValidationLab.capture(baseMetrics, accuracyAutoTuner.profileKey())
         }
         if (!offlineTestMode && ::accuracyAutoTuner.isInitialized && ::accuracyValidationLab.isInitialized) {
             accuracyAutoTuner.refresh(accuracyValidationLab.matched())
         }
-        val processedMetrics = if (!offlineTestMode && ::accuracyAutoTuner.isInitialized) accuracyAutoTuner.apply(baseMetrics) else baseMetrics
+        val tunedMetrics = if (!offlineTestMode && ::accuracyAutoTuner.isInitialized) accuracyAutoTuner.apply(baseMetrics) else baseMetrics
+        val processedMetrics = if (!offlineTestMode && ::accuracyAutoTuner.isInitialized && ::accuracyValidationLab.isInitialized) {
+            V14EmpiricalUncertainty.apply(
+                tunedMetrics,
+                accuracyValidationLab.matched(),
+                accuracyAutoTuner.profileKey(),
+                accuracyAutoTuner.current()
+            )
+        } else tunedMetrics
         if (!offlineTestMode) calibrationShotsSinceCheck++
         updateMetricCards(processedMetrics)
 
-        engine.launch(
-            processedMetrics
-        )
+        val latencyCatchup = TvInstantRollRuntime.elapsedSec()?.coerceIn(0.0, 3.0) ?: 0.0
+        engine.launch(processedMetrics)
+        if (latencyCatchup > .015) {
+            var remaining = latencyCatchup
+            var guard = 0
+            while (remaining > 0.0 && engine.lastResult == null && guard < 420) {
+                val step = minOf(.010, remaining)
+                engine.step(step)
+                remaining -= step
+                guard++
+            }
+        }
+        engine.state?.let { TvInstantRollRuntime.handoff(it.x, it.y) } ?: TvInstantRollRuntime.clear()
 
         startSimulationTicker()
 
@@ -3732,6 +3774,11 @@ class MainActivity : AppCompatActivity() {
       preScore?.let { append(" · SCORE ${it.total}") }
       coach?.let { append(" · ${it.headline}") }
       processedMetrics.uncertainty?.let { append("\n${it.compact()}") }
+      processedMetrics.roll?.takeIf { it.markedBall }?.let { rr ->
+          append("\nROLL ")
+          rr.spinRpm?.let { append("${"%.0f".format(it)}rpm") }
+          rr.rollStartDistanceCm?.let { append(" · START ${"%.1f".format(it)}cm") }
+      }
   }
 
         overlay.invalidate()
