@@ -23,10 +23,11 @@ jobs:
       - name: Wire V23 markerless integrations
         run: |
           python3 ci/v23_apply.py
-          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/V23MarkerlessCalibrator.kt app/src/main/java/com/puttvision/screen/MainActivity.kt; then
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/V23MarkerlessCalibrator.kt app/src/main/java/com/puttvision/screen/AutoCalibrator.kt app/src/main/java/com/puttvision/screen/MainActivity.kt; then
             git config user.name "puttvision-v23-bot"
             git config user.email "actions@users.noreply.github.com"
             git add app/src/main/java/com/puttvision/screen/V23MarkerlessCalibrator.kt \
+                    app/src/main/java/com/puttvision/screen/AutoCalibrator.kt \
                     app/src/main/java/com/puttvision/screen/MainActivity.kt
             git diff --cached --check
             git commit -m "feat: wire V23 markerless-first normal calibration"
