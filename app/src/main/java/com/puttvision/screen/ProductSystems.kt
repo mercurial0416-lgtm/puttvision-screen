@@ -184,7 +184,7 @@ class CameraStabilityController {
                     val availableBanding = runCatching {
                         Camera2CameraInfo.from(camera.cameraInfo)
                             .getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_ANTIBANDING_MODES)
-                    }.getOrNull().orEmpty()
+                    }.getOrNull() ?: intArrayOf()
                     val bandingMode = when {
                         availableBanding.contains(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ) ->
                             CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ
