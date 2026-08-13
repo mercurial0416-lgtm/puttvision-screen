@@ -85,17 +85,93 @@ if changed:
 else:
     print("V23 fitter guards/RANSAC already current")
 
-# Keep image/world arrays in the exact same BL,BR,TR,TL order for downstream diagnostics/drift.
+# AutoCalibrator: keep point ordering aligned and make each ImageProxy serial deliver at most once.
 auto = Path("app/src/main/java/com/puttvision/screen/AutoCalibrator.kt")
 text = auto.read_text(encoding="utf-8")
+auto_changed = False
 if "imagePoints = detection.fitImagePoints()," not in text:
     old = "imagePoints = detection.cornersPx,"
     if text.count(old) != 1:
         raise SystemExit(f"V23 point ordering: expected 1 match, got {text.count(old)}")
-    auto.write_text(text.replace(old, "imagePoints = detection.fitImagePoints(),", 1), encoding="utf-8")
-    print("V23 markerless point ordering applied")
+    text = text.replace(old, "imagePoints = detection.fitImagePoints(),", 1)
+    auto_changed = True
+
+if "private var frameSerial = 0L" not in text:
+    marker = "    private var lastDeliveryNs = 0L\n"
+    if text.count(marker) != 1:
+        raise SystemExit("V23 frame serial field insertion point missing")
+    text = text.replace(
+        marker,
+        marker + "    private var frameSerial = 0L\n    private var lastDeliveredFrameSerial = -1L\n",
+        1,
+    )
+    auto_changed = True
+
+if "val serial = ++frameSerial" not in text:
+    marker = '''        if (media == null) {
+            busy.set(false)
+            image.close()
+            return
+        }
+
+'''
+    if text.count(marker) != 1:
+        raise SystemExit("V23 frame serial analyze insertion point missing")
+    text = text.replace(marker, marker + "        val serial = ++frameSerial\n\n", 1)
+    auto_changed = True
+
+replacements = [
+    ("processMarkerless(image, markerless)", "processMarkerless(image, markerless, serial)"),
+    (".addOnSuccessListener { codes -> processQr(image, codes) }", ".addOnSuccessListener { codes -> processQr(image, codes, serial) }"),
+    ("private fun processMarkerless(image: ImageProxy, detection: V23MarkerlessDetection?)", "private fun processMarkerless(image: ImageProxy, detection: V23MarkerlessDetection?, serial: Long)"),
+    ("private fun processQr(image: ImageProxy, codes: List<Barcode>)", "private fun processQr(image: ImageProxy, codes: List<Barcode>, serial: Long)"),
+    ("if (deliver(result)) {", "if (deliver(result, serial)) {")
+]
+for old, new in replacements:
+    if new in text:
+        continue
+    count = text.count(old)
+    expected = 2 if old == "if (deliver(result)) {" else 1
+    if count != expected:
+        raise SystemExit(f"V23 serial patch {old!r}: expected {expected}, got {count}")
+    text = text.replace(old, new)
+    auto_changed = True
+
+old_deliver = '''    @Synchronized
+    private fun deliver(result: CalibrationResult): Boolean {
+        val now = System.nanoTime()
+        // Markerless and QR can finish on the same frame. Prevent duplicate callbacks while still
+        // allowing another attempt when ProductCalibrationQuality rejects a weak result.
+        if (lastDeliveryNs != 0L && now - lastDeliveryNs < 500_000_000L) return false
+        lastDeliveryNs = now
+        onCalibrated(result)
+        return true
+    }'''
+new_deliver = '''    @Synchronized
+    private fun deliver(result: CalibrationResult, serial: Long): Boolean {
+        val now = System.nanoTime()
+        // Markerless and QR share the same ImageProxy. A slow QR callback must never overwrite a
+        // markerless result from that exact frame, even if ML processing takes longer than cooldown.
+        if (lastDeliveredFrameSerial == serial) return false
+        // Cross-frame cooldown still allows a fresh attempt if ProductCalibrationQuality rejects
+        // the previous candidate while preventing rapid oscillation between two valid sources.
+        if (lastDeliveryNs != 0L && now - lastDeliveryNs < 350_000_000L) return false
+        lastDeliveredFrameSerial = serial
+        lastDeliveryNs = now
+        onCalibrated(result)
+        return true
+    }'''
+if new_deliver not in text:
+    if text.count(old_deliver) != 1:
+        raise SystemExit(f"V23 deliver block: expected 1 legacy block, got {text.count(old_deliver)}")
+    text = text.replace(old_deliver, new_deliver, 1)
+    auto_changed = True
+
+if auto_changed:
+    auto.write_text(text, encoding="utf-8")
+    print("V23 markerless ordering/frame-idempotence applied")
 else:
-    print("V23 markerless point ordering already current")
+    print("V23 AutoCalibrator already current")
 
 # The visible setup status should match the actual markerless-first policy.
 main = Path("app/src/main/java/com/puttvision/screen/MainActivity.kt")
