@@ -62,7 +62,7 @@ class V15PerformanceSystemsTest {
         val fit = V15PutterFitter.fit(enough, null)
         assertNotNull(fit)
         assertEquals(28, fit!!.sampleCount)
-        assertTrue(fit.confidence in .45..90)
+        assertTrue(fit.confidence in .45..0.90)
     }
 
     @Test fun multiCameraFusionWeightsCompanionsWithoutBreakingPrimary() {
