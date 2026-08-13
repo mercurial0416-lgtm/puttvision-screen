@@ -1,0 +1,45 @@
+name: Verify PuttVision V13 core temp
+
+on:
+  push:
+    branches: [ v13-offline-test-and-reliability ]
+    paths:
+      - '.github/workflows/v13-core-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v13-offline-test-and-reliability
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Apply V13 core
+        run: python .v13/apply_v13_core.py
+      - name: Diff sanity
+        run: git diff --check
+      - name: Unit regression
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+      - name: Compile both channels
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
+      - name: Commit verified app changes
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app
+          if git diff --cached --quiet; then
+            echo 'No app changes to commit'
+            exit 1
+          fi
+          git commit -m 'feat: V13 reliability core and hardwareless engine'
+          git push origin HEAD:v13-offline-test-and-reliability
