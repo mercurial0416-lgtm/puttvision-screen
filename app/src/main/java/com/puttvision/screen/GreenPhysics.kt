@@ -46,14 +46,21 @@ class GreenPhysics {
         private const val RIM_CONTACT_RADIUS_M = CUP_RADIUS_M + BALL_RADIUS_M * 0.80
     }
 
-    fun launch(metrics: ShotMetrics, settings: GreenSettings): SimState {
+    fun launch(
+        metrics: ShotMetrics,
+        settings: GreenSettings,
+        startX: Double = 0.0,
+        startY: Double = 0.0
+    ): SimState {
         val a = Math.toRadians(metrics.launchAngleDeg)
         val speed = metrics.ballSpeedMps.coerceIn(0.05, 5.0)
         return SimState(
+            x = startX,
+            y = startY,
             vx = speed * sin(a),
             vy = speed * cos(a),
             running = true,
-            trail = mutableListOf(0.0 to 0.0)
+            trail = mutableListOf(startX to startY)
         )
     }
 

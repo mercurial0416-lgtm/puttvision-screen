@@ -303,7 +303,8 @@ class GreenReadDiskCache(context: Context) {
     fun clear() = prefs.edit().clear().apply()
 
     private fun stableKey(key: GreenReadKey): String = listOf(
-        key.profile, key.distance100, key.stimp100, key.side100, key.long100, key.putter100
+        key.profile, key.distance100, key.stimp100, key.side100, key.long100, key.putter100,
+        key.startX100, key.startY100
     ).joinToString(":")
 
     private fun slot(stable: String): String {
