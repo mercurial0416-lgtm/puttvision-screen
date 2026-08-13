@@ -61,7 +61,9 @@ class GameEngine {
     fun launch(metrics: ShotMetrics) {
         val deviceAdjusted = V16DeviceAutoCalibrationRuntime.applyFallback(metrics)
         V16CompanionLinkRuntime.publishIfCompanion(deviceAdjusted)
-        val effectiveMetrics = V15CompanionRuntime.fusePrimary(deviceAdjusted)
+        val effectiveMetrics = V21CaptureConsistencyRuntime.adjust(
+            V15CompanionRuntime.fusePrimary(deviceAdjusted)
+        )
         currentShot = effectiveMetrics
         metricConfidence = V16MetricConfidenceEstimator.estimate(effectiveMetrics)
         lastResult = null

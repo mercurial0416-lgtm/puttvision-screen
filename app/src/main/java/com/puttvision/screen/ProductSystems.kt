@@ -3,6 +3,7 @@ package com.puttvision.screen
 import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Color
+import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
 import android.speech.tts.TextToSpeech
 import android.text.InputType
@@ -16,6 +17,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
@@ -176,12 +178,25 @@ class CameraStabilityController {
             val future = camera.cameraControl.startFocusAndMetering(action)
             future.addListener({
                 runCatching {
-                    val opts = CaptureRequestOptions.Builder()
+                    val options = CaptureRequestOptions.Builder()
                         .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
                         .setCaptureRequestOption(CaptureRequest.CONTROL_AWB_LOCK, true)
-                        .build()
+                    val availableBanding = runCatching {
+                        Camera2CameraInfo.from(camera.cameraInfo)
+                            .getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_ANTIBANDING_MODES)
+                    }.getOrNull().orEmpty()
+                    val bandingMode = when {
+                        availableBanding.contains(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ) ->
+                            CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ
+                        availableBanding.contains(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO) ->
+                            CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_AUTO
+                        else -> availableBanding.firstOrNull()
+                    }
+                    if (bandingMode != null) {
+                        options.setCaptureRequestOption(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE, bandingMode)
+                    }
                     Camera2CameraControl.from(camera.cameraControl)
-                        .setCaptureRequestOptions(opts)
+                        .setCaptureRequestOptions(options.build())
                 }
             }, ContextCompat.getMainExecutor(previewView.context))
         }
@@ -193,6 +208,7 @@ class CameraStabilityController {
         runCatching {
             Camera2CameraControl.from(camera.cameraControl).clearCaptureRequestOptions()
         }
+        V21CaptureConsistencyRuntime.reset()
         activeCamera = null
     }
 }

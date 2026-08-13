@@ -3018,8 +3018,10 @@ class MainActivity : AppCompatActivity() {
         tracker.cancel()
         engine.resetSimulation()
 
+        val previewBuilder = Preview.Builder()
+        V21CaptureConsistencyRuntime.attach(previewBuilder)
         val preview =
-            Preview.Builder()
+            previewBuilder
                 .build()
                 .also {
                     it.setSurfaceProvider(
