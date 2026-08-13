@@ -61,13 +61,14 @@ fun showV16MatSetupDialog(context: Context, manager: MatCalibrationManager) {
     root.addView(length, LinearLayout.LayoutParams(-1, context.pvDp(48)))
 
     val message = buildString {
-        append("QR은 가장 정확한 기준이고, V16은 저장한 매트 크기와 영상의 매트 윤곽을 이용해 HFR에서 QR 없는 보정도 시도합니다.\n")
+        append("V23은 저장한 실제 매트 크기와 카메라 영상의 매트 윤곽만으로 일반 30/60fps와 HFR 모두 자동 보정합니다.\n")
+        append("QR 마커는 이제 필수가 아니라, 매트가 가려졌거나 조명이 어려울 때 쓰는 정밀/복구 보조입니다.\n")
         append("현재 매트 속도: ${manager.statusLabel()}\n\n")
-        append("처음 한 번 QR로 맞춘 뒤 같은 거치 위치를 쓰는 것을 권장합니다.")
+        append("폭/길이는 실제 매트 치수를 입력하세요. 같은 거치 위치를 쓰면 이후에는 폰을 놓고 매트가 잡히는 즉시 READY 됩니다.")
     }
 
     val dialog = AlertDialog.Builder(context)
-        .setTitle("매트 자동 인식")
+        .setTitle("매트 자동 캘리브레이션")
         .setMessage(message)
         .setView(root)
         .setNegativeButton("취소", null)
@@ -83,7 +84,11 @@ fun showV16MatSetupDialog(context: Context, manager: MatCalibrationManager) {
                 return@setOnClickListener
             }
             store.save(w, l, true)
-            Toast.makeText(context, "매트 ${"%.0f".format(w)} × ${"%.0f".format(l)}cm 저장 · QR 없는 HFR 보정 ON", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                "매트 ${"%.0f".format(w)} × ${"%.0f".format(l)}cm 저장 · V23 마커리스 자동캘 ON",
+                Toast.LENGTH_LONG
+            ).show()
             dialog.dismiss()
         }
     }
