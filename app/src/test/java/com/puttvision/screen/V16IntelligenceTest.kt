@@ -41,7 +41,7 @@ class V16IntelligenceTest {
         val fit = V16DeviceCalibrator.fit("test", samples)
         assertNotNull(fit)
         assertTrue(fit!!.speedScale in 1.0..1.10)
-        assertTrue(fit.launchBiasDeg in .30..45)
+        assertTrue(fit.launchBiasDeg in .30..0.45)
     }
 
     private fun metrics(
