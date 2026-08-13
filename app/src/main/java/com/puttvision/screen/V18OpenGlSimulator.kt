@@ -98,6 +98,7 @@ private class V18PuttingRenderer(
     private var terrainKey: V18TerrainKey? = null
     private var terrainMesh: V18Mesh? = null
     private var roughMesh: V18Mesh? = null
+    private var decorMesh: V18Mesh? = null
 
     private val eye = floatArrayOf(0f, -1.65f, .72f)
     private val target = floatArrayOf(0f, 2.0f, .03f)
@@ -136,6 +137,7 @@ private class V18PuttingRenderer(
         GLES20.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
 
         roughMesh?.let { draw(it, GLES20.GL_TRIANGLES) }
+        decorMesh?.let { draw(it, GLES20.GL_TRIANGLES) }
         terrainMesh?.let { draw(it, GLES20.GL_TRIANGLES) }
         drawAimAndRead(settings)
         drawGhost(settings)
@@ -155,6 +157,7 @@ private class V18PuttingRenderer(
         terrainKey = key
         terrainMesh = buildTerrain(settings)
         roughMesh = buildRough(settings)
+        decorMesh = V18Mesh(V18ProceduralDecor.build(settings))
     }
 
     private fun buildRough(settings: GreenSettings): V18Mesh {
@@ -283,8 +286,14 @@ private class V18PuttingRenderer(
     private fun drawBall(settings: GreenSettings) {
         val state = engine.state
         val display = TvInstantRollRuntime.displayPosition(state) ?: if (state != null) state.x to state.y else 0.0 to 0.0
-        val z = GreenTerrain.effectiveHeightAt(settings, display.first, display.second).toFloat() + .023f
-        draw(sphere(display.first.toFloat(), display.second.toFloat(), z, .043f), GLES20.GL_TRIANGLES)
+        val ground = GreenTerrain.effectiveHeightAt(settings, display.first, display.second).toFloat()
+        // Soft contact shadow anchors the ball to the 3D green instead of making it look pasted on.
+        draw(
+            circle(display.first.toFloat() + .012f, display.second.toFloat() + .010f, ground + .003f, .052f,
+                floatArrayOf(.015f, .020f, .015f, .22f), 24),
+            GLES20.GL_TRIANGLES
+        )
+        draw(sphere(display.first.toFloat(), display.second.toFloat(), ground + .043f, .043f), GLES20.GL_TRIANGLES)
     }
 
     private fun ribbon(
