@@ -311,7 +311,7 @@ class ImpactReplayView(context: Context) : View(context) {
         val items = listOf(
             "TOGGLE" to if (paused) "PLAY" else "PAUSE",
             "LINE" to "LINE", "CIRCLE" to "CIRCLE", "ANGLE" to "ANGLE",
-            "UNDO" to "UNDO", "CLEAR" to "CLEAR"
+            "UNDO" to "UNDO", "CLEAR" to "CLEAR", "SHARE" to "SHARE"
         )
         val gap = w * .004f
         val bh = h * .038f
@@ -343,6 +343,7 @@ class ImpactReplayView(context: Context) : View(context) {
             "ANGLE" -> { setPaused(true); annotations.selectTool(if (annotations.tool==V27ReplayTool.ANGLE) V27ReplayTool.NONE else V27ReplayTool.ANGLE) }
             "UNDO" -> { setPaused(true); annotations.undo() }
             "CLEAR" -> { setPaused(true); annotations.clear() }
+            "SHARE" -> { setPaused(true); V28ReplayShare.share(context, this) }
         }
         invalidate()
     }

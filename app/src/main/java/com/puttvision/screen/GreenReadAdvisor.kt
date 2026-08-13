@@ -15,7 +15,8 @@ data class GreenReadKey(
     val putter100: Int,
     val startX100: Int,
     val startY100: Int,
-    val pace100: Int
+    val pace100: Int,
+    val customGreenHash: Int
 )
 
 data class GreenRead(
@@ -69,7 +70,8 @@ object GreenReadAdvisor {
             (putterWidth * 100.0).toInt(),
             (start.first * 100.0).toInt(),
             (start.second * 100.0).toInt(),
-            (targetCupSpeedMps * 100.0).toInt()
+            (targetCupSpeedMps * 100.0).toInt(),
+            V28CustomGreenCodec.signature(V22CustomGreenRuntime.profile)
         )
     }
 

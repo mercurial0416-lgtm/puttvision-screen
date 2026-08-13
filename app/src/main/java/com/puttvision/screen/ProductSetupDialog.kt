@@ -114,6 +114,10 @@ fun showProductSetupDialog(
         showV22CustomGreenDialog(context)
     })
 
+    addAction(action("CUSTOM GREEN SHARE", "JSON 공유 · 불러오기") {
+        V28CustomGreenShare.show(context)
+    })
+
     addAction(action("PERFORMANCE COMPARE", V20PerformanceRuntime.report.headline) {
         showV20PerformanceCompareDialog(context)
     })

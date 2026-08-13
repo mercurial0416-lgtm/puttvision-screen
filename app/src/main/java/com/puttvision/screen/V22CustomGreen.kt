@@ -56,6 +56,7 @@ object V22CustomGreenRuntime {
                 putFloat("long_$i", n.longPct.toFloat())
             }
         }.apply()
+        GreenReadRuntime.clearRuntimeCache()
     }
 
     fun disable(context: Context) = save(context, false, profile.nodes)
