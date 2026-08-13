@@ -49,3 +49,81 @@ if changed:
     main.write_text(text, encoding="utf-8")
 else:
     print("V22 MainActivity already current")
+
+# Preserve camera thermal headroom: render the 3D TV fast only while the ball/camera is moving.
+gl = Path("app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt")
+gl_text = gl.read_text(encoding="utf-8")
+gl_changed = False
+if "import android.os.Handler" not in gl_text:
+    gl_text = gl_text.replace(
+        "import android.opengl.Matrix\n",
+        "import android.opengl.Matrix\nimport android.os.Handler\nimport android.os.Looper\n",
+        1,
+    )
+    gl_changed = True
+
+legacy_view = '''private class V18PuttingGlView(
+    context: Context,
+    engine: GameEngine
+) : GLSurfaceView(context) {
+    init {
+        setEGLContextClientVersion(2)
+        setRenderer(V18PuttingRenderer(engine))
+        renderMode = RENDERMODE_CONTINUOUSLY
+        preserveEGLContextOnPause = true
+    }
+}'''
+
+throttled_view = '''private class V18PuttingGlView(
+    context: Context,
+    private val engine: GameEngine
+) : GLSurfaceView(context) {
+    private val renderHandler = Handler(Looper.getMainLooper())
+    private var loopRunning = false
+    private val renderTick = object : Runnable {
+        override fun run() {
+            if (!loopRunning || !isAttachedToWindow) return
+            requestRender()
+            val moving = engine.state?.running == true || TvInstantRollRuntime.isAnimating()
+            val delay = when {
+                moving -> 16L
+                engine.lastResult == null -> 66L
+                else -> 180L
+            }
+            renderHandler.postDelayed(this, delay)
+        }
+    }
+
+    init {
+        setEGLContextClientVersion(2)
+        setRenderer(V18PuttingRenderer(engine))
+        renderMode = RENDERMODE_WHEN_DIRTY
+        preserveEGLContextOnPause = true
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        loopRunning = true
+        renderHandler.removeCallbacks(renderTick)
+        renderHandler.post(renderTick)
+    }
+
+    override fun onDetachedFromWindow() {
+        loopRunning = false
+        renderHandler.removeCallbacks(renderTick)
+        super.onDetachedFromWindow()
+    }
+}'''
+
+if throttled_view not in gl_text:
+    count = gl_text.count(legacy_view)
+    if count != 1:
+        raise SystemExit(f"V22 GL throttle: expected 1 legacy view, got {count}")
+    gl_text = gl_text.replace(legacy_view, throttled_view, 1)
+    gl_changed = True
+    print("V22 adaptive OpenGL render cadence wired")
+
+if gl_changed:
+    gl.write_text(gl_text, encoding="utf-8")
+else:
+    print("V22 OpenGL cadence already current")
