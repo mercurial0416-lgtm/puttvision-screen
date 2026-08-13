@@ -24,7 +24,9 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Apply V13 core
-        run: python .v13/apply_v13_core.py
+        run: |
+          python .v13/apply_v13_core.py
+          python .v13/fix_v13_core.py
       - name: Diff sanity
         run: git diff --check
       - name: Unit regression
