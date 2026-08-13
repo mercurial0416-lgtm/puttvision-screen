@@ -85,11 +85,11 @@ fun showProductSetupDialog(
         showPutterProfileManager(context, putterStore) { }
     })
 
-    val fit = V15PutterFitRuntime.latest
-    val fitTitle = fit?.let {
-        "${it.balance.label} · ${it.head.label} · ${(it.confidence * 100).toInt()}%"
-    } ?: "${V15PutterFitRuntime.currentSampleCount}/20구 · 분석 중"
-    addAction(action("AI PUTTER FIT", fitTitle) { showV15PutterFitDialog(context) })
+    val fit2 = V16PutterFit2Runtime.snapshot
+    val fitTitle = fit2.current?.let {
+        "적합도 ${it.fitScore} · ${fit2.currentRecommendation?.head?.label ?: "분석중"}"
+    } ?: "${V15PutterFitRuntime.currentSampleCount}/8구 · 비교 데이터 수집"
+    addAction(action("AI PUTTER FIT 2.0", fitTitle) { showV16PutterFit2Dialog(context) })
 
     val coach = V16Runtime.personalCoach
     addAction(action(
