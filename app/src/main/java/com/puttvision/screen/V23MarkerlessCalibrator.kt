@@ -202,7 +202,7 @@ object V23MatQuadFitter {
         val widthRatio = topW / bottomW.coerceAtLeast(.01)
         if (widthRatio !in .28..1.38) return null
         val aspect = ((leftH + rightH) * .5) / ((topW + bottomW) * .5).coerceAtLeast(.01)
-        if (aspect !in .45..9.0) return null
+        if (aspect !in .62..9.0) return null
         val centerX = corners.map { it.x }.average() / grid.width
         if (centerX !in .10..0.90) return null
         val bottomY = (bl.y + br.y) * .5 / grid.height
