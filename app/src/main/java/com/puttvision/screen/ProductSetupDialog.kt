@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Typeface
 import android.view.Gravity
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 fun showProductSetupDialog(
@@ -15,7 +16,11 @@ fun showProductSetupDialog(
 ) {
     val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(context.pvDp(16), context.pvDp(8), context.pvDp(16), context.pvDp(4))
+        setPadding(context.pvDp(16), context.pvDp(8), context.pvDp(16), context.pvDp(8))
+    }
+    val scroll = ScrollView(context).apply {
+        isFillViewport = true
+        addView(root, ScrollView.LayoutParams(-1, -2))
     }
 
     root.addView(TextView(context).apply {
@@ -26,7 +31,7 @@ fun showProductSetupDialog(
         letterSpacing = .12f
     })
     root.addView(TextView(context).apply {
-        text = "실제 장비 기준, AI 코칭, 멀티폰 카메라와 무터치 세션을 설정합니다."
+        text = "실제 장비 기준, 기기 보정, AI 코칭, 멀티폰 카메라와 무터치 세션을 설정합니다."
         setTextColor(Pv.textMid)
         textSize = context.pvSp(8.5f)
         setPadding(0, context.pvDp(4), 0, context.pvDp(10))
@@ -53,6 +58,7 @@ fun showProductSetupDialog(
                 setTextColor(Pv.textHi)
                 textSize = context.pvSp(9f)
                 typeface = Typeface.DEFAULT_BOLD
+                maxLines = 1
             })
             addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
             addView(TextView(context).apply {
@@ -91,11 +97,15 @@ fun showProductSetupDialog(
         coach?.let { "${it.primary.headline} · 개선 ${it.improvementScore}" } ?: "8구부터 개인 패턴 학습"
     ) { showV16PersonalCoachDialog(context) })
 
+    addAction(action("DEVICE AUTO CAL", V16DeviceAutoCalibrationRuntime.statusLabel()) {
+        showV16DeviceCalibrationDialog(context)
+    })
+
     addAction(action("MULTI PHONE CAMERA", V16CompanionLinkRuntime.status().label) {
         showV16CompanionDialog(context)
     })
 
-    addAction(action("PHYSICAL MAT", matManager.statusLabel()) {
+    addAction(action("PHYSICAL MAT", "${matManager.statusLabel()} · ${"%.0f".format(V16MatGeometryRuntime.lengthCm)}cm") {
         showV16MatSetupDialog(context, matManager)
     })
 
@@ -112,7 +122,7 @@ fun showProductSetupDialog(
 
     dialog = AlertDialog.Builder(context)
         .setTitle("제품 설정")
-        .setView(root)
+        .setView(scroll)
         .setNegativeButton("닫기", null)
         .create()
     dialog.show()
