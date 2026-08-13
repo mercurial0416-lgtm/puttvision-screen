@@ -32,7 +32,7 @@ fun showProductSetupDialog(
         letterSpacing = .12f
     })
     root.addView(TextView(context).apply {
-        text = "장비 기준, 기기 보정, AI 코칭, 커스텀 그린, 사운드와 멀티폰 카메라를 설정합니다."
+        text = "장비 기준, 기기 보정, AI 코칭, 온라인 리그, 커스텀 그린, 사운드와 멀티폰 카메라를 설정합니다."
         setTextColor(Pv.textMid)
         textSize = context.pvSp(8.5f)
         setPadding(0, context.pvDp(4), 0, context.pvDp(10))
@@ -97,6 +97,10 @@ fun showProductSetupDialog(
         "PERSONAL AI COACH",
         coach?.let { "${it.primary.headline} · 개선 ${it.improvementScore}" } ?: "8구부터 개인 패턴 학습"
     ) { showV16PersonalCoachDialog(context) })
+
+    addAction(action("ONLINE LEAGUE", V31OnlineRuntime.statusLabel(context)) {
+        showV31OnlineLeagueDialog(context)
+    })
 
     addAction(action("GREEN READ TRAINING", "${V20GreenReadTrainingRuntime.mode.label} · 샷 후 정답 공개") {
         showV20GreenReadModeDialog(context)

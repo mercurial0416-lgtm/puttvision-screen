@@ -26,6 +26,7 @@ object GreenReadRuntime {
                 if (diskCache == null) diskCache = GreenReadDiskCache(context.applicationContext)
             }
         }
+        V31TrainingSessionRuntime.install(context)
     }
 
     fun prefetch(settings: GreenSettings) {
