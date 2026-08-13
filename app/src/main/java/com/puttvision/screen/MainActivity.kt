@@ -1332,7 +1332,11 @@ class MainActivity : AppCompatActivity() {
                     0 -> "9홀 매치"
                     1 -> "18홀 매치"
                     2 -> "거리 맞추기"
-                    else -> "랜덤 경사"
+                    3 -> "랜덤 경사"
+                    4 -> "퍼팅 다트"
+                    5 -> "퍼팅 컬링"
+                    6 -> "배틀 퍼팅"
+                    else -> "고스트 챌린지"
                 }
                 setTextColor(Pv.textHi)
                 textSize = scaledSp(if (compact) 17f else 21f)
@@ -1344,7 +1348,11 @@ class MainActivity : AppCompatActivity() {
                     0 -> "빠르게 즐기는 9홀 스코어 매치"
                     1 -> "거리와 경사가 이어지는 풀 라운드"
                     2 -> "목표 거리에 가장 가깝게 붙이기"
-                    else -> "매 샷 달라지는 그린을 읽는 게임"
+                    3 -> "매 샷 달라지는 그린을 읽는 게임"
+                    4 -> "홀 주변 링에 붙일수록 높은 점수"
+                    5 -> "센터에 가장 가깝게 보내는 정밀 게임"
+                    6 -> "최대 4명이 턴제로 겨루는 스코어 배틀"
+                    else -> "내 최고 기록의 궤적과 정면 승부"
                 }
                 setTextColor(Pv.textMid)
                 textSize = scaledSp(if (compact) 6.7f else 7.8f)
@@ -1370,14 +1378,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     panel.addView(label("게임 모드"))
-    val modes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    listOf("9홀", "18홀", "거리", "랜덤 경사").forEachIndexed { i, title ->
-        modes.addView(darkChoice(title, gameModeIndex == i) {
-            gameModeIndex = i
-            showGameEntrance()
-        }, LinearLayout.LayoutParams(0, sdp(if (compact) 36 else 42), 1f).apply { if (i > 0) marginStart = sdp(5) })
+    val modeRows = listOf(
+        listOf(0 to "9홀", 1 to "18홀", 2 to "거리", 3 to "랜덤"),
+        listOf(4 to "다트", 5 to "컬링", 6 to "배틀", 7 to "고스트")
+    )
+    modeRows.forEachIndexed { rowIndex, entries ->
+        val modes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        entries.forEachIndexed { i, entry ->
+            val modeIndex = entry.first
+            modes.addView(darkChoice(entry.second, gameModeIndex == modeIndex) {
+                gameModeIndex = modeIndex
+                showGameEntrance()
+            }, LinearLayout.LayoutParams(0, sdp(if (compact) 31 else 36), 1f).apply { if (i > 0) marginStart = sdp(4) })
+        }
+        panel.addView(modes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (rowIndex == 0) 5 else 4) })
     }
-    panel.addView(modes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(5) })
 
     val middle = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -1444,7 +1459,12 @@ class MainActivity : AppCompatActivity() {
                 text = when (gameModeIndex) {
                     0 -> "9 HOLES"
                     1 -> "18 HOLES"
-                    else -> "RANDOM TERRAIN"
+                    3 -> "RANDOM TERRAIN"
+                    4 -> "PUTTING DART"
+                    5 -> "PUTTING CURLING"
+                    6 -> "PUTTING BATTLE"
+                    7 -> "GHOST CHALLENGE"
+                    else -> "DISTANCE CONTROL"
                 }
                 setTextColor(Pv.amber)
                 textSize = scaledSp(if (compact) 8f else 9.2f)
@@ -1455,7 +1475,12 @@ class MainActivity : AppCompatActivity() {
                 text = when (gameModeIndex) {
                     0 -> "  ·  홀마다 거리/경사 자동 구성"
                     1 -> "  ·  누적 스코어 풀 라운드"
-                    else -> "  ·  매 샷 다른 2D 그린 프로필"
+                    3 -> "  ·  매 샷 다른 2D 그린 프로필"
+                    4 -> "  ·  컵 주변 점수 링 정밀 공략"
+                    5 -> "  ·  센터 거리로 점수를 겨루는 모드"
+                    6 -> "  ·  최대 4인 턴제 점수 배틀"
+                    7 -> "  ·  내 베스트 샷과 실시간 비교"
+                    else -> "  ·  목표 거리 오차 최소화"
                 }
                 setTextColor(Pv.textMid)
                 textSize = scaledSp(if (compact) 6.4f else 7.4f)
@@ -1470,7 +1495,7 @@ class MainActivity : AppCompatActivity() {
         gravity = Gravity.CENTER_VERTICAL
     }
     footer.addView(TextView(this).apply {
-        text = "${gamePlayers}명  ·  ${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "${gameDistanceM}m 거리"; else -> "랜덤 경사" }}  ·  GREEN ${"%.1f".format(practiceGreenSpeed)}"
+        text = "${gamePlayers}명  ·  ${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "${gameDistanceM}m 거리"; 3 -> "랜덤 경사"; 4 -> "다트"; 5 -> "컬링"; 6 -> "배틀"; else -> "고스트" }}  ·  GREEN ${"%.1f".format(practiceGreenSpeed)}"
         setTextColor(Pv.textMid)
         textSize = scaledSp(if (compact) 6.8f else 8f)
         typeface = Typeface.MONOSPACE
@@ -1761,7 +1786,7 @@ class MainActivity : AppCompatActivity() {
         includeFontPadding = false
     })
     right.addView(TextView(this).apply {
-        text = if (game) "${gamePlayers}인 · ${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "거리 맞추기"; else -> "랜덤 경사" }}" else "${practiceCount}구 · ${practiceDistanceM}m · Green ${"%.1f".format(practiceGreenSpeed)}"
+        text = if (game) "${gamePlayers}인 · ${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "거리 맞추기"; 3 -> "랜덤 경사"; 4 -> "다트"; 5 -> "컬링"; 6 -> "배틀"; else -> "고스트" }}" else "${practiceCount}구 · ${practiceDistanceM}m · Green ${"%.1f".format(practiceGreenSpeed)}"
         setTextColor(Pv.textMid)
         textSize = scaledSp(if (compact) 8f else 9f)
         typeface = Typeface.MONOSPACE
@@ -1795,7 +1820,11 @@ class MainActivity : AppCompatActivity() {
                 0 -> PracticeMode.NINE_HOLE
                 1 -> PracticeMode.EIGHTEEN_HOLE
                 2 -> PracticeMode.DISTANCE
-                else -> PracticeMode.RANDOM_SLOPE
+                3 -> PracticeMode.RANDOM_SLOPE
+                4 -> PracticeMode.DART
+                5 -> PracticeMode.CURLING
+                6 -> PracticeMode.BATTLE
+                else -> PracticeMode.GHOST
             }
             engine.gameModes.setMode(mode)
         } else {
@@ -1977,7 +2006,7 @@ class MainActivity : AppCompatActivity() {
         practiceShotsTaken = s.practiceShotsTaken.coerceIn(0, practiceCount)
         practicePatternShotIndex = s.practicePatternShotIndex.coerceAtLeast(0)
         gamePlayers = s.gamePlayers.coerceIn(1, 4)
-        gameModeIndex = s.gameModeIndex.coerceIn(0, 3)
+        gameModeIndex = s.gameModeIndex.coerceIn(0, 7)
         gameDistanceM = s.gameDistanceM.coerceIn(1, 15)
         engine.settings.holeDistanceM = s.holeDistanceM
         engine.settings.stimpMeters = s.stimpMeters
