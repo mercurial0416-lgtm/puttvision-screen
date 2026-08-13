@@ -1,0 +1,46 @@
+name: Verify V29 auto discovery and TV material
+
+on:
+  push:
+    branches: [ agent/v29-auto-discovery-tv-material ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v29-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wire V29 systems
+        shell: bash
+        run: |
+          python ci/v29_patch_discovery.py
+          python ci/v29_patch_tv_material.py
+          if ! git diff --quiet; then
+            git diff --check
+            git config user.name "puttvision-v29-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add FEATURE_MATRIX.json \
+              app/src/main/java/com/puttvision/screen/V16CompanionUi.kt \
+              app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt
+            git commit -m "feat: wire V29 auto discovery and TV material"
+            git push
+          fi
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
