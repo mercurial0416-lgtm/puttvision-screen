@@ -36,6 +36,7 @@ jobs:
           grep -q 'TvImpactReplayView' app/src/main/java/com/puttvision/screen/ExternalDisplayController.kt
           grep -q 'onCalibrationDrift' app/src/main/java/com/puttvision/screen/MainActivity.kt
           grep -q 'uncertainty = uncertainty' app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt
+          grep -q 'reachedClosestApproach' app/src/main/java/com/puttvision/screen/GreenPhysics.kt
           git diff --check
       - name: Full unit regression
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
