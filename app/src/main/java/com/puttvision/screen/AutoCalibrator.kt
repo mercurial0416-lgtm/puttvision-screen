@@ -19,7 +19,8 @@ data class CalibrationResult(
     val fitPointCount: Int = 4,
     val reprojectionRmsPx: Double? = null,
     val maxReprojectionErrorPx: Double? = null,
-    val lensK1: Double? = null
+    val lensK1: Double? = null,
+    val setupAdvice: V15SetupAdvice? = null
 )
 
 class AutoCalibrator(
@@ -56,9 +57,14 @@ class AutoCalibrator(
                     stableHits = if (similarSignature(signature, lastSignature)) stableHits + 1 else 1
                     lastSignature = signature
                     val q = latestFrameQuality?.overallScore
+                    val setup = V15SetupAssistant.evaluate(image.width, image.height, resolved.imagePoints)
                     onStatus(buildString {
                         append("${resolved.source} ${resolved.fitImagePoints.size}개 · 안정화 $stableHits/3")
                         if (q != null) append(" · Q$q")
+                        if (setup != null) {
+                            append(" · 설치 ${setup.score}")
+                            if (!setup.ready) append(" · ${setup.primaryHint}")
+                        }
                     })
 
                     if (stableHits >= 3) {
@@ -81,7 +87,8 @@ class AutoCalibrator(
                                     fitPointCount = d.pointCount,
                                     reprojectionRmsPx = d.reprojectionRmsPx,
                                     maxReprojectionErrorPx = d.maxReprojectionErrorPx,
-                                    lensK1 = d.lensK1
+                                    lensK1 = d.lensK1,
+                                    setupAdvice = setup
                                 )
                             )
                             stableHits = 0
