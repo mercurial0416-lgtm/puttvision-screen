@@ -7,8 +7,8 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 
-fun showV16PutterFit2Dialog(context: Context, records: List<ShotRecord>) {
-    val snapshot = V16PutterFit2.analyze(records)
+fun showV16PutterFit2Dialog(context: Context) {
+    val snapshot = V16PutterFit2Runtime.snapshot
     val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(context.pvDp(18), context.pvDp(8), context.pvDp(18), context.pvDp(8))
