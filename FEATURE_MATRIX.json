@@ -1,5 +1,5 @@
 {
-  "version": "v22-development",
+  "version": "v23-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -9,6 +9,10 @@
     "robust_trajectory_false_positive_gate": true,
     "marked_ball_skid_roll_analysis": true,
     "markerless_mat_fallback": true,
+    "fully_markerless_normal_session_calibration": true,
+    "markerless_yuv_perspective_quad_fitter": true,
+    "markerless_temporal_stability_gate": true,
+    "markerless_qr_precision_fallback": true,
     "physical_cup_detection": true,
     "live_phone_placement_guidance": true,
     "mat_friction_auto_cal": true,
@@ -64,10 +68,10 @@
     "kotlin_regression_gate": true,
     "consumer_developer_unit_tests": true,
     "consumer_developer_debug_apk_compile": true,
-    "v22_ci_passed": true,
+    "v23_synthetic_markerless_regression_passed": true,
     "real_device_fixture_gate_script": "ci/v20_accuracy_gate.py",
     "real_device_reference_fixture_committed": false,
     "galaxy_s25_runtime_validation_still_required": true,
-    "fully_markerless_normal_session_calibration": false
+    "fully_markerless_normal_session_calibration": true
   }
 }
