@@ -22,6 +22,7 @@ jobs:
       - name: Wire V26 systems
         run: |
           python3 ci/v26_apply.py
+          python3 ci/v26_polish.py
           if ! git diff --quiet; then
             git config user.name "puttvision-v26-bot"
             git config user.email "actions@users.noreply.github.com"
@@ -38,7 +39,7 @@ jobs:
                     app/src/main/java/com/puttvision/screen/V26ReportBuilder.kt \
                     FEATURE_MATRIX.json
             git diff --cached --check
-            git commit -m "feat: wire V26 green insight and move ball"
+            git commit -m "feat: finalize V26 green insight and move ball"
             git push origin HEAD:agent/v26-green-visuals-report-builder
           fi
       - uses: actions/setup-java@v5
