@@ -1,0 +1,17 @@
+PuttVision V14 optional PV2 multi-point calibration markers
+
+Legacy PV1 4-marker mats remain supported. PV2 is optional and enables an over-determined camera fit with measured reprojection error and radial lens correction when 6 or more markers are visible.
+
+Recommended 8-point layout on a 45 cm x 100 cm measurement area:
+
+PV2|BL|-22.5|0
+PV2|BR|22.5|0
+PV2|TR|22.5|100
+PV2|TL|-22.5|100
+PV2|L25|-22.5|25
+PV2|R25|22.5|25
+PV2|L75|-22.5|75
+PV2|R75|22.5|75
+
+Coordinates are centimeters in the same PuttVision world coordinate system used by PV1.
+Use all 8 when possible. Six or more distinct PV2 markers enable lens/reprojection diagnostics; four PV2 corner markers behave like a normal four-point calibration and do not claim a statistically meaningful over-determined reprojection residual.
