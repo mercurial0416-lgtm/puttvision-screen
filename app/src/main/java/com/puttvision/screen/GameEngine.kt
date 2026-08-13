@@ -56,7 +56,8 @@ class GameEngine {
     fun seedHistory(records: List<ShotRecord>) {
         recentRecords = records.takeLast(80)
         V15GhostRuntime.seed(records.takeLast(240))
-        putterFitRecommendation = V15PutterFitter.fit(records)
+        V15PutterFitRuntime.update(records)
+        putterFitRecommendation = V15PutterFitRuntime.latest
     }
 
     @Synchronized
@@ -130,7 +131,8 @@ class GameEngine {
                 ghostComparison = V15GhostRuntime.compare(record, s.trail)
                 V15GhostRuntime.consider(record)
                 recentRecords = (recentRecords + record).takeLast(80)
-                putterFitRecommendation = V15PutterFitter.fit(recentRecords)
+                V15PutterFitRuntime.update(recentRecords)
+                putterFitRecommendation = V15PutterFitRuntime.latest
                 onRecordFinalized?.invoke(record)
                 gameModes.onResult(r)
                 V15AutoFlowRuntime.result()
