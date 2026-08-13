@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Typeface
 import android.view.Gravity
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -20,7 +21,7 @@ fun showProductSetupDialog(
     }
     val scroll = ScrollView(context).apply {
         isFillViewport = true
-        addView(root, ScrollView.LayoutParams(-1, -2))
+        addView(root, FrameLayout.LayoutParams(-1, -2))
     }
 
     root.addView(TextView(context).apply {
