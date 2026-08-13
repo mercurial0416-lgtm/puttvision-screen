@@ -122,6 +122,10 @@ fun showProductSetupDialog(
         showV16MatSetupDialog(context, matManager)
     })
 
+    addAction(action("TV 3D QUALITY", V24TvQualityRuntime.label()) {
+        showV24TvQualityDialog(context)
+    })
+
     addAction(action("PUTTING AUDIO", if (V22AudioRuntime.enabled) "공 타격 · 롤 · 컵 사운드 ON" else "사운드 OFF") {
         val enabled = V22AudioRuntime.toggle(context)
         dialog.dismiss()

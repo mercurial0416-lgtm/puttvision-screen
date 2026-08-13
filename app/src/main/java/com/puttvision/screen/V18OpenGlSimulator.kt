@@ -61,6 +61,7 @@ private class V18PuttingGlView(
     context: Context,
     private val engine: GameEngine
 ) : GLSurfaceView(context) {
+    private val appContext = context.applicationContext
     private val renderHandler = Handler(Looper.getMainLooper())
     private var loopRunning = false
     private val renderTick = object : Runnable {
@@ -68,10 +69,11 @@ private class V18PuttingGlView(
             if (!loopRunning || !isAttachedToWindow) return
             requestRender()
             val moving = engine.state?.running == true || TvInstantRollRuntime.isAnimating()
+            val tier = V24TvQualityRuntime.snapshot(appContext).tier
             val delay = when {
-                moving -> 16L
-                engine.lastResult == null -> 66L
-                else -> 180L
+                moving -> tier.movingFrameMs
+                engine.lastResult == null -> tier.idleFrameMs
+                else -> max(180L, tier.idleFrameMs * 2L)
             }
             renderHandler.postDelayed(this, delay)
         }
@@ -79,7 +81,7 @@ private class V18PuttingGlView(
 
     init {
         setEGLContextClientVersion(2)
-        setRenderer(V18PuttingRenderer(engine))
+        setRenderer(V18PuttingRenderer(appContext, engine))
         renderMode = RENDERMODE_WHEN_DIRTY
         preserveEGLContextOnPause = true
     }
@@ -102,7 +104,8 @@ private data class V18TerrainKey(
     val profile: Int,
     val distance100: Int,
     val side100: Int,
-    val long100: Int
+    val long100: Int,
+    val qualityTier: V24RenderTier
 )
 
 private class V18Mesh(data: FloatArray) {
@@ -114,6 +117,7 @@ private class V18Mesh(data: FloatArray) {
 }
 
 private class V18PuttingRenderer(
+    private val context: Context,
     private val engine: GameEngine
 ) : GLSurfaceView.Renderer {
     private var program = 0
@@ -178,15 +182,17 @@ private class V18PuttingRenderer(
     }
 
     private fun ensureTerrain(settings: GreenSettings) {
+        val tier = V24TvQualityRuntime.snapshot(context).tier
         val key = V18TerrainKey(
             settings.terrainProfileId,
             (settings.holeDistanceM * 100).toInt(),
             (settings.sideSlopePct * 100).toInt(),
-            (settings.longSlopePct * 100).toInt()
+            (settings.longSlopePct * 100).toInt(),
+            tier
         )
         if (key == terrainKey) return
         terrainKey = key
-        terrainMesh = buildTerrain(settings)
+        terrainMesh = buildTerrain(settings, tier)
         roughMesh = buildRough(settings)
         decorMesh = V18Mesh(V18ProceduralDecor.build(settings))
     }
@@ -198,11 +204,11 @@ private class V18PuttingRenderer(
         return V18Mesh(quad(-9f, -3.5f, 9f, d.toFloat(), z, c))
     }
 
-    private fun buildTerrain(settings: GreenSettings): V18Mesh {
+    private fun buildTerrain(settings: GreenSettings, tier: V24RenderTier): V18Mesh {
         val distance = max(3.5, settings.holeDistanceM * 1.32)
         val halfWidth = max(1.45, settings.holeDistanceM * .20)
-        val cols = 28
-        val rows = 72
+        val cols = tier.terrainCols
+        val rows = tier.terrainRows
         val out = ArrayList<Float>(cols * rows * 60)
         fun vertex(x: Double, y: Double, band: Int) {
             val z = GreenTerrain.effectiveHeightAt(settings, x, y).toFloat()

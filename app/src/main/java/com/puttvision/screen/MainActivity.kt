@@ -259,6 +259,7 @@ class MainActivity : AppCompatActivity() {
         V20ProductPreferences.install(this)
         V22CustomGreenRuntime.install(this)
         V22AudioRuntime.install(this)
+        V24TvQualityRuntime.install(this)
         voiceCoach = HandsFreeVoiceCoach(this)
         accuracyValidationLab = AccuracyValidationLab(this)
         accuracyAutoTuner = AccuracyAutoTuner(this, deviceReport.model)
