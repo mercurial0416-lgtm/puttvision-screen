@@ -1,0 +1,54 @@
+name: Verify V27 pace and replay analysis
+
+on:
+  push:
+    branches: [ agent/v27-pace-replay-annotations ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v27-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wire V27 systems
+        shell: bash
+        run: |
+          python ci/v27_patch_core.py
+          python ci/v27_patch_greenread.py
+          python ci/v27_patch_replay.py
+          python ci/v27_patch_hold.py
+          python ci/v27_patch_polish.py
+          if ! git diff --quiet; then
+            git diff --check
+            git config user.name "puttvision-v27-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add FEATURE_MATRIX.json \
+              app/src/main/java/com/puttvision/screen/GreenPhysics.kt \
+              app/src/main/java/com/puttvision/screen/GreenReadAdvisor.kt \
+              app/src/main/java/com/puttvision/screen/V13Reliability.kt \
+              app/src/main/java/com/puttvision/screen/MainActivity.kt \
+              app/src/main/java/com/puttvision/screen/V26SettingsDialogs.kt \
+              app/src/main/java/com/puttvision/screen/V26GreenVisuals.kt \
+              app/src/main/java/com/puttvision/screen/ImpactReplayView.kt
+            git commit -m "feat: wire V27 cup pace and replay analysis"
+            git push
+          fi
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
