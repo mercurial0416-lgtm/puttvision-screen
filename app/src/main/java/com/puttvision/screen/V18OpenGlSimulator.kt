@@ -516,7 +516,7 @@ private class V18SimulatorHudView(
         c.drawRoundRect(RectF(l,t,l+ww,t+hh), hh*.36f,hh*.36f,p)
         p.textAlign = Paint.Align.CENTER; p.typeface = Typeface.DEFAULT_BOLD
         p.textSize = max(10f,w*.0072f); p.color = Color.WHITE
-        c.drawText("${"%.1f".format(engine.settings.holeDistanceM)} m", l+ww*.30f,t+hh*.42f,p)
+        c.drawText("${"%.2f".format(engine.settings.holeDistanceM)} m", l+ww*.30f,t+hh*.42f,p)
         p.textSize = max(7f,w*.0052f); p.color = Color.argb(180,230,235,230)
         c.drawText("DISTANCE",l+ww*.30f,t+hh*.73f,p)
         p.color = Color.argb(60,255,255,255); c.drawRect(l+ww*.58f,t+hh*.18f,l+ww*.58f+1,t+hh*.82f,p)

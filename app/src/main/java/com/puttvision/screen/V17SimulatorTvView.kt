@@ -434,7 +434,7 @@ class V17SimulatorTvView(
         p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         p.textSize = max(16f, w * .0115f)
         p.color = Color.WHITE
-        c.drawText("${"%.1f".format(settings.holeDistanceM)}m", left + totalW * .285f, top + hh * .76f, p)
+        c.drawText("${"%.2f".format(settings.holeDistanceM)} m", left + totalW * .285f, top + hh * .76f, p)
 
         p.typeface = Typeface.DEFAULT_BOLD
         p.textSize = max(8f, w * .0052f)

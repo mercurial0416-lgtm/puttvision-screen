@@ -103,11 +103,11 @@ fun showProductSetupDialog(
     })
 
     addAction(action("GREEN VISUALS", V26GreenVisualRuntime.label()) {
-        showV26GreenVisualDialog(context)
+        showV26GreenVisualSettingsDialog(context)
     })
 
-    addAction(action("MOVE BALL", V26BallStartRuntime.label(engineSettingsForProductSetup())) {
-        showV26MoveBallDialog(context, engineSettingsForProductSetup())
+    addAction(action("MOVE BALL", V26BallStartRuntime.label(V26ProductSettingsRuntime.settings)) {
+        showV26MoveBallDialog(context, V26ProductSettingsRuntime.settings)
     })
 
     addAction(action("CUSTOM GREEN", V22CustomGreenRuntime.label()) {
