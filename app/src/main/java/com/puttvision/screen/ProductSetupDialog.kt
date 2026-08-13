@@ -32,7 +32,7 @@ fun showProductSetupDialog(
         letterSpacing = .12f
     })
     root.addView(TextView(context).apply {
-        text = "장비 기준, 기기 보정, AI 코칭, 블라인드 그린 리드, 성능 비교와 멀티폰 카메라를 설정합니다."
+        text = "장비 기준, 기기 보정, AI 코칭, 커스텀 그린, 사운드와 멀티폰 카메라를 설정합니다."
         setTextColor(Pv.textMid)
         textSize = context.pvSp(8.5f)
         setPadding(0, context.pvDp(4), 0, context.pvDp(10))
@@ -102,6 +102,10 @@ fun showProductSetupDialog(
         showV20GreenReadModeDialog(context)
     })
 
+    addAction(action("CUSTOM GREEN", V22CustomGreenRuntime.label()) {
+        showV22CustomGreenDialog(context)
+    })
+
     addAction(action("PERFORMANCE COMPARE", V20PerformanceRuntime.report.headline) {
         showV20PerformanceCompareDialog(context)
     })
@@ -116,6 +120,13 @@ fun showProductSetupDialog(
 
     addAction(action("PHYSICAL MAT", "${matManager.statusLabel()} · ${"%.0f".format(V16MatGeometryRuntime.lengthCm)}cm") {
         showV16MatSetupDialog(context, matManager)
+    })
+
+    addAction(action("PUTTING AUDIO", if (V22AudioRuntime.enabled) "공 타격 · 롤 · 컵 사운드 ON" else "사운드 OFF") {
+        val enabled = V22AudioRuntime.toggle(context)
+        dialog.dismiss()
+        showProductSetupDialog(context, putterStore, matManager, voiceCoach)
+        android.widget.Toast.makeText(context, if (enabled) "퍼팅 사운드 ON" else "퍼팅 사운드 OFF", android.widget.Toast.LENGTH_SHORT).show()
     })
 
     addAction(action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {

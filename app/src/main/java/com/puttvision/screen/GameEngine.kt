@@ -84,6 +84,7 @@ class GameEngine {
         strokeScore = StrokeScorer.score(effectiveMetrics, null, recentRecords)
         coachFeedback = CoachEngine.diagnose(effectiveMetrics, strokeScore!!, recentRecords)
         V15AutoFlowRuntime.rolling()
+        V22AudioRuntime.launch(effectiveMetrics.ballSpeedMps)
         state = physics.launch(effectiveMetrics, settings)
     }
 
@@ -95,6 +96,7 @@ class GameEngine {
         val r = physics.step(s, settings, dt)
         if (r != null && lastResult == null) {
             lastResult = r
+            V22AudioRuntime.result(r)
             val metrics = currentShot
             if (metrics != null) {
                 val modeAtShot = gameModes.status.mode
