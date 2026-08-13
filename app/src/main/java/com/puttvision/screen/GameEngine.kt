@@ -7,60 +7,33 @@ class GameEngine {
 
     private val physics = GreenPhysics()
 
-    @Volatile
-    var currentShot: ShotMetrics? = null
+    @Volatile var currentShot: ShotMetrics? = null
         private set
-
-    @Volatile
-    var state: SimState? = null
+    @Volatile var state: SimState? = null
         private set
-
-    @Volatile
-    var lastResult: SimResult? = null
+    @Volatile var lastResult: SimResult? = null
         private set
-
-    @Volatile
-    var strokeScore: StrokeScore? = null
+    @Volatile var strokeScore: StrokeScore? = null
         private set
-
-    @Volatile
-    var coachFeedback: CoachFeedback? = null
+    @Volatile var coachFeedback: CoachFeedback? = null
         private set
-
-    @Volatile
-    var performanceSnapshot: V15PerformanceSnapshot? = null
+    @Volatile var performanceSnapshot: V15PerformanceSnapshot? = null
         private set
-
-    @Volatile
-    var metricConfidence: V16MetricConfidence? = null
+    @Volatile var metricConfidence: V16MetricConfidence? = null
         private set
-
-    @Volatile
-    var personalCoachSnapshot: V16PersonalCoachSnapshot? = null
+    @Volatile var personalCoachSnapshot: V16PersonalCoachSnapshot? = null
         private set
-
-    @Volatile
-    var dailyTrainingPlan: V16DailyTrainingPlan = V16TrainingPlanner.build(null)
+    @Volatile var dailyTrainingPlan: V16DailyTrainingPlan = V16TrainingPlanner.build(null)
         private set
-
-    @Volatile
-    var putterFitRecommendation: V15PutterFitRecommendation? = null
+    @Volatile var putterFitRecommendation: V15PutterFitRecommendation? = null
         private set
-
-    @Volatile
-    var ghostComparison: V15GhostComparison? = null
+    @Volatile var ghostComparison: V15GhostComparison? = null
         private set
-
-    @Volatile
-    var recentRecords: List<ShotRecord> = emptyList()
+    @Volatile var recentRecords: List<ShotRecord> = emptyList()
         private set
-
-    @Volatile
-    var latestRecord: ShotRecord? = null
+    @Volatile var latestRecord: ShotRecord? = null
         private set
-
-    @Volatile
-    var matStimpEstimateM: Double? = null
+    @Volatile var matStimpEstimateM: Double? = null
         private set
 
     var onRecordFinalized: ((ShotRecord) -> Unit)? = null
@@ -69,6 +42,7 @@ class GameEngine {
         recentRecords = records.takeLast(120)
         V15GhostRuntime.seed(records.takeLast(240))
         V15PutterFitRuntime.update(records)
+        V16PutterFit2Runtime.update(records)
         putterFitRecommendation = V15PutterFitRuntime.latest
         V16Runtime.update(records)
         personalCoachSnapshot = V16Runtime.personalCoach
@@ -77,12 +51,7 @@ class GameEngine {
 
     @Synchronized
     fun launch(metrics: ShotMetrics) {
-        // HFR teaches a small device-specific speed correction. Only lower-speed fallback
-        // measurements receive it, so HFR is never corrected twice.
         val deviceAdjusted = V16DeviceAutoCalibrationRuntime.applyFallback(metrics)
-
-        // A secondary phone publishes its own measurement; a host consumes all recent companion
-        // measurements through the existing confidence-weighted V15 fusion path.
         V16CompanionLinkRuntime.publishIfCompanion(deviceAdjusted)
         val effectiveMetrics = V15CompanionRuntime.fusePrimary(deviceAdjusted)
         currentShot = effectiveMetrics
@@ -92,23 +61,12 @@ class GameEngine {
         ghostComparison = null
 
         effectiveMetrics.estimatedMatStimpM?.let { estimate ->
-            matStimpEstimateM =
-                matStimpEstimateM?.let { old -> old * 0.78 + estimate * 0.22 } ?: estimate
+            matStimpEstimateM = matStimpEstimateM?.let { old -> old * 0.78 + estimate * 0.22 } ?: estimate
         }
 
         performanceSnapshot = V15PerformanceAnalyzer.analyze(effectiveMetrics, recentRecords)
-        strokeScore = StrokeScorer.score(
-            metrics = effectiveMetrics,
-            result = null,
-            recent = recentRecords
-        )
-
-        coachFeedback = CoachEngine.diagnose(
-            metrics = effectiveMetrics,
-            score = strokeScore!!,
-            recent = recentRecords
-        )
-
+        strokeScore = StrokeScorer.score(effectiveMetrics, null, recentRecords)
+        coachFeedback = CoachEngine.diagnose(effectiveMetrics, strokeScore!!, recentRecords)
         V15AutoFlowRuntime.rolling()
         state = physics.launch(effectiveMetrics, settings)
     }
@@ -129,11 +87,11 @@ class GameEngine {
                 val sideSlope = settings.sideSlopePct
                 val longSlope = settings.longSlopePct
 
-                val finalScore = StrokeScorer.score(metrics = metrics, result = r, recent = recentRecords)
+                val finalScore = StrokeScorer.score(metrics, r, recentRecords)
                 strokeScore = finalScore
                 performanceSnapshot = V15PerformanceAnalyzer.analyze(metrics, recentRecords)
                 metricConfidence = V16MetricConfidenceEstimator.estimate(metrics)
-                coachFeedback = CoachEngine.diagnose(metrics = metrics, score = finalScore, recent = recentRecords)
+                coachFeedback = CoachEngine.diagnose(metrics, finalScore, recentRecords)
                 V16DeviceAutoCalibrationRuntime.observe(metrics)
 
                 val record = ShotRecord(
@@ -157,6 +115,7 @@ class GameEngine {
                 V15GhostRuntime.consider(record)
                 recentRecords = (recentRecords + record).takeLast(120)
                 V15PutterFitRuntime.update(recentRecords)
+                V16PutterFit2Runtime.update(recentRecords)
                 putterFitRecommendation = V15PutterFitRuntime.latest
                 V16Runtime.update(recentRecords)
                 personalCoachSnapshot = V16Runtime.personalCoach
