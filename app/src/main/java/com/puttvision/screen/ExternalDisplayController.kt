@@ -18,7 +18,7 @@ class GamePresentation(
         super.onCreate(savedInstanceState)
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
-        root.addView(V16SimulatorTvView(context, engine), FrameLayout.LayoutParams(-1, -1))
+        root.addView(V17SimulatorTvView(context, engine), FrameLayout.LayoutParams(-1, -1))
         root.addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
     }
@@ -58,7 +58,7 @@ class ExternalDisplayController(
         }
 
         if (presentation?.display?.displayId == display.displayId) {
-            onChanged(true, "TV 연결됨 · ${display.name} · V16 SIM UI")
+            onChanged(true, "TV 연결됨 · ${display.name} · V17 SIM UI")
             return
         }
 
@@ -66,7 +66,7 @@ class ExternalDisplayController(
         presentation = GamePresentation(context, display, engine).also {
             try {
                 it.show()
-                onChanged(true, "TV 연결됨 · ${display.name} · V16 SIM UI")
+                onChanged(true, "TV 연결됨 · ${display.name} · V17 SIM UI")
             } catch (e: Throwable) {
                 presentation = null
                 onChanged(false, "TV 화면 열기 실패 · ${e.message}")
