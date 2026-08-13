@@ -60,9 +60,13 @@ class ShotTracker {
         impactNs = null
         armed = true
         finalized = false
+        V15AutoFlowRuntime.ready()
     }
 
-    fun cancel() { armed = false }
+    fun cancel() {
+        armed = false
+        V15AutoFlowRuntime.idle()
+    }
     fun isArmed(): Boolean = armed
     fun hasImpact(): Boolean = impactNs != null
 
@@ -95,7 +99,10 @@ class ShotTracker {
                 (sample.pCm.x - o.x).toDouble(),
                 (sample.pCm.y - o.y).toDouble()
             )
-            if (d >= 1.2) impactNs = sample.tNs
+            if (d >= 1.2) {
+                impactNs = sample.tNs
+                V15AutoFlowRuntime.impact()
+            }
         }
     }
 
@@ -107,6 +114,7 @@ class ShotTracker {
             (balls.last().pCm.y - o.y).toDouble()
         )
         if (distance < 22.0) return null
+        V15AutoFlowRuntime.analyzing()
         val result = calculate()
         if (result != null) {
             finalized = true
@@ -131,6 +139,9 @@ class ShotTracker {
                 )
             } else null
         }.take(18)
+        val trajectoryVerdict = V15TrajectoryGate.validate(earlyPoints)
+        if (!trajectoryVerdict.accepted && trajectoryVerdict.score < .35) return null
+
         val fit = V14RobustKinematics.fit(earlyPoints)
         val fallback = balls.firstOrNull {
             hypot(
@@ -176,9 +187,10 @@ class ShotTracker {
         val faceToPath = if (face != null && path != null) face - path else null
         val smash = if (headSpeed != null && headSpeed > 0.05) ballSpeed / headSpeed else null
         val impactOffset = impactHead?.let { (start.pCm.x - it.centerCm.x) * 10.0 }
-        val confidence = if (fit != null) {
+        val confidenceBase = if (fit != null) {
             (0.48 + (fit.sampleCount.coerceAtMost(12) / 12.0) * .22 - (fit.rmsCm / 2.5).coerceAtMost(.12)).coerceIn(.40, .72)
         } else .42
+        val confidence = (confidenceBase * .72 + trajectoryVerdict.score * .28).coerceIn(.35, .82)
         return ShotMetrics(
             ballSpeedMps = ballSpeed,
             launchAngleDeg = launch,
