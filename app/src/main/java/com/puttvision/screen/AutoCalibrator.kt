@@ -117,7 +117,7 @@ class AutoCalibrator(
         val d = h.diagnostics
         val result = CalibrationResult(
             homography = h,
-            imagePoints = detection.cornersPx,
+            imagePoints = detection.fitImagePoints(),
             realPointsCm = detection.realPointsCm(),
             frameInfo = frame,
             markerSource = "${detection.source}_V23",
