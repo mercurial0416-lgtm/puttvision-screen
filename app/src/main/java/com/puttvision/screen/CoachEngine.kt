@@ -99,9 +99,13 @@ object CoachEngine {
             )
         }
 
+        val fitting = V15PutterFitter.fit(recent)
+        val fittingText = fitting?.let {
+            " · 피팅 ${it.balance.label}/${it.head.label} (${(it.confidence * 100).toInt()}%)"
+        }.orEmpty()
         return CoachFeedback(
             headline = "${snapshot.signature.arcType.label} · 스트로크 안정적 · ${score.total}점",
-            detail = "큰 결함 없음 · ${snapshot.training.title}: ${snapshot.training.drill}",
+            detail = "큰 결함 없음 · ${snapshot.training.title}: ${snapshot.training.drill}$fittingText",
             priority = 20
         )
     }
