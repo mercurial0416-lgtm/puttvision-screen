@@ -1,5 +1,6 @@
 package com.puttvision.screen
 
+import java.util.Locale
 import kotlin.math.hypot
 
 /** V25 flag-side live target information. All user-visible values stay in metres. */
@@ -7,8 +8,8 @@ data class V25FlagInfo(
     val remainingDistanceM: Double,
     val heightDeltaM: Double
 ) {
-    val distanceLabel: String get() = "남은거리 %.2f m".format(remainingDistanceM.coerceAtLeast(0.0))
-    val heightLabel: String get() = "높이 %+.2f m".format(heightDeltaM)
+    val distanceLabel: String get() = String.format(Locale.US, "남은거리 %.2f m", remainingDistanceM.coerceAtLeast(0.0))
+    val heightLabel: String get() = String.format(Locale.US, "높이 %+.2f m", heightDeltaM)
 }
 
 object V25FlagInfoRuntime {
