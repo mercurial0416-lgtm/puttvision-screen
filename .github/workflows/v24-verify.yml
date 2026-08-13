@@ -1,0 +1,50 @@
+name: Verify V24 adaptive TV quality
+
+on:
+  push:
+    branches: [ agent/v24-adaptive-tv-quality ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v24-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire V24 adaptive quality
+        run: |
+          python3 ci/v24_apply.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/ProductSetupDialog.kt; then
+            git config user.name "puttvision-v24-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt \
+                    app/src/main/java/com/puttvision/screen/MainActivity.kt \
+                    app/src/main/java/com/puttvision/screen/ProductSetupDialog.kt
+            git diff --cached --check
+            git commit -m "feat: wire V24 adaptive TV quality"
+            git push origin HEAD:agent/v24-adaptive-tv-quality
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
