@@ -257,6 +257,8 @@ class MainActivity : AppCompatActivity() {
         V16MatGeometryStore(this)
         V16DeviceAutoCalibrationRuntime.install(this)
         V20ProductPreferences.install(this)
+        V22CustomGreenRuntime.install(this)
+        V22AudioRuntime.install(this)
         voiceCoach = HandsFreeVoiceCoach(this)
         accuracyValidationLab = AccuracyValidationLab(this)
         accuracyAutoTuner = AccuracyAutoTuner(this, deviceReport.model)
@@ -2236,14 +2238,17 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        actions.addView(pvButton("같은 조건 다시", PvButtonStyle.GHOST, textSp = if (compact) 7.8f else 9f, radiusDp = Pv.rLg) {
+        actions.addView(pvButton("같은 조건 다시", PvButtonStyle.GHOST, textSp = if (compact) 7.2f else 8.3f, radiusDp = Pv.rLg) {
             sessionActive = false
             measurementSuspended = true
             if (activeSessionIsGame) showGameEntrance() else showPracticeEntrance()
-        }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginEnd = sdp(5) })
-        actions.addView(pvButton("추천 훈련 시작", PvButtonStyle.PRIMARY, textSp = if (compact) 8f else 9.2f, radiusDp = Pv.rLg) {
+        }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginEnd = sdp(4) })
+        actions.addView(pvButton("PDF · CSV 공유", PvButtonStyle.GHOST, textSp = if (compact) 7.2f else 8.3f, radiusDp = Pv.rLg) {
+            V22ReportExporter.share(this, statsRepository.recent(120))
+        }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginStart = sdp(4); marginEnd = sdp(4) })
+        actions.addView(pvButton("추천 훈련 시작", PvButtonStyle.PRIMARY, textSp = if (compact) 7.2f else 8.3f, radiusDp = Pv.rLg) {
             applyAutoCoachPlan(report.plan)
-        }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginStart = sdp(5) })
+        }, LinearLayout.LayoutParams(0, sdp(if (compact) 40 else 46), 1f).apply { marginStart = sdp(4) })
         root.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (compact) 8 else 11) })
 
         replaceMenuScreen(root) { showHomeMenu() }
