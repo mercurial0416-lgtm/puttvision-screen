@@ -43,6 +43,8 @@ class AutoCalibrator(
     private var latestFrameQuality: FrameQualitySnapshot? = null
     private var markerlessStatus = "매트 자동 인식 준비"
     private var lastDeliveryNs = 0L
+    private var frameSerial = 0L
+    private var lastDeliveredFrameSerial = -1L
 
     override fun analyze(image: ImageProxy) {
         if (!busy.compareAndSet(false, true)) {
@@ -56,17 +58,19 @@ class AutoCalibrator(
             return
         }
 
+        val serial = ++frameSerial
+
         latestFrameQuality = runCatching { frameQualityEstimator.evaluate(image) }.getOrNull()
         val markerless = if (V16MatGeometryRuntime.markerlessEnabled) {
             runCatching { V23YuvMatDetector.detect(image) }.getOrNull()
         } else null
-        processMarkerless(image, markerless)
+        processMarkerless(image, markerless, serial)
 
         // Keep QR running as an optional precision/recovery path. We intentionally retain raw-frame
         // coordinates here because the homography and normal analyzer both consume sensor pixels.
         val input = InputImage.fromMediaImage(media, 0)
         scanner.process(input)
-            .addOnSuccessListener { codes -> processQr(image, codes) }
+            .addOnSuccessListener { codes -> processQr(image, codes, serial) }
             .addOnFailureListener {
                 onStatus(if (V16MatGeometryRuntime.markerlessEnabled) markerlessStatus else "QR 인식 재시도중")
             }
@@ -78,7 +82,7 @@ class AutoCalibrator(
 
     fun close() { scanner.close() }
 
-    private fun processMarkerless(image: ImageProxy, detection: V23MarkerlessDetection?) {
+    private fun processMarkerless(image: ImageProxy, detection: V23MarkerlessDetection?, serial: Long) {
         if (!V16MatGeometryRuntime.markerlessEnabled) {
             matStability.reset()
             markerlessStatus = "QR 보정 모드"
@@ -128,7 +132,7 @@ class AutoCalibrator(
             lensK1 = d.lensK1,
             setupAdvice = setup
         )
-        if (deliver(result)) {
+        if (deliver(result, serial)) {
             matStability.reset()
             qrStableHits = 0
             lastQrSignature = ""
@@ -137,7 +141,7 @@ class AutoCalibrator(
         }
     }
 
-    private fun processQr(image: ImageProxy, codes: List<Barcode>) {
+    private fun processQr(image: ImageProxy, codes: List<Barcode>, serial: Long) {
         val resolved = resolveCodes(codes)
         if (resolved == null) {
             qrStableHits = 0
@@ -186,7 +190,7 @@ class AutoCalibrator(
             lensK1 = d.lensK1,
             setupAdvice = setup
         )
-        if (deliver(result)) {
+        if (deliver(result, serial)) {
             qrStableHits = 0
             lastQrSignature = ""
             matStability.reset()
@@ -194,11 +198,15 @@ class AutoCalibrator(
     }
 
     @Synchronized
-    private fun deliver(result: CalibrationResult): Boolean {
+    private fun deliver(result: CalibrationResult, serial: Long): Boolean {
         val now = System.nanoTime()
-        // Markerless and QR can finish on the same frame. Prevent duplicate callbacks while still
-        // allowing another attempt when ProductCalibrationQuality rejects a weak result.
-        if (lastDeliveryNs != 0L && now - lastDeliveryNs < 500_000_000L) return false
+        // Markerless and QR share the same ImageProxy. A slow QR callback must never overwrite a
+        // markerless result from that exact frame, even if ML processing takes longer than cooldown.
+        if (lastDeliveredFrameSerial == serial) return false
+        // Cross-frame cooldown still allows a fresh attempt if ProductCalibrationQuality rejects
+        // the previous candidate while preventing rapid oscillation between two valid sources.
+        if (lastDeliveryNs != 0L && now - lastDeliveryNs < 350_000_000L) return false
+        lastDeliveredFrameSerial = serial
         lastDeliveryNs = now
         onCalibrated(result)
         return true
