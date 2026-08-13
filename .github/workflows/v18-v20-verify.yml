@@ -46,5 +46,13 @@ jobs:
       - name: V18-V20 unit and regression tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
+      - name: Real-device accuracy gate when fixtures exist
+        run: |
+          if [ -f validation/v20_reference.csv ] && [ -f validation/v20_measured.csv ]; then
+            python3 ci/v20_accuracy_gate.py validation/v20_reference.csv validation/v20_measured.csv
+          else
+            echo "No real-device fixtures committed yet; Kotlin regression gate remains active."
+          fi
+
       - name: Compile consumer and developer APKs
         run: gradle assembleConsumerDebug assembleDeveloperDebug
