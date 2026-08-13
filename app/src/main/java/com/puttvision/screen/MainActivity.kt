@@ -263,6 +263,7 @@ class MainActivity : AppCompatActivity() {
         V26BallStartRuntime.install(this)
         V26GreenVisualRuntime.install(this)
         V26ReportPreferences.install(this)
+        V27CupPaceRuntime.install(this)
         voiceCoach = HandsFreeVoiceCoach(this)
         accuracyValidationLab = AccuracyValidationLab(this)
         accuracyAutoTuner = AccuracyAutoTuner(this, deviceReport.model)
