@@ -34,15 +34,19 @@ object V28CompanionProtocol {
     fun syncAck(raw: String, expectedCode: String, serverMs: Long): String? = runCatching {
         val j = JSONObject(raw)
         require(j.optInt("pv") == VERSION && j.optString("type") == "sync")
-        require(j.optString("code") == expectedCode)
         JSONObject().apply {
-            put("pv", VERSION); put("type", "sync_ack"); put("t0", j.getLong("t0")); put("t1", serverMs)
+            put("pv", VERSION)
+            put("type", "sync_ack")
+            put("t0", j.getLong("t0"))
+            put("t1", serverMs)
+            put("ok", j.optString("code") == expectedCode)
         }.toString()
     }.getOrNull()
 
     fun parseSyncAck(raw: String, expectedT0: Long, t2: Long): V28ClockSync? = runCatching {
         val j = JSONObject(raw)
         require(j.optInt("pv") == VERSION && j.optString("type") == "sync_ack")
+        require(j.optBoolean("ok", false))
         require(j.getLong("t0") == expectedT0)
         V28ClockSyncEstimator.estimate(expectedT0, j.getLong("t1"), t2)
     }.getOrNull()
