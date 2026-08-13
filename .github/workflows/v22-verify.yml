@@ -1,0 +1,48 @@
+name: Verify V22 reports custom green audio
+
+on:
+  push:
+    branches: [ agent/v22-reports-custom-green-audio ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v22-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire V22 UI integrations
+        run: |
+          python3 ci/v22_apply.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt; then
+            git config user.name "puttvision-v22-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/MainActivity.kt
+            git diff --cached --check
+            git commit -m "feat: wire V22 reports custom green and audio"
+            git push origin HEAD:agent/v22-reports-custom-green-audio
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
