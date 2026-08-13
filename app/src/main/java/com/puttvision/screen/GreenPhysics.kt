@@ -64,7 +64,12 @@ class GreenPhysics {
         )
     }
 
-    fun step(state: SimState, settings: GreenSettings, dtRaw: Double): SimResult? {
+    fun step(
+        state: SimState,
+        settings: GreenSettings,
+        dtRaw: Double,
+        cupEnabled: Boolean = true
+    ): SimResult? {
         if (!state.running) return result(state, settings)
 
         val dt = dtRaw.coerceIn(0.001, 0.025)
@@ -135,7 +140,7 @@ class GreenPhysics {
         // Capture is evaluated while the ball is still approaching the opening.
         // Do this before rim contact so a centered, properly paced putt is not
         // incorrectly bounced off an imaginary vertical wall in front of the cup.
-        if (closestDist <= CAPTURE_CENTER_RADIUS_M && nowSpeed <= captureSpeed) {
+        if (cupEnabled && closestDist <= CAPTURE_CENTER_RADIUS_M && nowSpeed <= captureSpeed) {
             state.x = cupX
             state.y = cupY
             state.vx = 0.0
@@ -155,6 +160,7 @@ class GreenPhysics {
         // its closest approach. Entering the outer rim radius while still moving
         // toward the hole is not itself a collision.
         if (
+            cupEnabled &&
             closestDist <= RIM_CONTACT_RADIUS_M &&
             reachedClosestApproach &&
             state.elapsed - state.lastCupContactSec > 0.075

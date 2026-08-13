@@ -1,5 +1,5 @@
 {
-  "version": "v26-development",
+  "version": "v27-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -73,7 +73,12 @@
     "recommended_speed_swing_guide": true,
     "move_ball_shared_physics_and_green_read": true,
     "custom_report_builder": true,
-    "report_distance_units_meters": true
+    "report_distance_units_meters": true,
+    "selectable_cup_entry_pace": true,
+    "pace_changes_green_read_line_and_speed": true,
+    "hfr_manual_line_circle_angle_annotations": true,
+    "hfr_manual_frame_scrub": true,
+    "hfr_annotation_undo_clear": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -86,6 +91,8 @@
     "fully_markerless_normal_session_calibration": true,
     "v25_flag_unit_regression_test": true,
     "v26_contour_regression_test": true,
-    "v26_virtual_start_physics_test": true
+    "v26_virtual_start_physics_test": true,
+    "v27_pace_solver_regression_test": true,
+    "v27_replay_geometry_test": true
   }
 }
