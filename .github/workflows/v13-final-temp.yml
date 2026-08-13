@@ -1,0 +1,55 @@
+name: Verify PuttVision V13 final temp
+
+on:
+  push:
+    branches: [ v13-offline-test-and-reliability ]
+    paths:
+      - '.github/workflows/v13-final-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-final:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v13-offline-test-and-reliability
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Apply V13 UI and renderer
+        run: |
+          python .v13/apply_v13_green.py
+          python .v13/apply_v13_main.py
+      - name: Static V13 guards
+        shell: bash
+        run: |
+          grep -q '장비 없이 테스트' app/src/main/java/com/puttvision/screen/MainActivity.kt
+          grep -q 'showHardwarelessTestLab' app/src/main/java/com/puttvision/screen/MainActivity.kt
+          grep -q 'effectiveHeightAt(settings' app/src/main/java/com/puttvision/screen/GreenView.kt
+          grep -q 'TvImpactReplayView' app/src/main/java/com/puttvision/screen/ExternalDisplayController.kt
+          grep -q 'onCalibrationDrift' app/src/main/java/com/puttvision/screen/MainActivity.kt
+          grep -q 'uncertainty = uncertainty' app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt
+          git diff --check
+      - name: Full unit regression
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+      - name: Compile both app channels
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
+      - name: Commit verified V13 app
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app
+          if git diff --cached --quiet; then
+            echo 'No app changes to commit'
+            exit 1
+          fi
+          git commit -m 'feat: V13 hardwareless lab and unified TV surface'
+          git push origin HEAD:v13-offline-test-and-reliability
