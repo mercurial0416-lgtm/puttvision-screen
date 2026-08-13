@@ -10,7 +10,11 @@ enum class PracticeMode(val label: String) {
     EIGHTEEN_HOLE("18홀"),
     STREAK("연속 성공"),
     PRESSURE("압박 퍼팅"),
-    RANDOM_SLOPE("랜덤 경사")
+    RANDOM_SLOPE("랜덤 경사"),
+    DART("퍼팅 다트"),
+    CURLING("퍼팅 컬링"),
+    BATTLE("배틀 퍼팅"),
+    GHOST("고스트")
 }
 
 data class GameStatus(
@@ -111,8 +115,6 @@ class GameModeEngine(
         if (status.activePlayer < status.playerCount) {
             status.activePlayer++
             syncActivePlayerState()
-            // Pressure difficulty depends on each player's own streak; other modes keep the same
-            // hole/target for all players so multiplayer is fair.
             if (status.mode == PracticeMode.PRESSURE) prepareHole()
             return
         }
@@ -153,9 +155,7 @@ class GameModeEngine(
 
             PracticeMode.PRESSURE -> {
                 settings.holeDistanceM = 1.0 + status.streak * 0.25
-                settings.sideSlopePct = if (status.streak >= 4) {
-                    random.nextDouble(-1.8, 1.8)
-                } else 0.0
+                settings.sideSlopePct = if (status.streak >= 4) random.nextDouble(-1.8, 1.8) else 0.0
                 settings.longSlopePct = 0.0
             }
 
@@ -163,6 +163,39 @@ class GameModeEngine(
                 settings.holeDistanceM = random.nextDouble(1.5, 9.0)
                 settings.sideSlopePct = random.nextDouble(-4.0, 4.0)
                 settings.longSlopePct = random.nextDouble(-3.0, 3.0)
+            }
+
+            PracticeMode.DART -> {
+                settings.holeDistanceM = random.nextDouble(2.0, 6.5)
+                settings.sideSlopePct = random.nextDouble(-1.2, 1.2)
+                settings.longSlopePct = random.nextDouble(-.8, .8)
+            }
+
+            PracticeMode.CURLING -> {
+                settings.holeDistanceM = 4.0
+                settings.sideSlopePct = random.nextDouble(-.55, .55)
+                settings.longSlopePct = 0.0
+            }
+
+            PracticeMode.BATTLE -> {
+                settings.holeDistanceM = random.nextDouble(1.8, 5.5)
+                settings.sideSlopePct = random.nextDouble(-1.8, 1.8)
+                settings.longSlopePct = random.nextDouble(-1.0, 1.0)
+            }
+
+            PracticeMode.GHOST -> {
+                val ghost = V15GhostRuntime.referenceForCurrent(settings)
+                if (ghost != null) {
+                    settings.holeDistanceM = ghost.record.targetDistanceM.coerceAtLeast(.5)
+                    settings.stimpMeters = ghost.record.stimpMeters
+                    settings.sideSlopePct = ghost.record.sideSlopePct
+                    settings.longSlopePct = ghost.record.longSlopePct
+                    settings.terrainProfileId = ghost.record.terrainProfileId
+                } else {
+                    settings.holeDistanceM = 3.0
+                    settings.sideSlopePct = 0.0
+                    settings.longSlopePct = 0.0
+                }
             }
         }
     }
@@ -211,11 +244,43 @@ class GameModeEngine(
             PracticeMode.RANDOM_SLOPE -> if (result.holed) 150 else {
                 (120 - result.distanceToCupM * 80.0).roundToInt().coerceIn(0, 120)
             }
+
+            PracticeMode.DART -> when {
+                result.holed -> 300
+                result.distanceToCupM <= .10 -> 250
+                result.distanceToCupM <= .20 -> 200
+                result.distanceToCupM <= .35 -> 150
+                result.distanceToCupM <= .60 -> 100
+                result.distanceToCupM <= 1.00 -> 50
+                else -> 0
+            }
+
+            PracticeMode.CURLING -> when {
+                result.holed -> 250
+                result.distanceToCupM <= .15 -> 220
+                result.distanceToCupM <= .30 -> 170
+                result.distanceToCupM <= .55 -> 110
+                result.distanceToCupM <= .90 -> 60
+                else -> 0
+            }
+
+            PracticeMode.BATTLE -> {
+                val base = if (result.holed) 180 else (140 - result.distanceToCupM * 100.0).roundToInt().coerceIn(0, 140)
+                val pressureBonus = if (status.playerCount > 1 && scores.maxOrNull() != null && scores[playerIndex] < (scores.maxOrNull() ?: 0)) 20 else 0
+                base + pressureBonus
+            }
+
+            PracticeMode.GHOST -> {
+                val ghost = V15GhostRuntime.lastComparison
+                when {
+                    ghost == null -> if (result.holed) 150 else (100 - result.distanceToCupM * 80.0).roundToInt().coerceIn(0, 100)
+                    ghost.beatGhost -> 200 + ghost.scoreDelta.coerceAtLeast(0) * 5
+                    else -> (120 + ghost.scoreDelta * 4).coerceIn(0, 119)
+                }
+            }
         }
 
-        if (status.mode != PracticeMode.PRACTICE) {
-            scores[playerIndex] += status.lastPoints
-        }
+        if (status.mode != PracticeMode.PRACTICE) scores[playerIndex] += status.lastPoints
         status.gameScore = scores[playerIndex]
         status.streak = streaks[playerIndex]
         status.bestStreak = bestStreaks.maxOrNull() ?: 0
