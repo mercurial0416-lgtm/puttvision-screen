@@ -1,0 +1,50 @@
+name: Verify V23 markerless normal calibration
+
+on:
+  push:
+    branches: [ agent/v23-markerless-normal-calibration ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v23-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire V23 markerless integrations
+        run: |
+          python3 ci/v23_apply.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/V23MarkerlessCalibrator.kt app/src/main/java/com/puttvision/screen/AutoCalibrator.kt app/src/main/java/com/puttvision/screen/MainActivity.kt; then
+            git config user.name "puttvision-v23-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/V23MarkerlessCalibrator.kt \
+                    app/src/main/java/com/puttvision/screen/AutoCalibrator.kt \
+                    app/src/main/java/com/puttvision/screen/MainActivity.kt
+            git diff --cached --check
+            git commit -m "feat: wire V23 markerless-first normal calibration"
+            git push origin HEAD:agent/v23-markerless-normal-calibration
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug

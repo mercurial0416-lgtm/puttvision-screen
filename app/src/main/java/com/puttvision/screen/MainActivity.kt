@@ -3108,7 +3108,11 @@ class MainActivity : AppCompatActivity() {
             cameraStability.stabilize(camera, previewView)
 
             overlay.status =
-                "QR 마커 4개 자동 인식중"
+                if (V16MatGeometryRuntime.markerlessEnabled) {
+                    "매트 자동 인식중 · QR은 선택"
+                } else {
+                    "QR 마커 4개 자동 인식중"
+                }
 
             overlay.invalidate()
         } catch (t: Throwable) {
