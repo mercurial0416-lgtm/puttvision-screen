@@ -2,7 +2,7 @@ name: Verify V27 pace and replay analysis
 
 on:
   push:
-    branches: [ agent/v27-pace-replay-annotations ]
+    branches: [ agent/v27-hfr-annotation-line-speed-online-foundation ]
 
 permissions:
   contents: write
@@ -21,26 +21,20 @@ jobs:
       - name: Wire V27 systems
         shell: bash
         run: |
-          python ci/v27_patch_core.py
-          python ci/v27_patch_greenread.py
-          python ci/v27_patch_replay.py
-          python ci/v27_patch_hold.py
-          python ci/v27_patch_polish.py
-          python ci/v27_fix_tool_name.py
+          python3 ci/v27_apply.py
           if ! git diff --quiet; then
             git diff --check
             git config user.name "puttvision-v27-bot"
             git config user.email "actions@users.noreply.github.com"
             git add FEATURE_MATRIX.json \
-              app/src/main/java/com/puttvision/screen/GreenPhysics.kt \
-              app/src/main/java/com/puttvision/screen/GreenReadAdvisor.kt \
-              app/src/main/java/com/puttvision/screen/V13Reliability.kt \
               app/src/main/java/com/puttvision/screen/MainActivity.kt \
-              app/src/main/java/com/puttvision/screen/V26SettingsDialogs.kt \
-              app/src/main/java/com/puttvision/screen/V26GreenVisuals.kt \
+              app/src/main/java/com/puttvision/screen/ProductSetupDialog.kt \
+              app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt \
               app/src/main/java/com/puttvision/screen/ImpactReplayView.kt \
-              app/src/main/java/com/puttvision/screen/V27ReplayAnnotations.kt
-            git commit -m "feat: wire V27 cup pace and replay analysis"
+              app/src/main/java/com/puttvision/screen/V27PaceLineOverlay.kt \
+              app/src/test/java/com/puttvision/screen/V27FrameAnnotationBookTest.kt \
+              app/src/test/java/com/puttvision/screen/V27CupPaceTest.kt
+            git commit -m "feat: wire V27 pace line and frame annotations"
             git push
           fi
       - uses: actions/setup-java@v5
