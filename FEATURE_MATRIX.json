@@ -84,7 +84,8 @@
     "annotated_replay_png_share": true,
     "companion_session_code_pairing": true,
     "companion_clock_sync": true,
-    "companion_stale_measurement_rejection": true
+    "companion_stale_measurement_rejection": true,
+    "custom_green_3d_mesh_cache_key": true
   },
   "validation": {
     "kotlin_regression_gate": true,
