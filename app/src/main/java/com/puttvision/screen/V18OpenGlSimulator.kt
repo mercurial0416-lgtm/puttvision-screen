@@ -10,6 +10,8 @@ import android.graphics.Typeface
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
 import java.nio.ByteBuffer
@@ -57,13 +59,42 @@ class V18SimulatorStage(
 
 private class V18PuttingGlView(
     context: Context,
-    engine: GameEngine
+    private val engine: GameEngine
 ) : GLSurfaceView(context) {
+    private val renderHandler = Handler(Looper.getMainLooper())
+    private var loopRunning = false
+    private val renderTick = object : Runnable {
+        override fun run() {
+            if (!loopRunning || !isAttachedToWindow) return
+            requestRender()
+            val moving = engine.state?.running == true || TvInstantRollRuntime.isAnimating()
+            val delay = when {
+                moving -> 16L
+                engine.lastResult == null -> 66L
+                else -> 180L
+            }
+            renderHandler.postDelayed(this, delay)
+        }
+    }
+
     init {
         setEGLContextClientVersion(2)
         setRenderer(V18PuttingRenderer(engine))
-        renderMode = RENDERMODE_CONTINUOUSLY
+        renderMode = RENDERMODE_WHEN_DIRTY
         preserveEGLContextOnPause = true
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        loopRunning = true
+        renderHandler.removeCallbacks(renderTick)
+        renderHandler.post(renderTick)
+    }
+
+    override fun onDetachedFromWindow() {
+        loopRunning = false
+        renderHandler.removeCallbacks(renderTick)
+        super.onDetachedFromWindow()
     }
 }
 
