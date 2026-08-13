@@ -26,6 +26,7 @@ jobs:
           python ci/v27_patch_replay.py
           python ci/v27_patch_hold.py
           python ci/v27_patch_polish.py
+          python ci/v27_fix_tool_name.py
           if ! git diff --quiet; then
             git diff --check
             git config user.name "puttvision-v27-bot"
@@ -37,7 +38,8 @@ jobs:
               app/src/main/java/com/puttvision/screen/MainActivity.kt \
               app/src/main/java/com/puttvision/screen/V26SettingsDialogs.kt \
               app/src/main/java/com/puttvision/screen/V26GreenVisuals.kt \
-              app/src/main/java/com/puttvision/screen/ImpactReplayView.kt
+              app/src/main/java/com/puttvision/screen/ImpactReplayView.kt \
+              app/src/main/java/com/puttvision/screen/V27ReplayAnnotations.kt
             git commit -m "feat: wire V27 cup pace and replay analysis"
             git push
           fi
