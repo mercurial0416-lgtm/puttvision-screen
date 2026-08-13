@@ -41,8 +41,8 @@ object V16PutterFit2Runtime {
 object V16PutterFit2 {
     fun analyze(recordsRaw: List<ShotRecord>, currentName: String = ProductRuntime.putterProfileName): V16PutterFit2Snapshot {
         val groups = recordsRaw
-            .filter { it.putterProfileName.isNotBlank() }
-            .groupBy { it.putterProfileName }
+            .filter { it.putterProfileName.orEmpty().isNotBlank() }
+            .groupBy { it.putterProfileName.orEmpty() }
         val ranking = groups.mapNotNull { (name, records) -> performance(name, records.takeLast(80)) }
             .sortedByDescending { it.fitScore }
         val current = ranking.firstOrNull { it.putterName == currentName }
