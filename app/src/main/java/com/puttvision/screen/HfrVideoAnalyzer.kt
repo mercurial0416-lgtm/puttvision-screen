@@ -264,6 +264,23 @@ private fun findVideoHomography(
         }
     }
 
+    // V16 MARKERLESS HFR FALLBACK
+    // QR remains the precision path. When QR is absent, use a high-confidence mat silhouette
+    // together with the dimensions saved in Product Setup. Weak detections are rejected.
+    if (V16MatGeometryRuntime.markerlessEnabled) {
+        for (i in indices) {
+            val bmp = safeFrame(mmr, i) ?: continue
+            val detected = V15MatDetector.detect(bmp) ?: continue
+            if (detected.confidence < .74) continue
+            V15MatDetector.homography(
+                detection = detected,
+                frameInfo = FrameInfo(bmp.width, bmp.height, 0),
+                matWidthCm = V16MatGeometryRuntime.widthCm,
+                matLengthCm = V16MatGeometryRuntime.lengthCm
+            )?.let { return it }
+        }
+    }
+
     return null
 }
 

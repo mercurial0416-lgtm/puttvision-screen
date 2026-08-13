@@ -96,7 +96,7 @@ fun showProductSetupDialog(
     })
 
     addAction(action("PHYSICAL MAT", matManager.statusLabel()) {
-        showMatCalibrationManager(context, matManager)
+        showV16MatSetupDialog(context, matManager)
     })
 
     addAction(action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {
