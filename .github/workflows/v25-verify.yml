@@ -1,0 +1,50 @@
+name: Verify V25 flag info and TV units
+
+on:
+  push:
+    branches: [ agent/v25-flag-info-and-resilience ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v25-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire V25 TV flag information
+        run: |
+          python3 ci/v25_apply.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt app/src/main/java/com/puttvision/screen/V17SimulatorTvView.kt FEATURE_MATRIX.json; then
+            git config user.name "puttvision-v25-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt \
+                    app/src/main/java/com/puttvision/screen/V17SimulatorTvView.kt \
+                    FEATURE_MATRIX.json
+            git diff --cached --check
+            git commit -m "feat: wire V25 flag-side live info"
+            git push origin HEAD:agent/v25-flag-info-and-resilience
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
