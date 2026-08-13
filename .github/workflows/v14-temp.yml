@@ -30,7 +30,14 @@ jobs:
           from pathlib import Path
           p=Path('.v14/apply_v14.py')
           s=p.read_text()
-          s=s.replace('if needle in s:\n    idx = s.index(needle)', 'm = re.search(r\'root\\.addView\\(pvButton\\("자동 시나리오 전체검사"[^\\n]*\\{\', s)\nif m:\n    idx = m.start()')
+          s=s.replace(
+              'root.addView(pvButton("자동 시나리오 전체검사", PvButtonStyle.PRIMARY)',
+              'controls.addView(pvButton("자동 시나리오 전체검사", PvButtonStyle.PRIMARY, textSp = 7f)'
+          )
+          s=s.replace(
+              'root.addView(pvButton("SIM CAMERA 2.0',
+              'controls.addView(pvButton("SIM CAMERA 2.0'
+          )
           p.write_text(s)
           PY
           python .v14/apply_v14.py
