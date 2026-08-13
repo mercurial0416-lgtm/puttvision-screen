@@ -3,13 +3,11 @@ package com.puttvision.screen
 import android.content.Context
 import android.os.Build
 import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Learns a conservative per-device speed correction from HFR shots that already contain both the
  * raw observed speed and the mat/back-extrapolated impact speed. It only applies that correction
- * to lower-speed fallback measurements; HFR measurements are never corrected twice.
+ * to non-HFR fallback measurements; HFR measurements are never corrected twice.
  */
 object V16DeviceAutoCalibrationRuntime {
     private val ratios = ArrayList<Double>()
@@ -24,6 +22,7 @@ object V16DeviceAutoCalibrationRuntime {
         appContext = context.applicationContext
         model = Build.MODEL ?: "Android"
         val prefs = context.getSharedPreferences("v16_auto_device_cal", Context.MODE_PRIVATE)
+        ratios.clear()
         if (prefs.getString("model", null) == model) {
             speedScale = prefs.getFloat("speedScale", 1f).toDouble().coerceIn(.90, 1.10)
             sampleCount = prefs.getInt("count", 0).coerceAtLeast(0)
@@ -33,20 +32,30 @@ object V16DeviceAutoCalibrationRuntime {
                 ?.filter { it in .90..1.10 }
                 ?.takeLast(20)
                 ?.let { ratios += it }
+        } else {
+            speedScale = 1.0
+            sampleCount = 0
         }
         installed = true
     }
 
+    private fun hasHfrEvidence(metrics: ShotMetrics): Boolean =
+        metrics.estimatedMatDecelMps2 != null ||
+            metrics.estimatedMatStimpM != null ||
+            metrics.backswingMs != null ||
+            metrics.downswingMs != null ||
+            metrics.peakHeadAccelerationMps2 != null
+
     @Synchronized
     fun observe(metrics: ShotMetrics) {
-        if (!installed) return
+        if (!installed || !hasHfrEvidence(metrics)) return
         val raw = metrics.rawBallSpeedMps ?: return
         val corrected = metrics.ballSpeedMps
         if (raw !in .10..6.0 || corrected !in .10..6.0) return
         if ((metrics.confidence ?: .0) < .72) return
         val ratio = corrected / raw
-        // We only learn the small camera/capture correction component. Large ratios usually mean
-        // the mat model or clip itself was poor and should not become a permanent device profile.
+        // Only learn a small repeatable capture bias. Bigger gaps usually belong to mat physics,
+        // bad clips, or a setup change and must not become a permanent device correction.
         if (ratio !in .90..1.10) return
         ratios += ratio
         while (ratios.size > 20) ratios.removeAt(0)
@@ -60,7 +69,7 @@ object V16DeviceAutoCalibrationRuntime {
     }
 
     fun applyFallback(metrics: ShotMetrics): ShotMetrics {
-        if (!installed || sampleCount < 5 || metrics.rawBallSpeedMps != null) return metrics
+        if (!installed || sampleCount < 5 || hasHfrEvidence(metrics)) return metrics
         if (abs(speedScale - 1.0) < .003) return metrics
         val speed = (metrics.ballSpeedMps * speedScale).coerceIn(.05, 8.0)
         val smash = metrics.headSpeedMps?.takeIf { it > .05 }?.let { speed / it } ?: metrics.smash
