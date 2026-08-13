@@ -53,7 +53,7 @@ class V27ReplayAnnotationSession {
         else if (marks.isNotEmpty()) marks.removeAt(marks.lastIndex)
     }
 
-    fun setTool(value: V27ReplayTool) {
+    fun selectTool(value: V27ReplayTool) {
         tool = value
         down = null
         preview = null

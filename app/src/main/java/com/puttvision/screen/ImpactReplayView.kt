@@ -61,7 +61,7 @@ class ImpactReplayView(context: Context) : View(context) {
         loops = 0
         paused = false
         annotations.clear()
-        annotations.setTool(V27ReplayTool.NONE)
+        annotations.selectTool(V27ReplayTool.NONE)
         visibility = VISIBLE
         invalidate()
         handler.postDelayed(tick, 55L)
@@ -77,7 +77,7 @@ class ImpactReplayView(context: Context) : View(context) {
         loops = 0
         paused = false
         annotations.clear()
-        annotations.setTool(V27ReplayTool.NONE)
+        annotations.selectTool(V27ReplayTool.NONE)
         visibility = GONE
         if (recycleFrames) {
             old?.frames?.distinctBy { System.identityHashCode(it) }?.forEach { bitmap ->
@@ -338,9 +338,9 @@ class ImpactReplayView(context: Context) : View(context) {
     private fun handleToolbar(code: String) {
         when (code) {
             "TOGGLE" -> setPaused(!paused)
-            "LINE" -> { setPaused(true); annotations.setTool(if (annotations.tool==V27ReplayTool.LINE) V27ReplayTool.NONE else V27ReplayTool.LINE) }
-            "CIRCLE" -> { setPaused(true); annotations.setTool(if (annotations.tool==V27ReplayTool.CIRCLE) V27ReplayTool.NONE else V27ReplayTool.CIRCLE) }
-            "ANGLE" -> { setPaused(true); annotations.setTool(if (annotations.tool==V27ReplayTool.ANGLE) V27ReplayTool.NONE else V27ReplayTool.ANGLE) }
+            "LINE" -> { setPaused(true); annotations.selectTool(if (annotations.tool==V27ReplayTool.LINE) V27ReplayTool.NONE else V27ReplayTool.LINE) }
+            "CIRCLE" -> { setPaused(true); annotations.selectTool(if (annotations.tool==V27ReplayTool.CIRCLE) V27ReplayTool.NONE else V27ReplayTool.CIRCLE) }
+            "ANGLE" -> { setPaused(true); annotations.selectTool(if (annotations.tool==V27ReplayTool.ANGLE) V27ReplayTool.NONE else V27ReplayTool.ANGLE) }
             "UNDO" -> { setPaused(true); annotations.undo() }
             "CLEAR" -> { setPaused(true); annotations.clear() }
         }
