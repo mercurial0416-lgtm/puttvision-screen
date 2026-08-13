@@ -4,6 +4,7 @@
 - Added an OpenGL ES 2 putting stage with terrain geometry generated from the same GreenTerrain model used by physics.
 - Added low address camera, ball-follow camera, near-cup tracking, and cup/result close-up framing.
 - Added shaded green/rough, 3D ball, cup/flag, solution/ghost/live-path ribbons.
+- Added procedural rolling hills, tree lines, a generic clubhouse, mowing depth, and a contact shadow under the ball so the asset-free 3D path does not become visually sparse.
 - Real TV and local/hardwareless preview use the same V18 factory. Devices without GLES 2 support fall back to the proven V17 Canvas renderer.
 
 ## V19 — stroke studio
