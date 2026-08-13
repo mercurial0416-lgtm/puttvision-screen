@@ -2512,7 +2512,7 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        val tv = GreenView(this, engine)
+        val tv = V17SimulatorTvView(this, engine)
         root.addView(tv, FrameLayout.LayoutParams(-1, -1))
         root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
 
@@ -2584,12 +2584,12 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        root.addView(GreenView(this, engine), FrameLayout.LayoutParams(-1, -1))
+        root.addView(V17SimulatorTvView(this, engine), FrameLayout.LayoutParams(-1, -1))
         root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = pvRounded(Color.argb(238, 4, 8, 10), Pv.rLg, Pv.line)
+            background = pvRounded(Color.argb(214, 4, 8, 10), Pv.rLg, Pv.line)
             setPadding(pvDp(12), pvDp(10), pvDp(12), pvDp(10))
         }
         controls.addView(TextView(this).apply {
@@ -2601,7 +2601,7 @@ class MainActivity : AppCompatActivity() {
             includeFontPadding = false
         })
         controls.addView(TextView(this).apply {
-            text = "CAMERA MOCK ●  ·  TV LOCAL ●\n실제 측정 파이프라인에 합성 샷을 주입합니다."
+            text = "CAMERA MOCK ●  ·  TV V17 LOCAL ●\n실제 측정 파이프라인에 합성 샷을 주입합니다."
             setTextColor(Pv.textMid)
             textSize = pvSp(7f)
             setPadding(0, pvDp(3), 0, pvDp(8))
@@ -2763,11 +2763,24 @@ class MainActivity : AppCompatActivity() {
         controls.addView(pvButton("닫기", PvButtonStyle.GHOST, textSp = 7f) { dialog.dismiss() }, LinearLayout.LayoutParams(-1, pvDp(38)).apply { topMargin = pvDp(8) })
         val scroll = ScrollView(this).apply {
             isFillViewport = true
+            visibility = View.GONE
             addView(controls, FrameLayout.LayoutParams(-1, -2))
         }
-        root.addView(scroll, FrameLayout.LayoutParams(pvDp(if (compactLandscape) 250 else 300), -1, Gravity.END).apply {
-            topMargin = pvDp(8)
+        root.addView(scroll, FrameLayout.LayoutParams(pvDp(if (compactLandscape) 190 else 220), -1, Gravity.END).apply {
+            topMargin = pvDp(48)
             bottomMargin = pvDp(8)
+            marginEnd = pvDp(8)
+        })
+
+        val labToggle = pvButton("LAB", PvButtonStyle.GHOST, textSp = 6.5f) {
+            scroll.visibility = if (scroll.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+        root.addView(labToggle, FrameLayout.LayoutParams(pvDp(58), pvDp(32), Gravity.TOP or Gravity.END).apply {
+            topMargin = pvDp(8)
+            marginEnd = pvDp(48)
+        })
+        root.addView(pvButton("×", PvButtonStyle.GHOST, textSp = 8f) { dialog.dismiss() }, FrameLayout.LayoutParams(pvDp(34), pvDp(32), Gravity.TOP or Gravity.END).apply {
+            topMargin = pvDp(8)
             marginEnd = pvDp(8)
         })
 
