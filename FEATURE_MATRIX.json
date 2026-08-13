@@ -1,5 +1,5 @@
 {
-  "version": "v28-development",
+  "version": "v29-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -85,7 +85,9 @@
     "companion_session_code_pairing": true,
     "companion_clock_sync": true,
     "companion_stale_measurement_rejection": true,
-    "custom_green_3d_mesh_cache_key": true
+    "custom_green_3d_mesh_cache_key": true,
+    "pace_dependent_tv_ideal_trail": true,
+    "hfr_frame_scoped_manual_annotations": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -103,6 +105,7 @@
     "v27_replay_geometry_test": true,
     "v28_custom_green_roundtrip_test": true,
     "v28_custom_green_cache_signature_test": true,
-    "v28_companion_protocol_test": true
+    "v28_companion_protocol_test": true,
+    "v29_frame_annotation_test": true
   }
 }
