@@ -20,15 +20,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Ensure V15 commercial game selector is wired
+      - name: Ensure V15 commercial UI is wired
         run: |
           python3 ci/v15_ui_patch.py
-          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt; then
+          python3 ci/v15_green_patch.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/GreenView.kt; then
             git config user.name "puttvision-v15-bot"
             git config user.email "actions@users.noreply.github.com"
-            git add app/src/main/java/com/puttvision/screen/MainActivity.kt
+            git add app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/GreenView.kt
             git diff --cached --check
-            git commit -m "feat: expose V15 game modes in commercial UI"
+            git commit -m "feat: wire V15 game and ghost TV UI"
             git push origin HEAD:agent/v15-product-grade-putting
           fi
 
