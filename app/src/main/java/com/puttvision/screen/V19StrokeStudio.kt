@@ -5,7 +5,6 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
 
 /** A normalized putter-head point around impact. y=0 is impact, -y backswing, +y follow-through. */
@@ -29,21 +28,21 @@ data class V19StrokeStudioModel(
     val detail: String
 )
 
-/**
- * Captures the real preview-camera head centers that ShotTracker already receives.
- * This deliberately lives outside ShotMetrics so Room/history schemas do not need a migration.
- */
+/** Captures real preview-camera head centers without changing the persisted ShotMetrics schema. */
 object V19StrokeTraceRuntime {
     private val samples = ArrayList<HeadSample>(220)
     private var impactNs: Long? = null
 
     @Volatile var latestTrace: List<V19StrokeNode> = emptyList()
         private set
+    @Volatile var latestImpactNs: Long = Long.MIN_VALUE
+        private set
 
     @Synchronized fun begin() {
         samples.clear()
         impactNs = null
         latestTrace = emptyList()
+        latestImpactNs = Long.MIN_VALUE
     }
 
     @Synchronized fun add(sample: HeadSample) {
@@ -57,10 +56,9 @@ object V19StrokeTraceRuntime {
 
     @Synchronized fun finish(): List<V19StrokeNode> {
         val impact = impactNs ?: return emptyList()
+        latestImpactNs = impact
         val center = samples.minByOrNull { abs(it.tNs - impact) } ?: return emptyList()
-        val beforeNs = 900_000_000L
-        val afterNs = 520_000_000L
-        val selected = samples.filter { it.tNs in (impact - beforeNs)..(impact + afterNs) }
+        val selected = samples.filter { it.tNs in (impact - 900_000_000L)..(impact + 520_000_000L) }
         if (selected.size < 4) {
             latestTrace = emptyList()
             return latestTrace
@@ -68,13 +66,9 @@ object V19StrokeTraceRuntime {
         val preSpan = max(1L, impact - selected.first().tNs).toDouble()
         val postSpan = max(1L, selected.last().tNs - impact).toDouble()
         latestTrace = selected.map { s ->
-            val t = if (s.tNs <= impact) {
-                -((impact - s.tNs) / preSpan)
-            } else {
-                (s.tNs - impact) / postSpan
-            }.coerceIn(-1.0, 1.0)
+            val rawT = if (s.tNs <= impact) -((impact - s.tNs) / preSpan) else (s.tNs - impact) / postSpan
             V19StrokeNode(
-                tNorm = t,
+                tNorm = rawT.coerceIn(-1.0, 1.0),
                 xCm = (s.centerCm.x - center.centerCm.x).toDouble(),
                 yCm = (s.centerCm.y - center.centerCm.y).toDouble(),
                 faceDeg = faceOf(s)
@@ -82,6 +76,9 @@ object V19StrokeTraceRuntime {
         }.distinctBy { (it.tNorm * 1000).toInt() }
         return latestTrace
     }
+
+    fun matchingTrace(measuredAtNs: Long): List<V19StrokeNode> =
+        if (latestImpactNs != Long.MIN_VALUE && abs(latestImpactNs - measuredAtNs) <= 300_000_000L) latestTrace else emptyList()
 
     private fun faceOf(sample: HeadSample): Double {
         val vx = (sample.toeCm.x - sample.heelCm.x).toDouble()
@@ -92,7 +89,7 @@ object V19StrokeTraceRuntime {
 
 object V19StrokeStudio {
     fun build(metrics: ShotMetrics, recent: List<ShotRecord>): V19StrokeStudioModel {
-        val measured = V19StrokeTraceRuntime.latestTrace
+        val measured = V19StrokeTraceRuntime.matchingTrace(metrics.measuredAtNs)
         val current = if (measured.size >= 4) normalizeMeasured(measured) else inferred(metrics)
         val ideal = ideal(metrics)
         val ghostMetrics = recent
@@ -137,9 +134,7 @@ object V19StrokeStudio {
     private fun normalizeMeasured(points: List<V19StrokeNode>): List<V19StrokeNode> {
         if (points.isEmpty()) return emptyList()
         val impact = points.minByOrNull { abs(it.tNorm) } ?: points[points.size / 2]
-        return points.map {
-            V19StrokeNode(it.tNorm, it.xCm - impact.xCm, it.yCm - impact.yCm, it.faceDeg)
-        }
+        return points.map { V19StrokeNode(it.tNorm, it.xCm - impact.xCm, it.yCm - impact.yCm, it.faceDeg) }
     }
 
     /** Fallback when HFR produces metrics without preview head samples. */
@@ -162,7 +157,6 @@ object V19StrokeStudio {
     fun ideal(metrics: ShotMetrics): List<V19StrokeNode> {
         val back = metrics.backswingLengthCm?.coerceIn(7.0, 35.0) ?: 15.0
         val follow = (back * .64).coerceIn(5.0, 22.0)
-        // A small symmetrical arc is used as a neutral coaching template; it is not presented as a fitting absolute.
         val arcAmp = (back * .025).coerceIn(.18, .75)
         return (0..40).map { i ->
             val t = i / 20.0 - 1.0
@@ -205,7 +199,5 @@ object V19StrokeStudioRuntime {
         latest = V19StrokeStudio.build(metrics, recent)
     }
 
-    fun clear() {
-        latest = null
-    }
+    fun clear() { latest = null }
 }
