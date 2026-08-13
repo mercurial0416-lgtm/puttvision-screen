@@ -26,7 +26,7 @@ fun showProductSetupDialog(
         letterSpacing = .12f
     })
     root.addView(TextView(context).apply {
-        text = "실제 장비 기준을 맞추고 폰을 만지지 않는 자동 세션을 설정합니다."
+        text = "실제 장비 기준, AI 코칭, 멀티폰 카메라와 무터치 세션을 설정합니다."
         setTextColor(Pv.textMid)
         textSize = context.pvSp(8.5f)
         setPadding(0, context.pvDp(4), 0, context.pvDp(10))
@@ -67,46 +67,48 @@ fun showProductSetupDialog(
             setOnClickListener { onClick() }
         }
 
+    fun addAction(view: LinearLayout) {
+        root.addView(view, LinearLayout.LayoutParams(-1, context.pvDp(48)).apply {
+            if (root.childCount > 2) topMargin = context.pvDp(5)
+        })
+    }
+
     val current = putterStore.current()
-    root.addView(
-        action("PUTTER PROFILE", "${current.name} · ${"%.1f".format(current.headWidthCm)}cm") {
-            dialog.dismiss()
-            showPutterProfileManager(context, putterStore) { }
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52))
-    )
+    addAction(action("PUTTER PROFILE", "${current.name} · ${"%.1f".format(current.headWidthCm)}cm") {
+        dialog.dismiss()
+        showPutterProfileManager(context, putterStore) { }
+    })
 
     val fit = V15PutterFitRuntime.latest
     val fitTitle = fit?.let {
         "${it.balance.label} · ${it.head.label} · ${(it.confidence * 100).toInt()}%"
     } ?: "${V15PutterFitRuntime.currentSampleCount}/20구 · 분석 중"
-    root.addView(
-        action("AI PUTTER FIT", fitTitle) {
-            showV15PutterFitDialog(context)
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52)).apply { topMargin = context.pvDp(6) }
-    )
+    addAction(action("AI PUTTER FIT", fitTitle) { showV15PutterFitDialog(context) })
 
-    root.addView(
-        action("PHYSICAL MAT", matManager.statusLabel()) {
-            showMatCalibrationManager(context, matManager)
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52)).apply { topMargin = context.pvDp(6) }
-    )
+    val coach = V16Runtime.personalCoach
+    addAction(action(
+        "PERSONAL AI COACH",
+        coach?.let { "${it.primary.headline} · 개선 ${it.improvementScore}" } ?: "8구부터 개인 패턴 학습"
+    ) { showV16PersonalCoachDialog(context) })
 
-    root.addView(
-        action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {
-            val enabled = voiceCoach.toggle()
-            dialog.dismiss()
-            showProductSetupDialog(context, putterStore, matManager, voiceCoach)
-            android.widget.Toast.makeText(
-                context,
-                if (enabled) "음성 안내 ON" else "음성 안내 OFF",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52)).apply { topMargin = context.pvDp(6) }
-    )
+    addAction(action("MULTI PHONE CAMERA", V16CompanionLinkRuntime.status().label) {
+        showV16CompanionDialog(context)
+    })
+
+    addAction(action("PHYSICAL MAT", matManager.statusLabel()) {
+        showMatCalibrationManager(context, matManager)
+    })
+
+    addAction(action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {
+        val enabled = voiceCoach.toggle()
+        dialog.dismiss()
+        showProductSetupDialog(context, putterStore, matManager, voiceCoach)
+        android.widget.Toast.makeText(
+            context,
+            if (enabled) "음성 안내 ON" else "음성 안내 OFF",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    })
 
     dialog = AlertDialog.Builder(context)
         .setTitle("제품 설정")
