@@ -18,6 +18,9 @@ data class V16CompanionUiStatus(
     val view: V15CameraView,
     val peers: Int,
     val received: Long,
+    val rejected: Long,
+    val sessionCode: String?,
+    val syncLabel: String?,
     val label: String
 )
 
@@ -30,19 +33,22 @@ object V16CompanionLinkRuntime {
     @Volatile private var role = V16CompanionRole.OFF
     @Volatile private var view = V15CameraView.FACE_ON
     @Volatile private var host: String? = null
+    @Volatile private var sessionCode: String? = null
     private var server: V15CompanionServer? = null
     private var client: V15CompanionClient? = null
 
     @Synchronized
     fun startHost(): Boolean {
         stop()
-        val created = V15CompanionServer()
+        val code = V28CompanionProtocol.newSessionCode()
+        val created = V15CompanionServer(sessionCode = code)
         val ok = created.start()
         if (!ok) {
             created.close()
             return false
         }
         server = created
+        sessionCode = code
         role = V16CompanionRole.HOST
         host = null
         V15CompanionRuntime.clear()
@@ -50,11 +56,12 @@ object V16CompanionLinkRuntime {
     }
 
     @Synchronized
-    fun join(hostAddress: String, cameraView: V15CameraView): Boolean {
+    fun join(hostAddress: String, cameraView: V15CameraView, pairingCode: String): Boolean {
         val clean = hostAddress.trim().substringBefore(':')
-        if (clean.isBlank()) return false
+        val code = pairingCode.trim().uppercase()
+        if (clean.isBlank() || code.length < 6) return false
         stop()
-        val created = V15CompanionClient(clean)
+        val created = V15CompanionClient(clean, sessionCode = code)
         if (!created.connect()) {
             created.close()
             return false
@@ -63,6 +70,7 @@ object V16CompanionLinkRuntime {
         role = V16CompanionRole.COMPANION
         view = cameraView
         host = clean
+        sessionCode = code
         return true
     }
 
@@ -86,23 +94,26 @@ object V16CompanionLinkRuntime {
         server = null
         client = null
         host = null
+        sessionCode = null
         role = V16CompanionRole.OFF
         V15CompanionRuntime.clear()
     }
 
     fun status(): V16CompanionUiStatus {
         val s = synchronized(this) { server?.status() }
+        val sync = synchronized(this) { client?.syncStatus() }
         val label = when (role) {
             V16CompanionRole.OFF -> "꺼짐"
-            V16CompanionRole.HOST -> "메인폰 · ${s?.peers ?: 0}대 연결"
-            V16CompanionRole.COMPANION -> "보조폰 ${viewLabel(view)} · ${host ?: "연결중"}"
+            V16CompanionRole.HOST -> "메인폰 · ${s?.peers ?: 0}대 · 거부 ${s?.rejectedMeasurements ?: 0}"
+            V16CompanionRole.COMPANION -> "보조폰 ${viewLabel(view)} · ${sync?.label ?: "SYNC 중"}"
         }
         return V16CompanionUiStatus(
-            role = role,
-            host = host,
-            view = view,
+            role = role, host = host, view = view,
             peers = s?.peers ?: 0,
             received = s?.receivedMeasurements ?: 0L,
+            rejected = s?.rejectedMeasurements ?: 0L,
+            sessionCode = sessionCode,
+            syncLabel = sync?.label,
             label = label
         )
     }
@@ -145,7 +156,8 @@ fun showV16CompanionDialog(context: Context) {
             gravity = Gravity.CENTER
             setPadding(0, context.pvDp(14), 0, context.pvDp(8))
         })
-        root.addView(text("보조폰에서 위 주소를 입력하면 연결됩니다. 연결 ${status.peers}대 · 수신 ${status.received}회", 8f))
+        root.addView(text("PAIR ${status.sessionCode ?: "--------"}", 18f, true, true).apply { gravity = Gravity.CENTER })
+        root.addView(text("보조폰에서 주소+PAIR 코드를 입력하세요. 연결 ${status.peers}대 · 수신 ${status.received}회 · 거부 ${status.rejected}회", 8f))
     }
 
     AlertDialog.Builder(context)
@@ -176,6 +188,12 @@ private fun showV16JoinCompanionDialog(context: Context) {
         setSingleLine(true)
     }
     root.addView(hostInput, LinearLayout.LayoutParams(-1, context.pvDp(50)))
+    val codeInput = EditText(context).apply {
+        hint = "PAIR 코드 8자리"
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+        setSingleLine(true)
+    }
+    root.addView(codeInput, LinearLayout.LayoutParams(-1, context.pvDp(50)))
 
     val views = listOf(
         V15CameraView.FACE_ON to "정면",
@@ -203,8 +221,8 @@ private fun showV16JoinCompanionDialog(context: Context) {
         .setTitle("보조폰 연결")
         .setView(root)
         .setPositiveButton("연결") { _, _ ->
-            val ok = V16CompanionLinkRuntime.join(hostInput.text.toString(), selected)
-            Toast.makeText(context, if (ok) "보조폰 연결됨 · ${V16CompanionLinkRuntime.viewLabel(selected)}" else "연결 실패 · 같은 Wi‑Fi와 주소 확인", Toast.LENGTH_LONG).show()
+            val ok = V16CompanionLinkRuntime.join(hostInput.text.toString(), selected, codeInput.text.toString())
+            Toast.makeText(context, if (ok) "보조폰 연결됨 · ${V16CompanionLinkRuntime.viewLabel(selected)} · ${V16CompanionLinkRuntime.status().syncLabel ?: "SYNC"}" else "연결 실패 · 같은 Wi‑Fi/주소/PAIR 코드 확인", Toast.LENGTH_LONG).show()
         }
         .setNegativeButton("취소", null)
         .show()

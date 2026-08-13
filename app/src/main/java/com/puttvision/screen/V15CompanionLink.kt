@@ -22,6 +22,7 @@ data class V15CompanionLinkStatus(
     val localAddresses: List<String>,
     val peers: Int,
     val receivedMeasurements: Long,
+    val rejectedMeasurements: Long = 0L,
     val lastError: String? = null
 )
 
@@ -32,6 +33,7 @@ data class V15CompanionLinkStatus(
  */
 class V15CompanionServer(
     private val requestedPort: Int = DEFAULT_PORT,
+    private val sessionCode: String? = null,
     private val onMeasurement: (V15CameraMeasurement) -> Unit = V15CompanionRuntime::submit,
     private val onStatus: ((V15CompanionLinkStatus) -> Unit)? = null
 ) : Closeable {
@@ -40,6 +42,7 @@ class V15CompanionServer(
     private val clients = CopyOnWriteArrayList<Socket>()
     @Volatile private var server: ServerSocket? = null
     @Volatile private var received = 0L
+    @Volatile private var rejected = 0L
     @Volatile private var lastError: String? = null
 
     fun start(): Boolean {
@@ -79,12 +82,23 @@ class V15CompanionServer(
     private fun readLoop(socket: Socket) {
         try {
             BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8)).use { reader ->
-                while (running.get() && !socket.isClosed) {
-                    val line = try { reader.readLine() } catch (_: SocketTimeoutException) { continue } ?: break
-                    if (line.length > MAX_MESSAGE_CHARS) continue
-                    V15CompanionWire.decode(line)?.let {
-                        received++
-                        onMeasurement(it)
+                BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8)).use { out ->
+                    while (running.get() && !socket.isClosed) {
+                        val line = try { reader.readLine() } catch (_: SocketTimeoutException) { continue } ?: break
+                        if (line.length > MAX_MESSAGE_CHARS) { rejected++; continue }
+                        val code = sessionCode
+                        if (code == null) {
+                            V15CompanionWire.decode(line)?.let { received++; onMeasurement(it); publish() }
+                            continue
+                        }
+                        if (V28CompanionProtocol.isSync(line)) {
+                            val ack = V28CompanionProtocol.syncAck(line, code, System.currentTimeMillis())
+                            if (ack == null) { rejected++; publish(); continue }
+                            out.write(ack); out.newLine(); out.flush(); continue
+                        }
+                        val measurement = V28CompanionProtocol.decodeMeasurement(line, code)
+                        if (measurement == null) { rejected++; publish(); continue }
+                        received++; onMeasurement(measurement); publish()
                     }
                 }
             }
@@ -103,6 +117,7 @@ class V15CompanionServer(
         localAddresses = localIpv4Addresses(),
         peers = clients.count { !it.isClosed },
         receivedMeasurements = received,
+        rejectedMeasurements = rejected,
         lastError = lastError
     )
 
@@ -136,11 +151,14 @@ class V15CompanionServer(
 
 class V15CompanionClient(
     private val host: String,
-    private val port: Int = V15CompanionServer.DEFAULT_PORT
+    private val port: Int = V15CompanionServer.DEFAULT_PORT,
+    private val sessionCode: String? = null
 ) : Closeable {
     private val lock = Any()
     @Volatile private var socket: Socket? = null
     @Volatile private var writer: BufferedWriter? = null
+    @Volatile private var reader: BufferedReader? = null
+    @Volatile private var clockSync: V28ClockSync? = null
 
     fun connect(timeoutMs: Int = 1800): Boolean = synchronized(lock) {
         if (socket?.isConnected == true && socket?.isClosed == false) return@synchronized true
@@ -152,6 +170,15 @@ class V15CompanionClient(
             s.connect(java.net.InetSocketAddress(host, port), timeoutMs.coerceIn(300, 5000))
             socket = s
             writer = BufferedWriter(OutputStreamWriter(s.getOutputStream(), Charsets.UTF_8))
+            reader = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
+            val code = sessionCode
+            if (code != null) {
+                val t0 = System.currentTimeMillis()
+                writer!!.write(V28CompanionProtocol.syncRequest(code, t0)); writer!!.newLine(); writer!!.flush()
+                val ack = reader!!.readLine() ?: error("sync closed")
+                val t2 = System.currentTimeMillis()
+                clockSync = V28CompanionProtocol.parseSyncAck(ack, t0, t2) ?: error("sync rejected")
+            }
             true
         } catch (_: Throwable) {
             closeLocked()
@@ -163,7 +190,9 @@ class V15CompanionClient(
         if (!connect()) return@synchronized false
         val out = writer ?: return@synchronized false
         try {
-            out.write(V15CompanionWire.encode(measurement))
+            val encoded = sessionCode?.let { V28CompanionProtocol.encodeMeasurement(it, measurement, clockSync?.offsetMs ?: 0L) }
+                ?: V15CompanionWire.encode(measurement)
+            out.write(encoded)
             out.newLine()
             out.flush()
             true
@@ -173,12 +202,17 @@ class V15CompanionClient(
         }
     }
 
+    fun syncStatus(): V28ClockSync? = clockSync
+
     override fun close() = synchronized(lock) { closeLocked() }
 
     private fun closeLocked() {
+        runCatching { reader?.close() }
         runCatching { writer?.close() }
         runCatching { socket?.close() }
         writer = null
+        reader = null
         socket = null
+        clockSync = null
     }
 }

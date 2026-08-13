@@ -106,6 +106,7 @@ private data class V18TerrainKey(
     val distance100: Int,
     val side100: Int,
     val long100: Int,
+    val customGreenHash: Int,
     val qualityTier: V24RenderTier
 )
 
@@ -194,6 +195,7 @@ private class V18PuttingRenderer(
             (settings.holeDistanceM * 100).toInt(),
             (settings.sideSlopePct * 100).toInt(),
             (settings.longSlopePct * 100).toInt(),
+            V28CustomGreenCodec.signature(V22CustomGreenRuntime.profile),
             tier
         )
         if (key == terrainKey) return

@@ -1,5 +1,5 @@
 {
-  "version": "v27-development",
+  "version": "v28-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -78,7 +78,14 @@
     "pace_changes_green_read_line_and_speed": true,
     "hfr_manual_line_circle_angle_annotations": true,
     "hfr_manual_frame_scrub": true,
-    "hfr_annotation_undo_clear": true
+    "hfr_annotation_undo_clear": true,
+    "custom_green_json_export_import": true,
+    "custom_green_shape_cache_key": true,
+    "annotated_replay_png_share": true,
+    "companion_session_code_pairing": true,
+    "companion_clock_sync": true,
+    "companion_stale_measurement_rejection": true,
+    "custom_green_3d_mesh_cache_key": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -93,6 +100,9 @@
     "v26_contour_regression_test": true,
     "v26_virtual_start_physics_test": true,
     "v27_pace_solver_regression_test": true,
-    "v27_replay_geometry_test": true
+    "v27_replay_geometry_test": true,
+    "v28_custom_green_roundtrip_test": true,
+    "v28_custom_green_cache_signature_test": true,
+    "v28_companion_protocol_test": true
   }
 }
