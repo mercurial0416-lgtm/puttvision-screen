@@ -38,15 +38,22 @@ jobs:
               'root.addView(pvButton("SIM CAMERA 2.0',
               'controls.addView(pvButton("SIM CAMERA 2.0'
           )
+          start=s.find('# ---------- GreenView live screen-putting presentation ----------')
+          end=s.find('# ---------- TV replay becomes PiP, never hides live green ----------', start)
+          if start < 0 or end < 0:
+              raise SystemExit('V14 Green section not found')
+          s=s[:start] + s[end:]
           p.write_text(s)
           PY
           python .v14/apply_v14.py
+          python .v14/apply_v14_green_actual.py
       - name: Static V14 guards
         shell: bash
         run: |
           grep -q 'analyzeSynthetic' app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt
           grep -q 'V14RobustKinematics.fit' app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt
           grep -q 'TvInstantRollRuntime.begin' app/src/main/java/com/puttvision/screen/MainActivity.kt
+          grep -q 'TvInstantRollRuntime.displayPosition' app/src/main/java/com/puttvision/screen/GreenView.kt
           grep -q 'LAB P95' app/src/main/java/com/puttvision/screen/V14VisionSystems.kt
           grep -q 'rollSpinRpm' app/src/main/java/com/puttvision/screen/StatsRepository.kt
           grep -q 'SIM CAMERA 2.0' app/src/main/java/com/puttvision/screen/MainActivity.kt
