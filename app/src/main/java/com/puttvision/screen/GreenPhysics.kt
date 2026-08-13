@@ -7,7 +7,7 @@ data class GreenSettings(
     var holeDistanceM: Double = 5.0,
     var sideSlopePct: Double = 0.0,   // + = right side is lower, ball breaks right
     var longSlopePct: Double = 0.0,   // + = downhill toward the hole
-    var terrainProfileId: Int = -1    // -1 = uniform plane, 0..5 = practice terrain profile
+    var terrainProfileId: Int = -1    // -1 = uniform plane, 0..23 = practice terrain profile
 )
 
 data class SimState(
@@ -18,7 +18,10 @@ data class SimState(
     var running: Boolean = false,
     var holed: Boolean = false,
     var elapsed: Double = 0.0,
-    val trail: MutableList<Pair<Double, Double>> = mutableListOf()
+    val trail: MutableList<Pair<Double, Double>> = mutableListOf(),
+    var cupContacts: Int = 0,
+    var lipOut: Boolean = false,
+    var lastCupContactSec: Double = -10.0
 )
 
 data class SimResult(
@@ -26,7 +29,9 @@ data class SimResult(
     val finishX: Double,
     val finishY: Double,
     val distanceToCupM: Double,
-    val elapsedSec: Double
+    val elapsedSec: Double,
+    val lipOut: Boolean = false,
+    val cupContacts: Int = 0
 )
 
 class GreenPhysics {
@@ -35,6 +40,10 @@ class GreenPhysics {
         private const val STIMP_LAUNCH_MPS = 1.95072 // 6.4 ft/s from USGA educational material.
         private const val ROLLING_GRAVITY_FACTOR = 5.0 / 7.0
         private const val CUP_RADIUS_M = 0.054
+        private const val BALL_RADIUS_M = 0.02135
+        // Center-path radius that lets the ball fall rather than ride the rim.
+        private const val CAPTURE_CENTER_RADIUS_M = CUP_RADIUS_M - BALL_RADIUS_M * 0.24
+        private const val RIM_CONTACT_RADIUS_M = CUP_RADIUS_M + BALL_RADIUS_M * 0.80
     }
 
     fun launch(metrics: ShotMetrics, settings: GreenSettings): SimState {
@@ -58,9 +67,6 @@ class GreenPhysics {
         // constant deceleration, a = v^2 / (2S).
         val frictionDecel = (STIMP_LAUNCH_MPS * STIMP_LAUNCH_MPS) / (2.0 * stimp)
 
-        // The selected practice green may add a position-dependent terrain slope
-        // on top of the preset's base break/grade. Non-green practice and game
-        // modes use terrainProfileId=-1 and therefore retain the uniform plane.
         val effectiveSlope = GreenTerrain.effectiveSlopeAt(settings, state.x, state.y)
         val effectiveSideSlopePct = effectiveSlope.sidePct
         val effectiveLongSlopePct = effectiveSlope.longPct
@@ -80,8 +86,6 @@ class GreenPhysics {
         val nvx = state.vx + ax * dt
         val nvy = state.vy + ay * dt
 
-        // Prevent friction from numerically reversing a near-stopped ball unless
-        // gravity down the slope is strong enough to overcome rolling resistance.
         val wouldReverse = state.vx * nvx + state.vy * nvy < 0.0
         val slopeMag = hypot(slopeAx, slopeAy)
         if (wouldReverse && slopeMag < frictionDecel) {
@@ -91,6 +95,8 @@ class GreenPhysics {
             return result(state, settings)
         }
 
+        val oldX = state.x
+        val oldY = state.y
         state.vx = nvx
         state.vy = nvy
         state.x += state.vx * dt
@@ -107,21 +113,57 @@ class GreenPhysics {
             if (state.trail.size > 500) state.trail.removeAt(0)
         }
 
-        val dx = state.x
-        val dy = state.y - settings.holeDistanceM
-        val toCup = hypot(dx, dy)
+        val cupX = 0.0
+        val cupY = settings.holeDistanceM
         val nowSpeed = hypot(state.vx, state.vy)
+        val closest = closestPointOnSegment(oldX, oldY, state.x, state.y, cupX, cupY)
+        val closestDx = closest.first - cupX
+        val closestDy = closest.second - cupY
+        val closestDist = hypot(closestDx, closestDy)
 
-        // Approximate capture: center enters cup radius with a reasonable lip speed.
-        if (toCup <= CUP_RADIUS_M && nowSpeed <= 1.15) {
-            state.x = 0.0
-            state.y = settings.holeDistanceM
-            state.vx = 0.0
-            state.vy = 0.0
-            state.running = false
-            state.holed = true
-            return result(state, settings)
+        if (closestDist <= RIM_CONTACT_RADIUS_M && state.elapsed - state.lastCupContactSec > 0.075) {
+            val normalizedOffset = (closestDist / CAPTURE_CENTER_RADIUS_M).coerceIn(0.0, 1.4)
+            // Off-centre balls need a slower lip speed to fall. A dead-centre ball
+            // can carry more speed, while a fast skim is explicitly a lip-out.
+            val captureSpeed = (1.20 - normalizedOffset * 0.48).coerceIn(0.52, 1.20)
+            if (closestDist <= CAPTURE_CENTER_RADIUS_M && nowSpeed <= captureSpeed) {
+                state.x = cupX
+                state.y = cupY
+                state.vx = 0.0
+                state.vy = 0.0
+                state.running = false
+                state.holed = true
+                return result(state, settings)
+            }
+
+            state.lipOut = true
+            state.cupContacts++
+            state.lastCupContactSec = state.elapsed
+
+            // A true edge contact gets a damped radial rebound. A very fast
+            // centre-line pass is allowed to bridge the cup rather than receiving
+            // an artificial sideways kick.
+            if (closestDist > CAPTURE_CENTER_RADIUS_M * 0.56 && closestDist > 1e-5 && nowSpeed <= 1.85) {
+                val nx = closestDx / closestDist
+                val ny = closestDy / closestDist
+                val vn = state.vx * nx + state.vy * ny
+                if (vn < 0.0) {
+                    val tx = state.vx - vn * nx
+                    val ty = state.vy - vn * ny
+                    val rebound = -vn * 0.34
+                    state.vx = tx * 0.78 + rebound * nx
+                    state.vy = ty * 0.78 + rebound * ny
+                    // Keep the ball just outside the effective rim after contact.
+                    val push = RIM_CONTACT_RADIUS_M + 0.002
+                    state.x = cupX + nx * push
+                    state.y = cupY + ny * push
+                }
+            }
         }
+
+        val dx = state.x - cupX
+        val dy = state.y - cupY
+        val toCup = hypot(dx, dy)
 
         if (state.elapsed > 20.0 || state.y > settings.holeDistanceM + 8.0 ||
             abs(state.x) > 8.0
@@ -135,7 +177,30 @@ class GreenPhysics {
             return result(state, settings)
         }
 
+        // Retain toCup calculation here to make the stop/cup relationship explicit
+        // and avoid an optimizer removing the final position dependency in tests.
+        if (!toCup.isFinite()) {
+            state.running = false
+            return result(state, settings)
+        }
+
         return null
+    }
+
+    private fun closestPointOnSegment(
+        ax: Double,
+        ay: Double,
+        bx: Double,
+        by: Double,
+        px: Double,
+        py: Double
+    ): Pair<Double, Double> {
+        val dx = bx - ax
+        val dy = by - ay
+        val denom = dx * dx + dy * dy
+        if (denom <= 1e-12) return ax to ay
+        val t = (((px - ax) * dx + (py - ay) * dy) / denom).coerceIn(0.0, 1.0)
+        return (ax + dx * t) to (ay + dy * t)
     }
 
     private fun result(state: SimState, settings: GreenSettings): SimResult {
@@ -146,7 +211,9 @@ class GreenPhysics {
             finishX = state.x,
             finishY = state.y,
             distanceToCupM = hypot(dx, dy),
-            elapsedSec = state.elapsed
+            elapsedSec = state.elapsed,
+            lipOut = state.lipOut && !state.holed,
+            cupContacts = state.cupContacts
         )
     }
 }
