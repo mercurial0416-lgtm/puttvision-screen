@@ -120,22 +120,38 @@ class GreenPhysics {
         val closestDx = closest.first - cupX
         val closestDy = closest.second - cupY
         val closestDist = hypot(closestDx, closestDy)
+        val normalizedOffset = (closestDist / CAPTURE_CENTER_RADIUS_M).coerceIn(0.0, 1.4)
+        // Off-centre balls need a slower lip speed to fall. A dead-centre ball
+        // can carry more speed, while a fast skim is explicitly a lip-out.
+        val captureSpeed = (1.20 - normalizedOffset * 0.48).coerceIn(0.52, 1.20)
 
-        if (closestDist <= RIM_CONTACT_RADIUS_M && state.elapsed - state.lastCupContactSec > 0.075) {
-            val normalizedOffset = (closestDist / CAPTURE_CENTER_RADIUS_M).coerceIn(0.0, 1.4)
-            // Off-centre balls need a slower lip speed to fall. A dead-centre ball
-            // can carry more speed, while a fast skim is explicitly a lip-out.
-            val captureSpeed = (1.20 - normalizedOffset * 0.48).coerceIn(0.52, 1.20)
-            if (closestDist <= CAPTURE_CENTER_RADIUS_M && nowSpeed <= captureSpeed) {
-                state.x = cupX
-                state.y = cupY
-                state.vx = 0.0
-                state.vy = 0.0
-                state.running = false
-                state.holed = true
-                return result(state, settings)
-            }
+        // Capture is evaluated while the ball is still approaching the opening.
+        // Do this before rim contact so a centered, properly paced putt is not
+        // incorrectly bounced off an imaginary vertical wall in front of the cup.
+        if (closestDist <= CAPTURE_CENTER_RADIUS_M && nowSpeed <= captureSpeed) {
+            state.x = cupX
+            state.y = cupY
+            state.vx = 0.0
+            state.vy = 0.0
+            state.running = false
+            state.holed = true
+            return result(state, settings)
+        }
 
+        val oldCupDistance = hypot(oldX - cupX, oldY - cupY)
+        val newCupDistance = hypot(state.x - cupX, state.y - cupY)
+        val crossedCupPlane =
+            (oldY - cupY) * (state.y - cupY) <= 0.0 && abs(state.y - oldY) > 1e-9
+        val reachedClosestApproach = newCupDistance >= oldCupDistance || crossedCupPlane
+
+        // A rim collision is only possible once the trajectory has reached/passed
+        // its closest approach. Entering the outer rim radius while still moving
+        // toward the hole is not itself a collision.
+        if (
+            closestDist <= RIM_CONTACT_RADIUS_M &&
+            reachedClosestApproach &&
+            state.elapsed - state.lastCupContactSec > 0.075
+        ) {
             state.lipOut = true
             state.cupContacts++
             state.lastCupContactSec = state.elapsed
@@ -177,8 +193,6 @@ class GreenPhysics {
             return result(state, settings)
         }
 
-        // Retain toCup calculation here to make the stop/cup relationship explicit
-        // and avoid an optimizer removing the final position dependency in tests.
         if (!toCup.isFinite()) {
             state.running = false
             return result(state, settings)
