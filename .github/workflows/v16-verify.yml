@@ -29,9 +29,10 @@ jobs:
             git add app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt \
                     app/src/main/java/com/puttvision/screen/ProductSetupDialog.kt \
                     app/src/main/java/com/puttvision/screen/AutoCalibrator.kt \
-                    app/src/main/java/com/puttvision/screen/V16SimulatorTvView.kt
+                    app/src/main/java/com/puttvision/screen/V16SimulatorTvView.kt \
+                    app/src/main/java/com/puttvision/screen/MainActivity.kt
             git diff --cached --check
-            git commit -m "feat: wire V16 markerless setup and TV framing"
+            git commit -m "feat: wire V16 markerless setup TV framing and startup runtimes"
             git push origin HEAD:agent/v16-friends-like-tv-and-polish
           fi
 
