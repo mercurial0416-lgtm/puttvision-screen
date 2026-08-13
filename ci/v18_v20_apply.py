@@ -32,16 +32,69 @@ if count:
 if changed:
     main.write_text(text, encoding="utf-8")
 
-# V18 stage: the SAM-like studio is result-only and therefore safe to overlay without polluting address mode.
+# V18 stage: SAM-like result overlay plus procedural scenery so the real 3D path is not visually sparse.
 stage = Path("app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt")
 text = stage.read_text(encoding="utf-8")
+stage_changed = False
 if "V19StrokeStudioOverlay(context, engine)" not in text:
     old = "        addView(hud, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))\n"
     new = old + "        addView(V19StrokeStudioOverlay(context, engine), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))\n"
     if old not in text:
         raise SystemExit("V18 overlay insertion point missing")
-    stage.write_text(text.replace(old, new, 1), encoding="utf-8")
+    text = text.replace(old, new, 1)
+    stage_changed = True
     print("V18 TV stroke studio overlay wired")
+
+if "private var decorMesh: V18Mesh? = null" not in text:
+    old = "    private var roughMesh: V18Mesh? = null\n"
+    if old not in text:
+        raise SystemExit("V18 decor field insertion point missing")
+    text = text.replace(old, old + "    private var decorMesh: V18Mesh? = null\n", 1)
+    stage_changed = True
+
+if "decorMesh?.let { draw(it, GLES20.GL_TRIANGLES) }" not in text:
+    old = "        roughMesh?.let { draw(it, GLES20.GL_TRIANGLES) }\n        terrainMesh?.let { draw(it, GLES20.GL_TRIANGLES) }\n"
+    new = "        roughMesh?.let { draw(it, GLES20.GL_TRIANGLES) }\n        decorMesh?.let { draw(it, GLES20.GL_TRIANGLES) }\n        terrainMesh?.let { draw(it, GLES20.GL_TRIANGLES) }\n"
+    if old not in text:
+        raise SystemExit("V18 decor draw insertion point missing")
+    text = text.replace(old, new, 1)
+    stage_changed = True
+
+if "decorMesh = V18Mesh(V18ProceduralDecor.build(settings))" not in text:
+    old = "        terrainMesh = buildTerrain(settings)\n        roughMesh = buildRough(settings)\n"
+    new = old + "        decorMesh = V18Mesh(V18ProceduralDecor.build(settings))\n"
+    if old not in text:
+        raise SystemExit("V18 decor build insertion point missing")
+    text = text.replace(old, new, 1)
+    stage_changed = True
+
+legacy_ball = '''    private fun drawBall(settings: GreenSettings) {
+        val state = engine.state
+        val display = TvInstantRollRuntime.displayPosition(state) ?: if (state != null) state.x to state.y else 0.0 to 0.0
+        val z = GreenTerrain.effectiveHeightAt(settings, display.first, display.second).toFloat() + .023f
+        draw(sphere(display.first.toFloat(), display.second.toFloat(), z, .043f), GLES20.GL_TRIANGLES)
+    }'''
+shadow_ball = '''    private fun drawBall(settings: GreenSettings) {
+        val state = engine.state
+        val display = TvInstantRollRuntime.displayPosition(state) ?: if (state != null) state.x to state.y else 0.0 to 0.0
+        val ground = GreenTerrain.effectiveHeightAt(settings, display.first, display.second).toFloat()
+        // Soft contact shadow anchors the ball to the 3D green instead of making it look pasted on.
+        draw(
+            circle(display.first.toFloat() + .012f, display.second.toFloat() + .010f, ground + .003f, .052f,
+                floatArrayOf(.015f, .020f, .015f, .22f), 24),
+            GLES20.GL_TRIANGLES
+        )
+        draw(sphere(display.first.toFloat(), display.second.toFloat(), ground + .043f, .043f), GLES20.GL_TRIANGLES)
+    }'''
+if shadow_ball not in text:
+    if text.count(legacy_ball) != 1:
+        raise SystemExit(f"V18 ball shadow: expected 1 legacy match, got {text.count(legacy_ball)}")
+    text = text.replace(legacy_ball, shadow_ball, 1)
+    stage_changed = True
+
+if stage_changed:
+    stage.write_text(text, encoding="utf-8")
+    print("V18 procedural 3D scenery wired")
 
 # Phone HFR replay: add current / ideal / best corridor on the impact frame.
 replay = Path("app/src/main/java/com/puttvision/screen/ImpactReplayView.kt")
