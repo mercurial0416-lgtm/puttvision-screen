@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0-v15",
+  "version": "v21-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -12,16 +12,32 @@
     "physical_cup_detection": true,
     "live_phone_placement_guidance": true,
     "mat_friction_auto_cal": true,
-    "local_ai_coach_v15": true,
-    "personal_training_plan": true,
+    "personal_ai_coach": true,
+    "adaptive_daily_training_plan": true,
     "stroke_signature_repeatability": true,
-    "putter_fitting_after_20_shots": true,
+    "putter_fitting_v2": true,
+    "putter_performance_ranking": true,
+    "before_after_performance_compare": true,
     "ghost_best_shot_comparison": true,
     "multi_phone_camera_fusion": true,
     "lan_companion_camera_transport": true,
     "perfect_stroke_score": true,
+    "blind_green_read_training": true,
+    "post_shot_green_read_grading": true,
     "green_read_flow_dots": true,
     "green_aim_line": true,
+    "opengl_3d_tv_green": true,
+    "dynamic_ball_follow_camera": true,
+    "cup_closeup_camera": true,
+    "opengl_es2_fallback_to_v17": true,
+    "stroke_studio_current_ideal_best": true,
+    "measured_preview_head_trace": true,
+    "hfr_stroke_comparison_overlay": true,
+    "capture_result_quality_monitor": true,
+    "rolling_shutter_quality_penalty": true,
+    "ae_awb_lock": true,
+    "60hz_antibanding_when_supported": true,
+    "real_device_regression_gate_contract": true,
     "game_modes": [
       "practice",
       "distance",
@@ -37,13 +53,14 @@
     ],
     "multiplayer_local_1_to_4": true,
     "persistent_stats": true,
-    "tv_dispersion_heatmap": true,
     "generic_qr_marker_fallback": true
   },
   "validation": {
-    "pure_kotlin_core_compiled": true,
-    "android_full_build_executed": false,
-    "v15_ci_workflow": "Verify V15 product-grade bundle",
-    "device_runtime_still_required": true
+    "kotlin_regression_gate": true,
+    "consumer_developer_unit_tests": true,
+    "consumer_developer_debug_apk_compile": true,
+    "real_device_fixture_gate_script": "ci/v20_accuracy_gate.py",
+    "real_device_reference_fixture_committed": false,
+    "galaxy_s25_runtime_validation_still_required": true
   }
 }

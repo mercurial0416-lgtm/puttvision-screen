@@ -150,6 +150,7 @@ class ImpactReplayView(context: Context) : View(context) {
             canvas.drawRoundRect(media, max(10f, h * .018f), max(10f, h * .018f), paint)
             paint.style = Paint.Style.FILL
             drawBestShotComparison(canvas, media)
+            drawV19StudioComparison(canvas, media)
         }
 
         // Telemetry rail
@@ -227,6 +228,54 @@ class ImpactReplayView(context: Context) : View(context) {
             media.bottom - media.height() * .035f,
             paint
         )
+    }
+
+    private fun drawV19StudioComparison(canvas: Canvas, media: RectF) {
+        val model = V19StrokeStudioRuntime.latest ?: return
+        if (model.current.size < 2 || model.ideal.size < 2) return
+        val box = RectF(
+            media.right - media.width() * .34f,
+            media.top + media.height() * .06f,
+            media.right - media.width() * .025f,
+            media.bottom - media.height() * .08f
+        )
+        paint.color = Color.argb(126, 4, 8, 10)
+        canvas.drawRoundRect(box, max(9f, width * .006f), max(9f, width * .006f), paint)
+
+        fun trace(points: List<V19StrokeNode>, color: Int, stroke: Float) {
+            if (points.size < 2) return
+            val xMax = max(4.0, points.maxOf { kotlin.math.abs(it.xCm) } + 1.0)
+            val yMin = points.minOf { it.yCm }
+            val yMax = points.maxOf { it.yCm }.coerceAtLeast(yMin + 1.0)
+            fun sx(x: Double) = box.centerX() + (x / xMax).toFloat() * box.width() * .44f
+            fun sy(y: Double) = box.bottom - box.height() * .08f - ((y - yMin) / (yMax - yMin)).toFloat() * box.height() * .74f
+            val path = Path().apply {
+                moveTo(sx(points.first().xCm), sy(points.first().yCm))
+                points.drop(1).forEach { lineTo(sx(it.xCm), sy(it.yCm)) }
+            }
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+            paint.strokeWidth = stroke
+            paint.color = color
+            canvas.drawPath(path, paint)
+            paint.style = Paint.Style.FILL
+        }
+
+        paint.color = Color.argb(42, 246, 190, 74)
+        val corridor = (model.corridorCm / 5.0).toFloat().coerceIn(.03f, .22f) * box.width()
+        canvas.drawRect(box.centerX() - corridor, box.top + box.height() * .12f, box.centerX() + corridor, box.bottom - box.height() * .06f, paint)
+        trace(model.ghost, Color.argb(180, 86, 167, 255), max(2f, width * .0012f))
+        trace(model.ideal, Color.argb(220, 246, 190, 74), max(2f, width * .0014f))
+        trace(model.current, Color.argb(235, 78, 209, 121), max(3f, width * .0019f))
+
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textSize = max(8f, width * .0068f)
+        paint.color = Color.WHITE
+        canvas.drawText("STROKE Q${model.quality}", box.left + box.width() * .06f, box.top + box.height() * .09f, paint)
+        paint.textSize = max(6.5f, width * .0055f)
+        paint.color = Color.argb(210, 220, 228, 221)
+        canvas.drawText("GREEN CURRENT  ·  GOLD IDEAL  ·  BLUE BEST", box.left + box.width() * .06f, box.bottom - box.height() * .025f, paint)
     }
 
     override fun onDetachedFromWindow() {

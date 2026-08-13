@@ -71,7 +71,9 @@ class HighSpeedCaptureController(
             else -> quality.toString()
         }
 
-        val preview = Preview.Builder().build().also {
+        val previewBuilder = Preview.Builder()
+        V21CaptureConsistencyRuntime.attach(previewBuilder)
+        val preview = previewBuilder.build().also {
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
 

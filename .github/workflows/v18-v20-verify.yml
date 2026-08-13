@@ -1,0 +1,62 @@
+name: Verify V18-V21 simulator analysis training
+
+on:
+  push:
+    branches: [ agent/v18-v20-simulator-analysis-training ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v18-v21-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire V18-V21 integrations
+        run: |
+          python3 ci/v18_v20_apply.py
+          python3 ci/v21_camera_apply.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt app/src/main/java/com/puttvision/screen/ImpactReplayView.kt app/src/main/java/com/puttvision/screen/HighSpeedCaptureController.kt app/src/main/java/com/puttvision/screen/GameEngine.kt app/src/main/java/com/puttvision/screen/ProductSystems.kt; then
+            git config user.name "puttvision-v21-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/MainActivity.kt \
+                    app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt \
+                    app/src/main/java/com/puttvision/screen/ImpactReplayView.kt \
+                    app/src/main/java/com/puttvision/screen/HighSpeedCaptureController.kt \
+                    app/src/main/java/com/puttvision/screen/GameEngine.kt \
+                    app/src/main/java/com/puttvision/screen/ProductSystems.kt
+            git diff --cached --check
+            git commit -m "feat: wire V18-V21 runtime integrations"
+            git push origin HEAD:agent/v18-v20-simulator-analysis-training
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: V18-V21 unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Real-device accuracy gate when fixtures exist
+        run: |
+          if [ -f validation/v20_reference.csv ] && [ -f validation/v20_measured.csv ]; then
+            python3 ci/v20_accuracy_gate.py validation/v20_reference.csv validation/v20_measured.csv
+          else
+            echo "No real-device fixtures committed yet; Kotlin regression gate remains active."
+          fi
+
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug

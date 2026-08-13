@@ -29,6 +29,12 @@ class GameEngine {
         private set
     @Volatile var ghostComparison: V15GhostComparison? = null
         private set
+    @Volatile var strokeStudio: V19StrokeStudioModel? = null
+        private set
+    @Volatile var readFeedback: V20ReadFeedback = V20ReadFeedback(active = false, revealed = false)
+        private set
+    @Volatile var performanceCompare: V20PerformanceReport = V20PerformanceRuntime.report
+        private set
     @Volatile var recentRecords: List<ShotRecord> = emptyList()
         private set
     @Volatile var latestRecord: ShotRecord? = null
@@ -47,18 +53,28 @@ class GameEngine {
         V16Runtime.update(records)
         personalCoachSnapshot = V16Runtime.personalCoach
         dailyTrainingPlan = V16Runtime.trainingPlan
+        V20PerformanceRuntime.update(records)
+        performanceCompare = V20PerformanceRuntime.report
     }
 
     @Synchronized
     fun launch(metrics: ShotMetrics) {
         val deviceAdjusted = V16DeviceAutoCalibrationRuntime.applyFallback(metrics)
         V16CompanionLinkRuntime.publishIfCompanion(deviceAdjusted)
-        val effectiveMetrics = V15CompanionRuntime.fusePrimary(deviceAdjusted)
+        val effectiveMetrics = V21CaptureConsistencyRuntime.adjust(
+            V15CompanionRuntime.fusePrimary(deviceAdjusted)
+        )
         currentShot = effectiveMetrics
         metricConfidence = V16MetricConfidenceEstimator.estimate(effectiveMetrics)
         lastResult = null
         latestRecord = null
         ghostComparison = null
+
+        V19StrokeStudioRuntime.update(effectiveMetrics, recentRecords)
+        strokeStudio = V19StrokeStudioRuntime.latest
+        V20GreenReadTrainingRuntime.prepare(gameModes.status.mode, settings)
+        V20GreenReadTrainingRuntime.commit(effectiveMetrics, gameModes.status.mode, settings)
+        readFeedback = V20GreenReadTrainingRuntime.feedback
 
         effectiveMetrics.estimatedMatStimpM?.let { estimate ->
             matStimpEstimateM = matStimpEstimateM?.let { old -> old * 0.78 + estimate * 0.22 } ?: estimate
@@ -93,6 +109,8 @@ class GameEngine {
                 metricConfidence = V16MetricConfidenceEstimator.estimate(metrics)
                 coachFeedback = CoachEngine.diagnose(metrics, finalScore, recentRecords)
                 V16DeviceAutoCalibrationRuntime.observe(metrics)
+                V20GreenReadTrainingRuntime.reveal(settings)
+                readFeedback = V20GreenReadTrainingRuntime.feedback
 
                 val record = ShotRecord(
                     metrics = metrics,
@@ -120,6 +138,8 @@ class GameEngine {
                 V16Runtime.update(recentRecords)
                 personalCoachSnapshot = V16Runtime.personalCoach
                 dailyTrainingPlan = V16Runtime.trainingPlan
+                V20PerformanceRuntime.update(recentRecords)
+                performanceCompare = V20PerformanceRuntime.report
                 onRecordFinalized?.invoke(record)
                 gameModes.onResult(r)
                 V15AutoFlowRuntime.result()
@@ -139,6 +159,10 @@ class GameEngine {
         metricConfidence = null
         ghostComparison = null
         latestRecord = null
+        V19StrokeStudioRuntime.clear()
+        strokeStudio = null
+        V20GreenReadTrainingRuntime.prepare(gameModes.status.mode, settings)
+        readFeedback = V20GreenReadTrainingRuntime.feedback
         V15AutoFlowRuntime.rearm()
     }
 }
