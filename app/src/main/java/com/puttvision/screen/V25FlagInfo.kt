@@ -15,8 +15,9 @@ object V25FlagInfoRuntime {
     fun current(engine: GameEngine): V25FlagInfo {
         val settings = engine.settings
         val state = engine.state
-        val ballX = state?.x ?: 0.0
-        val ballY = state?.y ?: 0.0
+        val display = TvInstantRollRuntime.displayPosition(state)
+        val ballX = display?.first ?: state?.x ?: 0.0
+        val ballY = display?.second ?: state?.y ?: 0.0
         val cupX = 0.0
         val cupY = settings.holeDistanceM
         val remaining = hypot(cupX - ballX, cupY - ballY)
