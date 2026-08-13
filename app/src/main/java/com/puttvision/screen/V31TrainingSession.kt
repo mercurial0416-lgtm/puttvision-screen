@@ -1,7 +1,13 @@
 package com.puttvision.screen
 
-import kotlin.math.abs
 import kotlin.math.max
+
+object V31TrainingRules {
+    fun launchOk(angleDeg:Double)=kotlin.math.abs(angleDeg)<=.70
+    fun weaknessOk(score:Int,holed:Boolean,remainingM:Double)=score>=80&&(holed||remainingM<=.50)
+    fun distanceOk(remainingM:Double)=remainingM<=.35
+    fun pressureOk(holed:Boolean)=holed
+}
 
 data class V31TrainingProgress(val running:Boolean,val finished:Boolean,val blockIndex:Int,val blockCount:Int,val shotInBlock:Int,val shotsInBlock:Int,val successesInBlock:Int,val totalShots:Int,val totalSuccesses:Int,val streak:Int,val blockTitle:String,val targetDistanceM:Double,val summary:String)
 
@@ -38,7 +44,12 @@ object V31TrainingSessionRuntime {
         val summary=when{finished->"완료 · 성공 $totalSuccesses/$totalShots";running&&block!=null->"${blockIndex+1}/${p!!.blocks.size} · ${shotInBlock}/${block.shots}구";else->"대기"}
         return V31TrainingProgress(running,finished,blockIndex,p?.blocks?.size?:0,shotInBlock,block?.shots?:0,successesInBlock,totalShots,totalSuccesses,streak,block?.title?:"--",target,summary)
     }
-    private fun evaluate(index:Int,record:ShotRecord):Boolean=when(index){0->abs(record.metrics.launchAngleDeg)<=.70;1->record.strokeScore.total>=80&&(record.result?.holed==true||(record.result?.distanceToCupM?:9.0)<=.50);2->(record.result?.distanceToCupM?:9.0)<=.35;else->record.result?.holed==true}
+    private fun evaluate(index:Int,record:ShotRecord):Boolean=when(index){
+        0->V31TrainingRules.launchOk(record.metrics.launchAngleDeg)
+        1->V31TrainingRules.weaknessOk(record.strokeScore.total,record.result?.holed==true,record.result?.distanceToCupM?:9.0)
+        2->V31TrainingRules.distanceOk(record.result?.distanceToCupM?:9.0)
+        else->V31TrainingRules.pressureOk(record.result?.holed==true)
+    }
     private fun applyCurrentTarget(){val e=engine?:return;val p=plan?:return;val b=p.blocks.getOrNull(blockIndex)?:return;e.settings.holeDistanceM=if(b.title.contains("랜덤"))randomDistance(b.distanceM,shotInBlock)else b.distanceM;e.settings.sideSlopePct=b.sideSlopePct;e.settings.longSlopePct=b.longSlopePct;e.settings.terrainProfileId=-1;GreenReadRuntime.clearRuntimeCache()}
     private fun randomDistance(base:Double,shot:Int):Double{val f=doubleArrayOf(.70,.90,1.10,.80,1.00,1.20);return(base*f[shot%f.size]).coerceIn(1.5,8.0)}
     private fun restoreSettings(){val e=engine?:return;val s=original?:return;e.settings.holeDistanceM=s.distance;e.settings.sideSlopePct=s.side;e.settings.longSlopePct=s.long;e.settings.terrainProfileId=s.terrain;GreenReadRuntime.clearRuntimeCache();original=null}
