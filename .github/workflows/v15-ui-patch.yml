@@ -1,0 +1,163 @@
+name: Apply V15 commercial game UI patch
+
+on:
+  push:
+    branches: [ agent/v15-product-grade-putting ]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'ci: apply V15 game UI patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v15-product-grade-putting
+          fetch-depth: 0
+      - name: Expose all V15 game modes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('app/src/main/java/com/puttvision/screen/MainActivity.kt')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, got {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once('''                text = when (gameModeIndex) {
+                    0 -> "9홀 매치"
+                    1 -> "18홀 매치"
+                    2 -> "거리 맞추기"
+                    else -> "랜덤 경사"
+                }''', '''                text = when (gameModeIndex) {
+                    0 -> "9홀 매치"
+                    1 -> "18홀 매치"
+                    2 -> "거리 맞추기"
+                    3 -> "랜덤 경사"
+                    4 -> "퍼팅 다트"
+                    5 -> "퍼팅 컬링"
+                    6 -> "배틀 퍼팅"
+                    else -> "고스트 챌린지"
+                }''', 'game title')
+
+          replace_once('''                text = when (gameModeIndex) {
+                    0 -> "빠르게 즐기는 9홀 스코어 매치"
+                    1 -> "거리와 경사가 이어지는 풀 라운드"
+                    2 -> "목표 거리에 가장 가깝게 붙이기"
+                    else -> "매 샷 달라지는 그린을 읽는 게임"
+                }''', '''                text = when (gameModeIndex) {
+                    0 -> "빠르게 즐기는 9홀 스코어 매치"
+                    1 -> "거리와 경사가 이어지는 풀 라운드"
+                    2 -> "목표 거리에 가장 가깝게 붙이기"
+                    3 -> "매 샷 달라지는 그린을 읽는 게임"
+                    4 -> "홀 주변 링에 붙일수록 높은 점수"
+                    5 -> "센터에 가장 가깝게 보내는 정밀 게임"
+                    6 -> "최대 4명이 턴제로 겨루는 스코어 배틀"
+                    else -> "내 최고 기록의 궤적과 정면 승부"
+                }''', 'game description')
+
+          replace_once('''    panel.addView(label("게임 모드"))
+    val modes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+    listOf("9홀", "18홀", "거리", "랜덤 경사").forEachIndexed { i, title ->
+        modes.addView(darkChoice(title, gameModeIndex == i) {
+            gameModeIndex = i
+            showGameEntrance()
+        }, LinearLayout.LayoutParams(0, sdp(if (compact) 36 else 42), 1f).apply { if (i > 0) marginStart = sdp(5) })
+    }
+    panel.addView(modes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(5) })''', '''    panel.addView(label("게임 모드"))
+    val modeRows = listOf(
+        listOf(0 to "9홀", 1 to "18홀", 2 to "거리", 3 to "랜덤"),
+        listOf(4 to "다트", 5 to "컬링", 6 to "배틀", 7 to "고스트")
+    )
+    modeRows.forEachIndexed { rowIndex, entries ->
+        val modes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        entries.forEachIndexed { i, entry ->
+            val modeIndex = entry.first
+            modes.addView(darkChoice(entry.second, gameModeIndex == modeIndex) {
+                gameModeIndex = modeIndex
+                showGameEntrance()
+            }, LinearLayout.LayoutParams(0, sdp(if (compact) 31 else 36), 1f).apply { if (i > 0) marginStart = sdp(4) })
+        }
+        panel.addView(modes, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (rowIndex == 0) 5 else 4) })
+    }''', 'mode selector')
+
+          replace_once('''                text = when (gameModeIndex) {
+                    0 -> "9 HOLES"
+                    1 -> "18 HOLES"
+                    else -> "RANDOM TERRAIN"
+                }''', '''                text = when (gameModeIndex) {
+                    0 -> "9 HOLES"
+                    1 -> "18 HOLES"
+                    3 -> "RANDOM TERRAIN"
+                    4 -> "PUTTING DART"
+                    5 -> "PUTTING CURLING"
+                    6 -> "PUTTING BATTLE"
+                    7 -> "GHOST CHALLENGE"
+                    else -> "DISTANCE CONTROL"
+                }''', 'mode badge')
+
+          replace_once('''                text = when (gameModeIndex) {
+                    0 -> "  ·  홀마다 거리/경사 자동 구성"
+                    1 -> "  ·  누적 스코어 풀 라운드"
+                    else -> "  ·  매 샷 다른 2D 그린 프로필"
+                }''', '''                text = when (gameModeIndex) {
+                    0 -> "  ·  홀마다 거리/경사 자동 구성"
+                    1 -> "  ·  누적 스코어 풀 라운드"
+                    3 -> "  ·  매 샷 다른 2D 그린 프로필"
+                    4 -> "  ·  컵 주변 점수 링 정밀 공략"
+                    5 -> "  ·  센터 거리로 점수를 겨루는 모드"
+                    6 -> "  ·  최대 4인 턴제 점수 배틀"
+                    7 -> "  ·  내 베스트 샷과 실시간 비교"
+                    else -> "  ·  목표 거리 오차 최소화"
+                }''', 'mode badge detail')
+
+          old_footer = '''        text = "${gamePlayers}명  ·  ${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "${gameDistanceM}m 거리"; else -> "랜덤 경사" }}  ·  GREEN ${"%.1f".format(practiceGreenSpeed)}"'''
+          new_footer = '''        text = "${gamePlayers}명  ·  ${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "${gameDistanceM}m 거리"; 3 -> "랜덤 경사"; 4 -> "다트"; 5 -> "컬링"; 6 -> "배틀"; else -> "고스트" }}  ·  GREEN ${"%.1f".format(practiceGreenSpeed)}"'''
+          replace_once(old_footer, new_footer, 'game footer')
+
+          # Session recovery must retain the new selector range.
+          if 'gameModeIndex = s.gameModeIndex.coerceIn(0, 3)' not in text:
+              raise SystemExit('recovery range: expected match missing')
+          text = text.replace('gameModeIndex = s.gameModeIndex.coerceIn(0, 3)', 'gameModeIndex = s.gameModeIndex.coerceIn(0, 7)', 1)
+
+          # Session launch must map every commercial selector index to its engine mode.
+          pattern = re.compile(r'''            val mode = when \(gameModeIndex\) \{\n                0 -> PracticeMode\.NINE_HOLE\n                1 -> PracticeMode\.EIGHTEEN_HOLE\n                2 -> PracticeMode\.DISTANCE\n                else -> PracticeMode\.RANDOM_SLOPE\n            \}''')
+          replacement = '''            val mode = when (gameModeIndex) {
+                0 -> PracticeMode.NINE_HOLE
+                1 -> PracticeMode.EIGHTEEN_HOLE
+                2 -> PracticeMode.DISTANCE
+                3 -> PracticeMode.RANDOM_SLOPE
+                4 -> PracticeMode.DART
+                5 -> PracticeMode.CURLING
+                6 -> PracticeMode.BATTLE
+                else -> PracticeMode.GHOST
+            }'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'session mode mapping: expected 1 match, got {count}')
+
+          # Other compact game labels shown before a session starts.
+          old_short = '''${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "거리 맞추기"; else -> "랜덤 경사" }}'''
+          new_short = '''${when (gameModeIndex) { 0 -> "9홀"; 1 -> "18홀"; 2 -> "거리 맞추기"; 3 -> "랜덤 경사"; 4 -> "다트"; 5 -> "컬링"; 6 -> "배틀"; else -> "고스트" }}'''
+          if old_short in text:
+              text = text.replace(old_short, new_short)
+
+          path.write_text(text, encoding='utf-8')
+          print('V15 commercial mode UI patched successfully')
+          PY
+      - name: Commit UI integration
+        run: |
+          git config user.name "puttvision-v15-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/java/com/puttvision/screen/MainActivity.kt
+          git diff --cached --check
+          git commit -m "feat: expose V15 game modes in commercial UI"
+          git push origin HEAD:agent/v15-product-grade-putting
