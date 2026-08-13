@@ -1,0 +1,57 @@
+name: Verify PuttVision V14 final temp
+
+on:
+  push:
+    branches: [ v14-vision-and-tv-live ]
+    paths:
+      - '.github/workflows/v14-final-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-v14-final:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v14-vision-and-tv-live
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Apply final V14 touches
+        run: python .v14/apply_v14_final_touches.py
+      - name: Static product guards
+        shell: bash
+        run: |
+          grep -q 'onImpactDetected' app/src/main/java/com/puttvision/screen/ShotVisionAnalyzer.kt
+          grep -q 'IMPACT · TV LIVE · NORMAL' app/src/main/java/com/puttvision/screen/MainActivity.kt
+          grep -q 'IMPACT · TV LIVE · +700ms HFR' app/src/main/java/com/puttvision/screen/MainActivity.kt
+          grep -q 'analyzeSynthetic' app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt
+          grep -q 'V14RobustKinematics.fit' app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt
+          grep -q 'TvInstantRollRuntime.displayPosition' app/src/main/java/com/puttvision/screen/GreenView.kt
+          grep -q 'LAB P95' app/src/main/java/com/puttvision/screen/V14VisionSystems.kt
+          grep -q 'rollSpinRpm' app/src/main/java/com/puttvision/screen/StatsRepository.kt
+          grep -q 'version = 4' app/src/main/java/com/puttvision/screen/StatsRepository.kt
+          grep -q 'reprojectionRmsPx' app/src/main/java/com/puttvision/screen/AutoCalibrator.kt
+          git diff --check
+      - name: Full unit regression
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+      - name: Compile consumer and developer channels
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
+      - name: Commit final verified V14 app
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app
+          if git diff --cached --quiet; then
+            echo 'No final app changes to commit'
+            exit 1
+          fi
+          git commit -m 'feat: V14 instant TV roll for all camera modes'
+          git push origin HEAD:v14-vision-and-tv-live
