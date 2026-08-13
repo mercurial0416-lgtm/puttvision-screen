@@ -64,4 +64,38 @@ if new_status not in cal:
     cal_path.write_text(cal, encoding="utf-8")
     changed.append(str(cal_path))
 
+# 4) TV framing: ball/address point sits around the lower-middle of the screen like a simulator,
+# leaving turf below it for the READY pill instead of putting the ball on the bezel edge.
+tv_path = Path("app/src/main/java/com/puttvision/screen/V16SimulatorTvView.kt")
+tv = tv_path.read_text(encoding="utf-8")
+if "val projectionBottomY = h * .74f" not in tv:
+    old_block = '''        val horizonY = h * .405f
+        val bottomY = h * 1.02f
+        val centerX = w * .50f
+'''
+    new_block = '''        val horizonY = h * .405f
+        val projectionBottomY = h * .74f
+        val greenBottomY = h * 1.02f
+        val centerX = w * .50f
+'''
+    if tv.count(old_block) != 1:
+        raise SystemExit(f"TV framing header expected 1, got {tv.count(old_block)}")
+    tv = tv.replace(old_block, new_block, 1)
+    tv = tv.replace(
+        '''            return bottomY - (bottomY - horizonY) * t''',
+        '''            return projectionBottomY - (projectionBottomY - horizonY) * t''',
+        1
+    )
+    tv = tv.replace(
+        '''            val t = ((yPix - horizonY) / (bottomY - horizonY)).coerceIn(0f, 1f)''',
+        '''            val t = ((yPix - horizonY) / (projectionBottomY - horizonY)).coerceIn(0f, 1f)''',
+        1
+    )
+    tv = tv.replace('''            cubicTo(w * .16f, h * .60f, w * .04f, h * .87f, -w * .03f, bottomY)
+            lineTo(w * 1.03f, bottomY)''', '''            cubicTo(w * .16f, h * .60f, w * .04f, h * .87f, -w * .03f, greenBottomY)
+            lineTo(w * 1.03f, greenBottomY)''', 1)
+    tv = tv.replace('''            0f, horizonY, 0f, bottomY,''', '''            0f, horizonY, 0f, greenBottomY,''', 1)
+    tv_path.write_text(tv, encoding="utf-8")
+    changed.append(str(tv_path))
+
 print("V16 integration patch:", ", ".join(changed) if changed else "already current")
