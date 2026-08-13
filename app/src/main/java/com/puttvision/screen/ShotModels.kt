@@ -40,7 +40,10 @@ data class ShotMetrics(
     val estimatedMatStimpM: Double? = null,
 
     // 0..1 heuristic confidence; useful for UI / filtering bad captures.
-    val confidence: Double? = null
+    val confidence: Double? = null,
+
+    // V13 per-metric uncertainty estimate. Null for legacy/restored measurements.
+    val uncertainty: MeasurementUncertainty? = null
 )
 
 class ShotTracker {
@@ -184,6 +187,7 @@ class ShotTracker {
         val impactOffset =
             impactHead?.let { (start.pCm.x - it.centerCm.x) * 10.0 }
 
+        val confidence = 0.45
         return ShotMetrics(
             ballSpeedMps = ballSpeed,
             launchAngleDeg = launch,
@@ -195,7 +199,15 @@ class ShotTracker {
             impactOffsetMm = impactOffset,
             measuredAtNs = tImpact,
             rawBallSpeedMps = ballSpeed,
-            confidence = 0.45
+            confidence = confidence,
+            uncertainty = MeasurementUncertaintyEstimator.forNormal(
+                ballSpeedMps = ballSpeed,
+                headSpeedMps = headSpeed,
+                faceAngleDeg = face,
+                pathAngleDeg = path,
+                impactOffsetMm = impactOffset,
+                confidence = confidence
+            )
         )
     }
 }
