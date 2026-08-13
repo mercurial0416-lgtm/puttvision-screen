@@ -98,4 +98,24 @@ if "val projectionBottomY = h * .74f" not in tv:
     tv_path.write_text(tv, encoding="utf-8")
     changed.append(str(tv_path))
 
+# 5) Load persisted V16 mat geometry and the per-device auto-calibration profile at startup.
+main_path = Path("app/src/main/java/com/puttvision/screen/MainActivity.kt")
+main = main_path.read_text(encoding="utf-8")
+if "V16DeviceAutoCalibrationRuntime.install(this)" not in main:
+    old_runtime = '''        putterProfileStore = PutterProfileStore(this)
+        matCalibrationManager = MatCalibrationManager(this)
+        voiceCoach = HandsFreeVoiceCoach(this)
+'''
+    new_runtime = '''        putterProfileStore = PutterProfileStore(this)
+        matCalibrationManager = MatCalibrationManager(this)
+        V16MatGeometryStore(this)
+        V16DeviceAutoCalibrationRuntime.install(this)
+        voiceCoach = HandsFreeVoiceCoach(this)
+'''
+    if main.count(old_runtime) != 1:
+        raise SystemExit(f"MainActivity V16 runtime insertion expected 1, got {main.count(old_runtime)}")
+    main = main.replace(old_runtime, new_runtime, 1)
+    main_path.write_text(main, encoding="utf-8")
+    changed.append(str(main_path))
+
 print("V16 integration patch:", ", ".join(changed) if changed else "already current")
