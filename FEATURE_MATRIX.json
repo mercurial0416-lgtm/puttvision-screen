@@ -1,5 +1,5 @@
 {
-  "version": "v29-development",
+  "version": "v32-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -18,6 +18,9 @@
     "mat_friction_auto_cal": true,
     "personal_ai_coach": true,
     "adaptive_daily_training_plan": true,
+    "executable_15_minute_training_state_machine": true,
+    "training_crash_resume_6h": true,
+    "training_tv_progress_hud": true,
     "stroke_signature_repeatability": true,
     "putter_fitting_v2": true,
     "putter_performance_ranking": true,
@@ -47,19 +50,7 @@
     "ae_awb_lock": true,
     "60hz_antibanding_when_supported": true,
     "real_device_regression_gate_contract": true,
-    "game_modes": [
-      "practice",
-      "distance",
-      "9-hole",
-      "18-hole",
-      "streak",
-      "pressure",
-      "random-slope",
-      "dart",
-      "curling",
-      "battle",
-      "ghost"
-    ],
+    "game_modes": ["practice","distance","9-hole","18-hole","streak","pressure","random-slope","dart","curling","battle","ghost"],
     "multiplayer_local_1_to_4": true,
     "persistent_stats": true,
     "generic_qr_marker_fallback": true,
@@ -76,9 +67,11 @@
     "report_distance_units_meters": true,
     "selectable_cup_entry_pace": true,
     "pace_changes_green_read_line_and_speed": true,
+    "tv_pace_ideal_gold_line": true,
     "hfr_manual_line_circle_angle_annotations": true,
     "hfr_manual_frame_scrub": true,
     "hfr_annotation_undo_clear": true,
+    "hfr_frame_scoped_annotations": true,
     "custom_green_json_export_import": true,
     "custom_green_shape_cache_key": true,
     "annotated_replay_png_share": true,
@@ -91,7 +84,13 @@
     "companion_auto_fill_pair_code": true,
     "procedural_grass_micro_material": true,
     "hemisphere_ambient_lighting": true,
-    "distance_atmospheric_fog": true
+    "distance_atmospheric_fog": true,
+    "dedicated_online_supabase_backend": true,
+    "online_keystore_device_token": true,
+    "online_league_product_setup_entry": true,
+    "online_friend_request_response_ui": true,
+    "online_room_ready_controls": true,
+    "online_database_fk_index_hardening": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -111,6 +110,8 @@
     "v28_custom_green_cache_signature_test": true,
     "v28_companion_protocol_test": true,
     "v29_nsd_compile_gate": true,
-    "v29_opengl_shader_source_gate": true
+    "v29_opengl_shader_source_gate": true,
+    "v31_online_training_ci_passed": true,
+    "v29_pace_frame_annotation_integration_ci_passed": true
   }
 }
