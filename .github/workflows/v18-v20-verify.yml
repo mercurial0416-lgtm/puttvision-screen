@@ -1,4 +1,4 @@
-name: Verify V18-V20 simulator analysis training
+name: Verify V18-V21 simulator analysis training
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: puttvision-v18-v20-verify
+  group: puttvision-v18-v21-verify
   cancel-in-progress: true
 
 jobs:
@@ -20,17 +20,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Wire V18-V20 integrations
+      - name: Wire V18-V21 integrations
         run: |
           python3 ci/v18_v20_apply.py
-          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt app/src/main/java/com/puttvision/screen/ImpactReplayView.kt; then
-            git config user.name "puttvision-v20-bot"
+          python3 ci/v21_camera_apply.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt app/src/main/java/com/puttvision/screen/ImpactReplayView.kt app/src/main/java/com/puttvision/screen/HighSpeedCaptureController.kt app/src/main/java/com/puttvision/screen/GameEngine.kt app/src/main/java/com/puttvision/screen/ProductSystems.kt; then
+            git config user.name "puttvision-v21-bot"
             git config user.email "actions@users.noreply.github.com"
             git add app/src/main/java/com/puttvision/screen/MainActivity.kt \
                     app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt \
-                    app/src/main/java/com/puttvision/screen/ImpactReplayView.kt
+                    app/src/main/java/com/puttvision/screen/ImpactReplayView.kt \
+                    app/src/main/java/com/puttvision/screen/HighSpeedCaptureController.kt \
+                    app/src/main/java/com/puttvision/screen/GameEngine.kt \
+                    app/src/main/java/com/puttvision/screen/ProductSystems.kt
             git diff --cached --check
-            git commit -m "feat: wire V18 3D V19 studio and V20 prefs"
+            git commit -m "feat: wire V18-V21 runtime integrations"
             git push origin HEAD:agent/v18-v20-simulator-analysis-training
           fi
 
@@ -43,7 +47,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: V18-V20 unit and regression tests
+      - name: V18-V21 unit and regression tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
       - name: Real-device accuracy gate when fixtures exist
