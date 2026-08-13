@@ -25,14 +25,14 @@ fun showProductSetupDialog(
     }
 
     root.addView(TextView(context).apply {
-        text = "EQUIPMENT & HANDS FREE"
+        text = "EQUIPMENT & PERFORMANCE"
         setTextColor(Pv.primary)
         textSize = context.pvSp(7f)
         typeface = Typeface.DEFAULT_BOLD
         letterSpacing = .12f
     })
     root.addView(TextView(context).apply {
-        text = "실제 장비 기준, 기기 보정, AI 코칭, 멀티폰 카메라와 무터치 세션을 설정합니다."
+        text = "장비 기준, 기기 보정, AI 코칭, 블라인드 그린 리드, 성능 비교와 멀티폰 카메라를 설정합니다."
         setTextColor(Pv.textMid)
         textSize = context.pvSp(8.5f)
         setPadding(0, context.pvDp(4), 0, context.pvDp(10))
@@ -97,6 +97,14 @@ fun showProductSetupDialog(
         "PERSONAL AI COACH",
         coach?.let { "${it.primary.headline} · 개선 ${it.improvementScore}" } ?: "8구부터 개인 패턴 학습"
     ) { showV16PersonalCoachDialog(context) })
+
+    addAction(action("GREEN READ TRAINING", "${V20GreenReadTrainingRuntime.mode.label} · 샷 후 정답 공개") {
+        showV20GreenReadModeDialog(context)
+    })
+
+    addAction(action("PERFORMANCE COMPARE", V20PerformanceRuntime.report.headline) {
+        showV20PerformanceCompareDialog(context)
+    })
 
     addAction(action("DEVICE AUTO CAL", V16DeviceAutoCalibrationRuntime.statusLabel()) {
         showV16DeviceCalibrationDialog(context)
