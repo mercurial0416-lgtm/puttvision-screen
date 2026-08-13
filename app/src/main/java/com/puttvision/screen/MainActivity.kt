@@ -256,6 +256,7 @@ class MainActivity : AppCompatActivity() {
         matCalibrationManager = MatCalibrationManager(this)
         V16MatGeometryStore(this)
         V16DeviceAutoCalibrationRuntime.install(this)
+        V20ProductPreferences.install(this)
         voiceCoach = HandsFreeVoiceCoach(this)
         accuracyValidationLab = AccuracyValidationLab(this)
         accuracyAutoTuner = AccuracyAutoTuner(this, deviceReport.model)
@@ -2512,7 +2513,7 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        val tv = V17SimulatorTvView(this, engine)
+        val tv = V18SimulatorFactory.create(this, engine)
         root.addView(tv, FrameLayout.LayoutParams(-1, -1))
         root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
 
@@ -2584,7 +2585,7 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        root.addView(V17SimulatorTvView(this, engine), FrameLayout.LayoutParams(-1, -1))
+        root.addView(V18SimulatorFactory.create(this, engine), FrameLayout.LayoutParams(-1, -1))
         root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
 
         val controls = LinearLayout(this).apply {

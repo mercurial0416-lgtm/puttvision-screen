@@ -46,6 +46,7 @@ class V18SimulatorStage(
         setBackgroundColor(Color.rgb(55, 130, 190))
         addView(gl, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(hud, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(V19StrokeStudioOverlay(context, engine), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
     override fun onWindowVisibilityChanged(visibility: Int) {
