@@ -38,7 +38,7 @@ object V16CompanionLinkRuntime {
     private var client: V15CompanionClient? = null
 
     @Synchronized
-    fun startHost(): Boolean {
+    fun startHost(context: Context): Boolean {
         stop()
         val code = V28CompanionProtocol.newSessionCode()
         val created = V15CompanionServer(sessionCode = code)
@@ -51,6 +51,7 @@ object V16CompanionLinkRuntime {
         sessionCode = code
         role = V16CompanionRole.HOST
         host = null
+        V29NsdRuntime.advertise(context, code, created.status().port)
         V15CompanionRuntime.clear()
         return true
     }
@@ -91,6 +92,7 @@ object V16CompanionLinkRuntime {
     fun stop() {
         runCatching { server?.close() }
         runCatching { client?.close() }
+        V29NsdRuntime.stopAdvertising()
         server = null
         client = null
         host = null
@@ -164,8 +166,8 @@ fun showV16CompanionDialog(context: Context) {
         .setTitle("멀티폰 카메라")
         .setView(root)
         .setPositiveButton("메인폰으로 시작") { _, _ ->
-            val ok = V16CompanionLinkRuntime.startHost()
-            Toast.makeText(context, if (ok) "메인폰 서버 시작 · ${V16CompanionLinkRuntime.hostAddressLabel()}" else "메인폰 서버 시작 실패", Toast.LENGTH_LONG).show()
+            val ok = V16CompanionLinkRuntime.startHost(context)
+            Toast.makeText(context, if (ok) "메인폰 시작 · 보조폰에서 자동검색 가능" else "메인폰 서버 시작 실패", Toast.LENGTH_LONG).show()
         }
         .setNeutralButton("보조폰 연결") { _, _ -> showV16JoinCompanionDialog(context) }
         .setNegativeButton(if (status.role == V16CompanionRole.OFF) "닫기" else "연결 끄기") { _, _ ->
@@ -194,6 +196,38 @@ private fun showV16JoinCompanionDialog(context: Context) {
         setSingleLine(true)
     }
     root.addView(codeInput, LinearLayout.LayoutParams(-1, context.pvDp(50)))
+
+    val discover = TextView(context).apply {
+        text = "같은 Wi‑Fi에서 메인폰 자동검색"
+        textSize = context.pvSp(10f)
+        setTextColor(Pv.primary)
+        typeface = Typeface.DEFAULT_BOLD
+        gravity = Gravity.CENTER
+        setPadding(context.pvDp(8), context.pvDp(8), context.pvDp(8), context.pvDp(8))
+        setOnClickListener {
+            text = "검색 중…"
+            V29NsdRuntime.discover(context) { hosts ->
+                post {
+                    text = "같은 Wi‑Fi에서 메인폰 자동검색"
+                    if (hosts.isEmpty()) {
+                        Toast.makeText(context, "메인폰을 못 찾음 · 수동 주소/PAIR 입력 가능", Toast.LENGTH_LONG).show()
+                    } else {
+                        AlertDialog.Builder(context)
+                            .setTitle("발견된 PuttVision")
+                            .setItems(hosts.map { it.label }.toTypedArray()) { _, which ->
+                                val found = hosts[which]
+                                hostInput.setText(found.host)
+                                codeInput.setText(found.pairCode)
+                                Toast.makeText(context, "${found.serviceName} 선택됨", Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton("취소", null)
+                            .show()
+                    }
+                }
+            }
+        }
+    }
+    root.addView(discover, LinearLayout.LayoutParams(-1, context.pvDp(48)))
 
     val views = listOf(
         V15CameraView.FACE_ON to "정면",
