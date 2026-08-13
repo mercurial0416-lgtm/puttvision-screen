@@ -321,6 +321,29 @@ class V17SimulatorTvView(
         }
         p.color = Color.rgb(224, 64, 52)
         c.drawPath(flag, p)
+
+        val info = V25FlagInfoRuntime.current(engine)
+        val bw = w * .145f
+        val bh = h * .073f
+        val anchorY = hy - poleH * .52f
+        val left = (hx + w * .016f).coerceIn(w * .012f, w - bw - w * .012f)
+        val top = (anchorY - bh * .50f).coerceIn(h * .10f, h - bh - h * .08f)
+        p.color = Color.argb(188, 12, 18, 17)
+        c.drawRoundRect(RectF(left, top, left + bw, top + bh), bh * .23f, bh * .23f, p)
+        p.color = Color.argb(205, 255, 255, 255)
+        c.drawRect(hx, anchorY - 1f, left, anchorY + 1f, p)
+        p.textAlign = Paint.Align.LEFT
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(9f, w * .0063f)
+        p.color = Color.WHITE
+        c.drawText(info.distanceLabel, left + bw * .08f, top + bh * .40f, p)
+        p.textSize = max(8f, w * .0055f)
+        p.color = when {
+            info.heightDeltaM > .005 -> Color.rgb(255, 214, 94)
+            info.heightDeltaM < -.005 -> Color.rgb(124, 214, 255)
+            else -> Color.argb(205, 230, 236, 230)
+        }
+        c.drawText(info.heightLabel, left + bw * .08f, top + bh * .76f, p)
     }
 
     private fun drawAimLineAndBall(
@@ -523,7 +546,7 @@ class V17SimulatorTvView(
         p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         p.textSize = max(27f, w * .0195f)
         p.color = Color.WHITE
-        val main = if (result.holed) "IN" else "${"%.0f".format(result.distanceToCupM * 100.0)}cm"
+        val main = if (result.holed) "IN" else "${"%.2f".format(result.distanceToCupM)} m"
         c.drawText(main, left + boxW * .5f, top + boxH * .66f, p)
 
         p.typeface = Typeface.DEFAULT_BOLD

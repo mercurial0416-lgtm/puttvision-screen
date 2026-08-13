@@ -129,6 +129,8 @@ private class V18PuttingRenderer(
     private val view = FloatArray(16)
     private val mvp = FloatArray(16)
     private var aspect = 16f / 9f
+    private var viewportWidth = 0
+    private var viewportHeight = 0
 
     private var terrainKey: V18TerrainKey? = null
     private var terrainMesh: V18Mesh? = null
@@ -152,6 +154,8 @@ private class V18PuttingRenderer(
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         GLES20.glViewport(0, 0, width, height)
+        viewportWidth = width
+        viewportHeight = height
         aspect = width.toFloat() / height.coerceAtLeast(1).toFloat()
         Matrix.perspectiveM(projection, 0, 43f, aspect, .05f, 45f)
     }
@@ -168,6 +172,7 @@ private class V18PuttingRenderer(
             0f, 0f, 1f
         )
         Matrix.multiplyMM(mvp, 0, projection, 0, view, 0)
+        V25FlagProjectionRuntime.publish(mvp, viewportWidth, viewportHeight)
         GLES20.glUseProgram(program)
         GLES20.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
 
@@ -489,6 +494,7 @@ private class V18SimulatorHudView(
         super.onDraw(c)
         drawTopPill(c)
         drawMode(c)
+        drawFlagInfo(c)
         drawTelemetry(c)
         drawReadChallenge(c)
         drawResult(c)
@@ -524,6 +530,30 @@ private class V18SimulatorHudView(
             if (game.playerCount > 1) append("  ·  P${game.activePlayer}/${game.playerCount}")
         }
         c.drawText(text,w*.025f,h*.055f,p)
+    }
+
+    private fun drawFlagInfo(c: Canvas) {
+        val anchor = V25FlagProjectionRuntime.projectFlag(engine.settings) ?: return
+        val info = V25FlagInfoRuntime.current(engine)
+        val w = width.toFloat(); val h = height.toFloat()
+        if (anchor.x < -w * .02f || anchor.x > w * 1.02f || anchor.y < 0f || anchor.y > h) return
+        val bw = w * .145f; val bh = h * .073f
+        val left = (anchor.x + w * .016f).coerceIn(w * .012f, w - bw - w * .012f)
+        val top = (anchor.y - bh * .52f).coerceIn(h * .10f, h - bh - h * .08f)
+        p.color = Color.argb(188, 12, 18, 17)
+        c.drawRoundRect(RectF(left, top, left + bw, top + bh), bh * .23f, bh * .23f, p)
+        p.color = Color.argb(205, 255, 255, 255)
+        c.drawRect(anchor.x, anchor.y - 1f, left, anchor.y + 1f, p)
+        p.textAlign = Paint.Align.LEFT; p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(9f, w * .0063f); p.color = Color.WHITE
+        c.drawText(info.distanceLabel, left + bw * .08f, top + bh * .40f, p)
+        p.textSize = max(8f, w * .0055f)
+        p.color = when {
+            info.heightDeltaM > .005 -> Color.rgb(255, 214, 94)
+            info.heightDeltaM < -.005 -> Color.rgb(124, 214, 255)
+            else -> Color.argb(205, 230, 236, 230)
+        }
+        c.drawText(info.heightLabel, left + bw * .08f, top + bh * .76f, p)
     }
 
     private fun drawTelemetry(c: Canvas) {
@@ -569,7 +599,7 @@ private class V18SimulatorHudView(
         val title=when{r.holed->"NICE PUTT";r.lipOut->"LIP OUT";r.finishY<engine.settings.holeDistanceM->"SHORT";else->"RESULT"}
         p.textAlign=Paint.Align.CENTER;p.typeface=Typeface.DEFAULT_BOLD;p.textSize=max(10f,w*.0072f);p.color=if(r.holed)Color.rgb(255,215,70)else Color.rgb(126,235,148);c.drawText(title,w*.5f,t+hh*.31f,p)
         p.textSize=max(25f,w*.018f);p.color=Color.WHITE
-        c.drawText(if(r.holed)"IN" else "${"%.0f".format(r.distanceToCupM*100)} cm",w*.5f,t+hh*.68f,p)
+        c.drawText(if(r.holed)"IN" else "${"%.2f".format(r.distanceToCupM)} m",w*.5f,t+hh*.68f,p)
         p.textSize=max(7f,w*.005f);p.color=Color.argb(185,230,235,230);c.drawText(engine.coachFeedback?.headline?:"분석 완료",w*.5f,t+hh*.89f,p)
         p.textAlign=Paint.Align.LEFT
     }

@@ -1,5 +1,5 @@
 {
-  "version": "v23-development",
+  "version": "v25-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -62,7 +62,12 @@
     ],
     "multiplayer_local_1_to_4": true,
     "persistent_stats": true,
-    "generic_qr_marker_fallback": true
+    "generic_qr_marker_fallback": true,
+    "adaptive_tv_3d_quality": true,
+    "flag_side_live_remaining_distance_m": true,
+    "flag_side_live_height_delta_m": true,
+    "tv_distance_units_fixed_to_meters": true,
+    "flag_info_tracks_opengl_camera": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -72,6 +77,7 @@
     "real_device_fixture_gate_script": "ci/v20_accuracy_gate.py",
     "real_device_reference_fixture_committed": false,
     "galaxy_s25_runtime_validation_still_required": true,
-    "fully_markerless_normal_session_calibration": true
+    "fully_markerless_normal_session_calibration": true,
+    "v25_flag_unit_regression_test": true
   }
 }
