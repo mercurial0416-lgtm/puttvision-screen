@@ -8,8 +8,9 @@ data class TerrainSlope(
 
 /**
  * Compatibility facade for the spatial green library.
- * V12 derives every local terrain slope from GreenSurface.heightAt(), making
- * rendering and ball physics share one physically consistent scalar surface.
+ * V13 exposes both effective height and effective slope, including the explicit
+ * base plane from GreenSettings. Rendering and physics therefore consume the
+ * same complete surface instead of showing only the profile residual height.
  */
 object GreenTerrain {
     fun effectiveSlopeAt(settings: GreenSettings, x: Double, y: Double): TerrainSlope {
@@ -19,6 +20,12 @@ object GreenTerrain {
             longPct = settings.longSlopePct + local.longPct
         )
     }
+
+    /** Physical elevation in metres for the exact surface GreenPhysics feels. */
+    fun effectiveHeightAt(settings: GreenSettings, x: Double, y: Double): Double =
+        heightAt(settings.terrainProfileId, x, y, settings.holeDistanceM) -
+            0.01 * settings.sideSlopePct * x -
+            0.01 * settings.longSlopePct * y
 
     fun slopeAt(
         profileId: Int,
