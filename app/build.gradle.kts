@@ -4,21 +4,16 @@ plugins {
     id("org.jetbrains.kotlin.kapt")
 }
 
-val licensePublicKey = (System.getenv("PV_LICENSE_PUBLIC_KEY_B64") ?: "")
-    .replace("\\", "\\\\")
-    .replace("\"", "\\\"")
-
 android {
     namespace = "com.puttvision.screen"
     compileSdk = 36
 
     defaultConfig {
         applicationId = "com.puttvision.screen"
-        minSdk = 26
-        targetSdk = 36
-        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 105
-        versionName = System.getenv("PV_VERSION_NAME") ?: "1.2.0-v16"
-        buildConfigField("String", "LICENSE_PUBLIC_KEY_B64", "\"$licensePublicKey\"")
+        minSdk = 30
+        targetSdk = 35
+        versionCode = (providers.environmentVariable("PV_VERSION_CODE").orNull?.toIntOrNull() ?: 1600)
+        versionName = providers.environmentVariable("PV_VERSION_NAME").orNull ?: "1.2.0-v16"
     }
 
     buildFeatures {
@@ -29,30 +24,37 @@ android {
     productFlavors {
         create("consumer") {
             dimension = "distribution"
-            buildConfigField("boolean", "DEVELOPER_BUILD", "false")
+            buildConfigField("boolean", "DEVELOPER_FEATURES", "false")
         }
         create("developer") {
             dimension = "distribution"
-            buildConfigField("boolean", "DEVELOPER_BUILD", "true")
+            buildConfigField("boolean", "DEVELOPER_FEATURES", "true")
         }
     }
 
     signingConfigs {
         create("release") {
-            val ks = System.getenv("PUTTVISION_STORE_FILE")
-            if (!ks.isNullOrBlank()) {
-                storeFile = file(ks)
-                storePassword = System.getenv("PUTTVISION_STORE_PASSWORD")
-                keyAlias = System.getenv("PUTTVISION_KEY_ALIAS")
-                keyPassword = System.getenv("PUTTVISION_KEY_PASSWORD")
+            val storeFilePath = providers.environmentVariable("PV_KEYSTORE_PATH").orNull
+            if (!storeFilePath.isNullOrBlank()) {
+                storeFile = file(storeFilePath)
+                storePassword = providers.environmentVariable("PV_KEYSTORE_PASSWORD").orNull
+                keyAlias = providers.environmentVariable("PV_KEY_ALIAS").orNull
+                keyPassword = providers.environmentVariable("PV_KEY_PASSWORD").orNull
             }
         }
     }
 
     buildTypes {
-        getByName("release") {
+        release {
             isMinifyEnabled = false
+            if (providers.environmentVariable("PV_KEYSTORE_PATH").orNull.isNullOrBlank()) {
+                throw GradleException("PV_KEYSTORE_PATH is required for release builds")
+            }
             signingConfig = signingConfigs.getByName("release")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
@@ -60,27 +62,25 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=androidx.camera.core.ExperimentalSessionConfig",
-            "-opt-in=androidx.camera.video.ExperimentalHighSpeedVideo",
-            "-opt-in=androidx.camera.camera2.interop.ExperimentalCamera2Interop"
-        )
-    }
-
-    testOptions {
-        unitTests.isReturnDefaultValues = true
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        freeCompilerArgs.add("-Xjvm-default=all")
     }
 }
 
-dependencies {
-    implementation("androidx.core:core-ktx:1.16.0")
-    implementation("androidx.appcompat:appcompat:1.7.1")
-    implementation("androidx.activity:activity-ktx:1.10.1")
+kapt {
+    correctErrorTypes = true
+}
 
-    val cameraX = "1.6.1"
+dependencies {
+    implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("com.google.android.material:material:1.13.0")
+
+    val cameraX = "1.5.3"
     implementation("androidx.camera:camera-core:$cameraX")
     implementation("androidx.camera:camera-camera2:$cameraX")
     implementation("androidx.camera:camera-lifecycle:$cameraX")
@@ -94,4 +94,5 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20260719")
 }
