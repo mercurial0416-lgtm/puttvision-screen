@@ -1,14 +1,14 @@
-name: Verify V31 online and executable training
+name: Verify V32 clean product tree
 
 on:
   push:
-    branches: [ agent/v31-final ]
+    branches: [ agent/v32-verify ]
 
 permissions:
   contents: read
 
 concurrency:
-  group: v31-${{ github.ref }}
+  group: v32-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
