@@ -1,26 +1,28 @@
 from pathlib import Path
 
-# Tighten the pure fitter and keep calibration point ordering 1:1 with metric destinations.
+# Tighten the pure fitter against full-width floor patches.
 cal = Path("app/src/main/java/com/puttvision/screen/V23MarkerlessCalibrator.kt")
 text = cal.read_text(encoding="utf-8")
-changed = False
 if "if (aspect !in .62..9.0) return null" not in text:
     old = "if (aspect !in .45..9.0) return null"
     if text.count(old) != 1:
         raise SystemExit(f"V23 aspect guard: expected 1 match, got {text.count(old)}")
-    text = text.replace(old, "if (aspect !in .62..9.0) return null", 1)
-    changed = True
+    cal.write_text(text.replace(old, "if (aspect !in .62..9.0) return null", 1), encoding="utf-8")
+    print("V23 fitter aspect guard applied")
+else:
+    print("V23 fitter aspect guard already current")
+
+# Keep image/world arrays in the exact same BL,BR,TR,TL order for downstream diagnostics/drift.
+auto = Path("app/src/main/java/com/puttvision/screen/AutoCalibrator.kt")
+text = auto.read_text(encoding="utf-8")
 if "imagePoints = detection.fitImagePoints()," not in text:
     old = "imagePoints = detection.cornersPx,"
     if text.count(old) != 1:
         raise SystemExit(f"V23 point ordering: expected 1 match, got {text.count(old)}")
-    text = text.replace(old, "imagePoints = detection.fitImagePoints(),", 1)
-    changed = True
-if changed:
-    cal.write_text(text, encoding="utf-8")
-    print("V23 fitter guards applied")
+    auto.write_text(text.replace(old, "imagePoints = detection.fitImagePoints(),", 1), encoding="utf-8")
+    print("V23 markerless point ordering applied")
 else:
-    print("V23 fitter guards already current")
+    print("V23 markerless point ordering already current")
 
 # The visible setup status should match the actual markerless-first policy.
 main = Path("app/src/main/java/com/puttvision/screen/MainActivity.kt")
