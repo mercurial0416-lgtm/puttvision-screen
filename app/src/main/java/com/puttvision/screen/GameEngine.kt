@@ -77,10 +77,14 @@ class GameEngine {
 
     @Synchronized
     fun launch(metrics: ShotMetrics) {
+        // HFR teaches a small device-specific speed correction. Only lower-speed fallback
+        // measurements receive it, so HFR is never corrected twice.
+        val deviceAdjusted = V16DeviceAutoCalibrationRuntime.applyFallback(metrics)
+
         // A secondary phone publishes its own measurement; a host consumes all recent companion
         // measurements through the existing confidence-weighted V15 fusion path.
-        V16CompanionLinkRuntime.publishIfCompanion(metrics)
-        val effectiveMetrics = V15CompanionRuntime.fusePrimary(metrics)
+        V16CompanionLinkRuntime.publishIfCompanion(deviceAdjusted)
+        val effectiveMetrics = V15CompanionRuntime.fusePrimary(deviceAdjusted)
         currentShot = effectiveMetrics
         metricConfidence = V16MetricConfidenceEstimator.estimate(effectiveMetrics)
         lastResult = null
@@ -130,6 +134,7 @@ class GameEngine {
                 performanceSnapshot = V15PerformanceAnalyzer.analyze(metrics, recentRecords)
                 metricConfidence = V16MetricConfidenceEstimator.estimate(metrics)
                 coachFeedback = CoachEngine.diagnose(metrics = metrics, score = finalScore, recent = recentRecords)
+                V16DeviceAutoCalibrationRuntime.observe(metrics)
 
                 val record = ShotRecord(
                     metrics = metrics,
