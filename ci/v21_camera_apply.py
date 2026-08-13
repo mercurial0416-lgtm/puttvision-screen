@@ -84,7 +84,7 @@ replacement = '''                    val options = CaptureRequestOptions.Builder
                     val availableBanding = runCatching {
                         Camera2CameraInfo.from(camera.cameraInfo)
                             .getCameraCharacteristic(CameraCharacteristics.CONTROL_AE_AVAILABLE_ANTIBANDING_MODES)
-                    }.getOrNull().orEmpty()
+                    }.getOrNull() ?: intArrayOf()
                     val bandingMode = when {
                         availableBanding.contains(CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ) ->
                             CaptureRequest.CONTROL_AE_ANTIBANDING_MODE_60HZ
@@ -97,7 +97,12 @@ replacement = '''                    val options = CaptureRequestOptions.Builder
                     }
                     Camera2CameraControl.from(camera.cameraControl)
                         .setCaptureRequestOptions(options.build())'''
-if replacement not in text:
+
+# Migrate the first V21 patch version, which used Kotlin's nullable orEmpty() helper on IntArray.
+if ".getOrNull().orEmpty()" in text:
+    text = text.replace(".getOrNull().orEmpty()", ".getOrNull() ?: intArrayOf()", 1)
+    changed = True
+elif replacement not in text:
     if text.count(legacy) != 1:
         raise SystemExit(f"60Hz antibanding: expected 1 legacy match, got {text.count(legacy)}")
     text = text.replace(legacy, replacement, 1)
