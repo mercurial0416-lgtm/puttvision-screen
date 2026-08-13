@@ -356,8 +356,9 @@ class V17SimulatorTvView(
         val w = width.toFloat()
         val h = height.toFloat()
         val state = engine.state
+        val start = V26BallStartRuntime.current(settings)
         val display = TvInstantRollRuntime.displayPosition(state)
-            ?: if (state != null) state.x to state.y else 0.0 to 0.0
+            ?: if (state != null) state.x to state.y else start
         val tx = sx(display.first, display.second)
         val ty = sy(display.first, display.second)
         val generation = TvInstantRollRuntime.generation()
@@ -374,7 +375,9 @@ class V17SimulatorTvView(
 
         val preShot = state?.running != true && !TvInstantRollRuntime.isAnimating() && engine.lastResult == null
         if (preShot) {
-            val aimX = if (read?.solverReliable == true) read.aimOffsetCm / 100.0 else 0.0
+            val aimX = if (read?.solverReliable == true) {
+                start.first + kotlin.math.tan(Math.toRadians(read.recommendedLaunchAngleDeg)) * (settings.holeDistanceM - start.second)
+            } else 0.0
             val endX = sx(aimX, settings.holeDistanceM)
             val endY = sy(aimX, settings.holeDistanceM)
 
@@ -431,7 +434,7 @@ class V17SimulatorTvView(
         p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         p.textSize = max(16f, w * .0115f)
         p.color = Color.WHITE
-        c.drawText("${"%.1f".format(settings.holeDistanceM)}m", left + totalW * .285f, top + hh * .76f, p)
+        c.drawText("${"%.2f".format(settings.holeDistanceM)} m", left + totalW * .285f, top + hh * .76f, p)
 
         p.typeface = Typeface.DEFAULT_BOLD
         p.textSize = max(8f, w * .0052f)

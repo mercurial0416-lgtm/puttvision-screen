@@ -56,6 +56,7 @@ object V22ReportExporter {
     }
 
     private fun writePdf(file: File, records: List<ShotRecord>) {
+        val reportTiles = V26ReportPreferences.snapshot()
         val doc = PdfDocument()
         val pageWidth = 1240
         val pageHeight = 1754
@@ -95,9 +96,10 @@ object V22ReportExporter {
         val launch = records.map { it.metrics.launchAngleDeg }
         val face = records.mapNotNull { it.metrics.faceAngleDeg }
         val path = records.mapNotNull { it.metrics.pathAngleDeg }
-        val cupError = records.mapNotNull { it.result?.distanceToCupM?.times(100.0) }
+        val cupError = records.mapNotNull { it.result?.distanceToCupM }
         val compare = V20PerformanceCompare.build(records)
 
+        if (V26ReportTile.OVERVIEW in reportTiles) {
         paint.color = Color.rgb(242, 247, 244)
         canvas.drawRoundRect(65f, 135f, 1175f, 380f, 24f, 24f, paint)
         text("${records.size}", 105f, 230f, 58f, Color.rgb(34, 153, 84), true)
@@ -110,9 +112,11 @@ object V22ReportExporter {
         text("START σ", 870f, 265f, 16f, Color.rgb(95, 110, 102), true)
         text("FACE |avg| ${face.takeIf { it.isNotEmpty() }?.map(::abs)?.average()?.let { "%.2f°".format(it) } ?: "--"}", 105f, 330f, 19f)
         text("PATH |avg| ${path.takeIf { it.isNotEmpty() }?.map(::abs)?.average()?.let { "%.2f°".format(it) } ?: "--"}", 385f, 330f, 19f)
-        text("CUP ERROR ${cupError.takeIf { it.isNotEmpty() }?.average()?.let { "%.0fcm".format(it) } ?: "--"}", 665f, 330f, 19f)
+        text("CUP ERROR ${cupError.takeIf { it.isNotEmpty() }?.average()?.let { "%.2f m".format(it) } ?: "--"}", 665f, 330f, 19f)
         y = 435f
+        } else { y = 165f }
 
+        if (V26ReportTile.COACH_TREND in reportTiles) {
         text("COACH / TREND", 70f, y, 20f, Color.rgb(34, 153, 84), true); y += 42f
         text(compare.headline, 70f, y, 28f, Color.rgb(24, 31, 28), true); y += 35f
         text(compare.detail.take(110), 70f, y, 17f, Color.rgb(80, 93, 86)); y += 55f
@@ -121,7 +125,9 @@ object V22ReportExporter {
             y += 45f
         }
 
-        if (compare.putters.isNotEmpty()) {
+        }
+
+        if (V26ReportTile.PUTTER_RANKING in reportTiles && compare.putters.isNotEmpty()) {
             text("PUTTER RANKING", 70f, y, 20f, Color.rgb(34, 153, 84), true); y += 38f
             compare.putters.take(5).forEachIndexed { index, row ->
                 text("${index + 1}. ${row.label}", 85f, y, 19f, Color.rgb(24, 31, 28), true)
@@ -131,6 +137,7 @@ object V22ReportExporter {
             y += 20f
         }
 
+        if (V26ReportTile.SHOT_DETAIL in reportTiles) {
         text("SHOT DETAIL", 70f, y, 20f, Color.rgb(34, 153, 84), true); y += 36f
         text("#     SCORE     BALL       START      FACE       PATH       CUP", 78f, y, 15f, Color.rgb(100, 112, 105), true); y += 30f
         records.takeLast(80).forEachIndexed { index, r ->
@@ -149,11 +156,12 @@ object V22ReportExporter {
                 m.launchAngleDeg,
                 m.faceAngleDeg?.let { "%+.2f°".format(it) } ?: "--",
                 m.pathAngleDeg?.let { "%+.2f°".format(it) } ?: "--",
-                r.result?.let { if (it.holed) "IN" else "%.0fcm".format(it.distanceToCupM * 100.0) } ?: "--"
+                r.result?.let { if (it.holed) "IN" else "%.2fm".format(it.distanceToCupM) } ?: "--"
             )
             paint.typeface = Typeface.MONOSPACE
             text(row, 78f, y, 15f, Color.rgb(42, 51, 47))
             y += 35f
+        }
         }
 
         doc.finishPage(page)
@@ -162,7 +170,7 @@ object V22ReportExporter {
     }
 
     private fun writeCsv(file: File, records: List<ShotRecord>) {
-        val header = "timestamp_ms,putter,mode,target_m,score,holed,cup_error_cm,ball_mps,start_deg,head_mps,face_deg,path_deg,face_to_path_deg,impact_mm,confidence\n"
+        val header = "timestamp_ms,putter,mode,target_m,score,holed,cup_error_m,ball_mps,start_deg,head_mps,face_deg,path_deg,face_to_path_deg,impact_mm,confidence\n"
         file.bufferedWriter(Charsets.UTF_8).use { out ->
             out.write(header)
             records.forEach { r ->
@@ -174,7 +182,7 @@ object V22ReportExporter {
                     .append(r.targetDistanceM.toString()).append(',')
                     .append(r.strokeScore.total.toString()).append(',')
                     .append((r.result?.holed == true).toString()).append(',')
-                    .append(r.result?.distanceToCupM?.times(100.0)?.toString() ?: "").append(',')
+                    .append(r.result?.distanceToCupM?.toString() ?: "").append(',')
                     .append(m.ballSpeedMps.toString()).append(',')
                     .append(m.launchAngleDeg.toString()).append(',')
                     .append(m.headSpeedMps?.toString() ?: "").append(',')

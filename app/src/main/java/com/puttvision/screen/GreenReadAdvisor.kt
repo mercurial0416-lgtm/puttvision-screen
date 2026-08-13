@@ -12,7 +12,9 @@ data class GreenReadKey(
     val stimp100: Int,
     val side100: Int,
     val long100: Int,
-    val putter100: Int
+    val putter100: Int,
+    val startX100: Int,
+    val startY100: Int
 )
 
 data class GreenRead(
@@ -52,13 +54,16 @@ object GreenReadAdvisor {
 
     fun key(settings: GreenSettings): GreenReadKey {
         val putterWidth = ProductRuntime.putterHeadWidthCm.coerceIn(8.0, 15.0)
+        val start = V26BallStartRuntime.current(settings)
         return GreenReadKey(
             settings.terrainProfileId,
             (settings.holeDistanceM * 100.0).toInt(),
             (settings.stimpMeters * 100.0).toInt(),
             (settings.sideSlopePct * 100.0).toInt(),
             (settings.longSlopePct * 100.0).toInt(),
-            (putterWidth * 100.0).toInt()
+            (putterWidth * 100.0).toInt(),
+            (start.first * 100.0).toInt(),
+            (start.second * 100.0).toInt()
         )
     }
 
@@ -81,7 +86,11 @@ object GreenReadAdvisor {
         synchronized(cacheLock) { cache[key(settings)] }
 
     private fun solve(settings: GreenSettings, putterWidth: Double): GreenRead {
-        val d = settings.holeDistanceM.coerceIn(0.5, 20.0)
+        val start = V26BallStartRuntime.current(settings)
+        val toCupX = -start.first
+        val toCupY = settings.holeDistanceM - start.second
+        val d = hypot(toCupX, toCupY).coerceIn(0.5, 20.0)
+        val directAngleDeg = Math.toDegrees(kotlin.math.atan2(toCupX, toCupY))
         val stimp = settings.stimpMeters.coerceIn(1.5, 5.0)
         val flatSpeed = (STIMP_LAUNCH_MPS * sqrt(d / stimp)).coerceIn(.20, 5.0)
         val minSpeed = (flatSpeed * .45).coerceIn(.15, 4.7)
@@ -90,7 +99,7 @@ object GreenReadAdvisor {
         var best: Candidate? = null
         val coarseSpeedStep = (maxSpeed - minSpeed) / 14.0
         for (angleStep in -10..10) {
-            val angle = angleStep * 3.0
+            val angle = directAngleDeg + angleStep * 3.0
             for (speedStep in 0..14) {
                 val speed = minSpeed + coarseSpeedStep * speedStep
                 val c = candidate(settings, angle, speed, flatSpeed)
@@ -102,7 +111,7 @@ object GreenReadAdvisor {
         best = coarse
         val refineSpeedSpan = maxOf(.10, coarseSpeedStep * 1.25)
         for (ai in -6..6) {
-            val angle = (coarse.angleDeg + ai * .5).coerceIn(-35.0, 35.0)
+            val angle = (coarse.angleDeg + ai * .5).coerceIn(-45.0, 45.0)
             for (si in -6..6) {
                 val speed = (coarse.speed + refineSpeedSpan * si / 6.0).coerceIn(.15, 5.0)
                 val c = candidate(settings, angle, speed, flatSpeed)
@@ -113,7 +122,7 @@ object GreenReadAdvisor {
         // V12 final pass: 0.1 degree / 0.01 m/s local search around the best.
         val refined = best!!
         for (ai in -5..5) {
-            val angle = (refined.angleDeg + ai * .10).coerceIn(-35.0, 35.0)
+            val angle = (refined.angleDeg + ai * .10).coerceIn(-45.0, 45.0)
             for (si in -5..5) {
                 val speed = (refined.speed + si * .010).coerceIn(.15, 5.0)
                 val c = candidate(settings, angle, speed, flatSpeed)
@@ -123,16 +132,22 @@ object GreenReadAdvisor {
 
         val b = best!!
         val trace = simulateTrace(settings, b.speed, b.angleDeg)
-        val aimCm = tan(Math.toRadians(b.angleDeg)) * d * 100.0
+        val aimCm = tan(Math.toRadians(b.angleDeg - directAngleDeg)) * d * 100.0
         val magnitude = abs(aimCm)
-        val straight = simulate(settings, b.speed, 0.0)
-        val breakCm = straight.finishX * 100.0
+        val straight = simulate(settings, b.speed, directAngleDeg)
+        val ux = toCupX / d
+        val uy = toCupY / d
+        val perpX = -uy
+        val perpY = ux
+        val breakCm = ((straight.finishX) * perpX + (straight.finishY - settings.holeDistanceM) * perpY) * 100.0
 
         val corridor = (1..11).map { i ->
-            val y = d * i / 12.0
-            val center = GreenTerrain.effectiveSlopeAt(settings, 0.0, y)
-            val left = GreenTerrain.effectiveSlopeAt(settings, -0.12, y)
-            val right = GreenTerrain.effectiveSlopeAt(settings, 0.12, y)
+            val t = i / 12.0
+            val x = start.first + toCupX * t
+            val y = start.second + toCupY * t
+            val center = GreenTerrain.effectiveSlopeAt(settings, x, y)
+            val left = GreenTerrain.effectiveSlopeAt(settings, x - perpX * .12, y - perpY * .12)
+            val right = GreenTerrain.effectiveSlopeAt(settings, x + perpX * .12, y + perpY * .12)
             TerrainSlope(
                 center.sidePct * .60 + left.sidePct * .20 + right.sidePct * .20,
                 center.longPct * .60 + left.longPct * .20 + right.longPct * .20
@@ -175,7 +190,9 @@ object GreenReadAdvisor {
 
     private fun candidate(settings: GreenSettings, angle: Double, speed: Double, flatSpeed: Double): Candidate {
         val result = simulate(settings, speed, angle)
-        val regularizer = abs(angle) * .00015 + abs(speed - flatSpeed) * .00025
+        val start = V26BallStartRuntime.current(settings)
+        val direct = Math.toDegrees(kotlin.math.atan2(-start.first, settings.holeDistanceM - start.second))
+        val regularizer = abs(angle - direct) * .00015 + abs(speed - flatSpeed) * .00025
         val objective = if (result.holed) -1.0 + regularizer else result.distanceToCupM + regularizer
         return Candidate(angle, speed, result, objective)
     }
@@ -201,7 +218,8 @@ object GreenReadAdvisor {
         angle: Double,
         keepTrail: Boolean = true
     ): Trace {
-        val state = physics.launch(shot(speed, angle), settings)
+        val start = V26BallStartRuntime.current(settings)
+        val state = physics.launch(shot(speed, angle), settings, start.first, start.second)
         var result: SimResult? = null
         for (step in 0 until 900) {
             val completed = physics.step(state, settings, .025)

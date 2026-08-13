@@ -17,8 +17,9 @@ object V25FlagInfoRuntime {
         val settings = engine.settings
         val state = engine.state
         val display = TvInstantRollRuntime.displayPosition(state)
-        val ballX = display?.first ?: state?.x ?: 0.0
-        val ballY = display?.second ?: state?.y ?: 0.0
+        val start = V26BallStartRuntime.current(settings)
+        val ballX = display?.first ?: state?.x ?: start.first
+        val ballY = display?.second ?: state?.y ?: start.second
         val cupX = 0.0
         val cupY = settings.holeDistanceM
         val remaining = hypot(cupX - ballX, cupY - ballY)

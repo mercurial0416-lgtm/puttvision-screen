@@ -48,6 +48,7 @@ class V18SimulatorStage(
         setBackgroundColor(Color.rgb(55, 130, 190))
         addView(gl, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(hud, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(V26GreenInsightOverlay(context, engine), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(V19StrokeStudioOverlay(context, engine), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
@@ -249,8 +250,9 @@ private class V18PuttingRenderer(
         val state = engine.state
         val result = engine.lastResult
         val anim = TvInstantRollRuntime.displayPosition(state)
-        val bx = anim?.first ?: state?.x ?: 0.0
-        val by = anim?.second ?: state?.y ?: 0.0
+        val virtualStart = V26BallStartRuntime.current(settings)
+        val bx = anim?.first ?: state?.x ?: virtualStart.first
+        val by = anim?.second ?: state?.y ?: virtualStart.second
         val running = state?.running == true || TvInstantRollRuntime.isAnimating()
         val progress = (by / settings.holeDistanceM.coerceAtLeast(.5)).coerceIn(0.0, 1.0)
 
@@ -274,8 +276,9 @@ private class V18PuttingRenderer(
                 desiredTarget = floatArrayOf((bx * .30).toFloat(), min(settings.holeDistanceM, by + 1.85).toFloat(), .04f)
             }
             else -> {
-                desiredEye = floatArrayOf(0f, -1.58f, .70f)
-                desiredTarget = floatArrayOf(0f, min(2.35, settings.holeDistanceM * .48).toFloat(), .035f)
+                val remaining = (settings.holeDistanceM - virtualStart.second).coerceAtLeast(.5)
+                desiredEye = floatArrayOf(virtualStart.first.toFloat(), (virtualStart.second - 1.58).toFloat(), .70f)
+                desiredTarget = floatArrayOf((virtualStart.first * .45).toFloat(), (virtualStart.second + min(2.35, remaining * .48)).toFloat(), .035f)
             }
         }
         val smooth = if (running) .075f else .13f
@@ -291,7 +294,10 @@ private class V18PuttingRenderer(
         val hide = V20GreenReadTrainingRuntime.shouldHideSolution(mode, settings) && !feedback.revealed
         val read = GreenReadRuntime.peekOrSchedule(settings)
         if (!hide && read?.solverReliable == true && engine.state?.running != true && engine.lastResult == null) {
-            val pts = if (read.predictedTrail.size >= 2) read.predictedTrail else listOf(0.0 to 0.0, read.aimOffsetCm / 100.0 to settings.holeDistanceM)
+            val start = V26BallStartRuntime.current(settings)
+            val aimDy = settings.holeDistanceM - start.second
+            val aimX = start.first + kotlin.math.tan(Math.toRadians(read.recommendedLaunchAngleDeg)) * aimDy
+            val pts = if (read.predictedTrail.size >= 2) read.predictedTrail else listOf(start, aimX to settings.holeDistanceM)
             ribbon(pts, settings, .010f, floatArrayOf(.91f, .08f, .06f, .90f))?.let { draw(it, GLES20.GL_TRIANGLES) }
         }
         if (feedback.active && feedback.revealed && read != null) {
@@ -327,7 +333,8 @@ private class V18PuttingRenderer(
 
     private fun drawBall(settings: GreenSettings) {
         val state = engine.state
-        val display = TvInstantRollRuntime.displayPosition(state) ?: if (state != null) state.x to state.y else 0.0 to 0.0
+        val start = V26BallStartRuntime.current(settings)
+        val display = TvInstantRollRuntime.displayPosition(state) ?: if (state != null) state.x to state.y else start
         val ground = GreenTerrain.effectiveHeightAt(settings, display.first, display.second).toFloat()
         // Soft contact shadow anchors the ball to the 3D green instead of making it look pasted on.
         draw(
@@ -509,7 +516,7 @@ private class V18SimulatorHudView(
         c.drawRoundRect(RectF(l,t,l+ww,t+hh), hh*.36f,hh*.36f,p)
         p.textAlign = Paint.Align.CENTER; p.typeface = Typeface.DEFAULT_BOLD
         p.textSize = max(10f,w*.0072f); p.color = Color.WHITE
-        c.drawText("${"%.1f".format(engine.settings.holeDistanceM)} m", l+ww*.30f,t+hh*.42f,p)
+        c.drawText("${"%.2f".format(engine.settings.holeDistanceM)} m", l+ww*.30f,t+hh*.42f,p)
         p.textSize = max(7f,w*.0052f); p.color = Color.argb(180,230,235,230)
         c.drawText("DISTANCE",l+ww*.30f,t+hh*.73f,p)
         p.color = Color.argb(60,255,255,255); c.drawRect(l+ww*.58f,t+hh*.18f,l+ww*.58f+1,t+hh*.82f,p)

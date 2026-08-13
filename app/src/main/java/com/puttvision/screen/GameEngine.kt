@@ -1,8 +1,12 @@
 package com.puttvision.screen
 
+object V26ProductSettingsRuntime {
+    @Volatile var settings: GreenSettings = GreenSettings()
+}
+
 class GameEngine {
 
-    val settings = GreenSettings()
+    val settings = GreenSettings().also { V26ProductSettingsRuntime.settings = it }
     val gameModes = GameModeEngine(settings)
 
     private val physics = GreenPhysics()
@@ -40,6 +44,8 @@ class GameEngine {
     @Volatile var latestRecord: ShotRecord? = null
         private set
     @Volatile var matStimpEstimateM: Double? = null
+        private set
+    @Volatile var virtualStartAtShot: Pair<Double, Double> = 0.0 to 0.0
         private set
 
     var onRecordFinalized: ((ShotRecord) -> Unit)? = null
@@ -85,7 +91,8 @@ class GameEngine {
         coachFeedback = CoachEngine.diagnose(effectiveMetrics, strokeScore!!, recentRecords)
         V15AutoFlowRuntime.rolling()
         V22AudioRuntime.launch(effectiveMetrics.ballSpeedMps)
-        state = physics.launch(effectiveMetrics, settings)
+        virtualStartAtShot = V26BallStartRuntime.current(settings)
+        state = physics.launch(effectiveMetrics, settings, virtualStartAtShot.first, virtualStartAtShot.second)
     }
 
     @Synchronized
@@ -100,7 +107,10 @@ class GameEngine {
             val metrics = currentShot
             if (metrics != null) {
                 val modeAtShot = gameModes.status.mode
-                val targetDistance = settings.holeDistanceM
+                val targetDistance = kotlin.math.hypot(
+                    virtualStartAtShot.first,
+                    settings.holeDistanceM - virtualStartAtShot.second
+                )
                 val stimp = settings.stimpMeters
                 val sideSlope = settings.sideSlopePct
                 val longSlope = settings.longSlopePct
@@ -131,8 +141,9 @@ class GameEngine {
                 )
 
                 latestRecord = record
-                ghostComparison = V15GhostRuntime.compare(record, s.trail)
-                V15GhostRuntime.consider(record)
+                val originShot = kotlin.math.abs(virtualStartAtShot.first) < .005 && kotlin.math.abs(virtualStartAtShot.second) < .005
+                ghostComparison = if (originShot) V15GhostRuntime.compare(record, s.trail) else null
+                if (originShot) V15GhostRuntime.consider(record)
                 recentRecords = (recentRecords + record).takeLast(120)
                 V15PutterFitRuntime.update(recentRecords)
                 V16PutterFit2Runtime.update(recentRecords)
@@ -161,6 +172,7 @@ class GameEngine {
         metricConfidence = null
         ghostComparison = null
         latestRecord = null
+        virtualStartAtShot = 0.0 to 0.0
         V19StrokeStudioRuntime.clear()
         strokeStudio = null
         V20GreenReadTrainingRuntime.prepare(gameModes.status.mode, settings)

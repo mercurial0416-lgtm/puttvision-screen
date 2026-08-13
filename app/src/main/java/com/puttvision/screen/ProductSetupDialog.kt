@@ -102,12 +102,24 @@ fun showProductSetupDialog(
         showV20GreenReadModeDialog(context)
     })
 
+    addAction(action("GREEN VISUALS", V26GreenVisualRuntime.label()) {
+        showV26GreenVisualSettingsDialog(context)
+    })
+
+    addAction(action("MOVE BALL", V26BallStartRuntime.label(V26ProductSettingsRuntime.settings)) {
+        showV26MoveBallDialog(context, V26ProductSettingsRuntime.settings)
+    })
+
     addAction(action("CUSTOM GREEN", V22CustomGreenRuntime.label()) {
         showV22CustomGreenDialog(context)
     })
 
     addAction(action("PERFORMANCE COMPARE", V20PerformanceRuntime.report.headline) {
         showV20PerformanceCompareDialog(context)
+    })
+
+    addAction(action("REPORT BUILDER", V26ReportPreferences.summary()) {
+        showV26ReportBuilderDialog(context)
     })
 
     addAction(action("DEVICE AUTO CAL", V16DeviceAutoCalibrationRuntime.statusLabel()) {

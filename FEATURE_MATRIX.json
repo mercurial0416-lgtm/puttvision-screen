@@ -1,5 +1,5 @@
 {
-  "version": "v25-development",
+  "version": "v26-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -67,7 +67,13 @@
     "flag_side_live_remaining_distance_m": true,
     "flag_side_live_height_delta_m": true,
     "tv_distance_units_fixed_to_meters": true,
-    "flag_info_tracks_opengl_camera": true
+    "flag_info_tracks_opengl_camera": true,
+    "green_contour_overlay": true,
+    "live_slope_percentage_overlay": true,
+    "recommended_speed_swing_guide": true,
+    "move_ball_shared_physics_and_green_read": true,
+    "custom_report_builder": true,
+    "report_distance_units_meters": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -78,6 +84,8 @@
     "real_device_reference_fixture_committed": false,
     "galaxy_s25_runtime_validation_still_required": true,
     "fully_markerless_normal_session_calibration": true,
-    "v25_flag_unit_regression_test": true
+    "v25_flag_unit_regression_test": true,
+    "v26_contour_regression_test": true,
+    "v26_virtual_start_physics_test": true
   }
 }
