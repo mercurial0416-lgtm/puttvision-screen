@@ -22,6 +22,7 @@ class ShotVisionAnalyzer(
     private val onQuality: (LiveQualityGateSnapshot) -> Unit = {},
     private val baselineMarkerPoints: List<PointF> = emptyList(),
     private val onCalibrationDrift: (CalibrationDriftSnapshot) -> Unit = {},
+    private val onImpactDetected: (QuickImpactEstimate) -> Unit = {},
     private val onShotReady: (ShotMetrics) -> Unit
 ) : ImageAnalysis.Analyzer {
 
@@ -33,6 +34,9 @@ class ShotVisionAnalyzer(
     private var driftFrame = 0
     private var ballReadiness = 0.0
     private var putterReadiness = 0.0
+    private var impactNotified = false
+    private var previousMappedBall: PointF? = null
+    private var previousMappedNs: Long = 0L
     private val driftWatchdog = baselineMarkerPoints.takeIf { it.size == 4 }?.let { CalibrationDriftWatchdog(it) }
 
     override fun analyze(image: ImageProxy) {
@@ -92,9 +96,41 @@ class ShotVisionAnalyzer(
 
             val t = image.imageInfo.timestamp
 
+            if (tracker.isArmed() && !tracker.hasImpact() && impactNotified) {
+                impactNotified = false
+                previousMappedBall = null
+                previousMappedNs = 0L
+            }
+
             ball?.let {
-                val p = homography.map(it)
-                if (p.x.isFinite() && p.y.isFinite()) tracker.addBall(BallSample(p, t))
+                val mapped = homography.map(it)
+                if (mapped.x.isFinite() && mapped.y.isFinite()) {
+                    val beforeImpact = tracker.hasImpact()
+                    tracker.addBall(BallSample(mapped, t))
+                    if (!beforeImpact && tracker.hasImpact() && !impactNotified) {
+                        val old = previousMappedBall
+                        val oldNs = previousMappedNs
+                        var speed: Double? = null
+                        var angle: Double? = null
+                        if (old != null && oldNs > 0L) {
+                            val dt = (t - oldNs) / 1_000_000_000.0
+                            if (dt in .006..0.100) {
+                                val dx = (mapped.x - old.x).toDouble()
+                                val dy = (mapped.y - old.y).toDouble()
+                                val v = (hypot(dx, dy) / 100.0) / dt
+                                val a = Math.toDegrees(kotlin.math.atan2(dx, dy))
+                                if (v in .16..5.2 && abs(a) <= 22.0) {
+                                    speed = v
+                                    angle = a
+                                }
+                            }
+                        }
+                        impactNotified = true
+                        onImpactDetected(QuickImpactEstimate(speed, angle, if (speed != null) .55 else .34, t))
+                    }
+                    previousMappedBall = PointF(mapped.x, mapped.y)
+                    previousMappedNs = t
+                }
             }
 
             if (heel != null && toe != null) {

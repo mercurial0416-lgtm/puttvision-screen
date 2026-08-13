@@ -527,11 +527,13 @@ object TvInstantRollRuntime {
         val out = ArrayList<TvLivePoint>(600)
         var t = 0.0
         out += TvLivePoint(0.0, 0.0, 0.0)
-        repeat(750) {
+        var stepIndex = 0
+        while (stepIndex < 750) {
             val r = physics.step(state, copied, .012)
             t += .012
-            if (it % 1 == 0) out += TvLivePoint(t, state.x, state.y)
-            if (r != null) return@repeat
+            out += TvLivePoint(t, state.x, state.y)
+            stepIndex++
+            if (r != null) break
         }
         points = out
         startMs = SystemClock.uptimeMillis()

@@ -3096,6 +3096,19 @@ class MainActivity : AppCompatActivity() {
                 onCalibrationDrift = { drift ->
                     runOnUiThread { handleCalibrationDrift(drift) }
                 },
+                onImpactDetected = { quick ->
+                    runOnUiThread {
+                        if (!sessionActive || measurementSuspended || offlineTestMode) return@runOnUiThread
+                        if (!TvInstantRollRuntime.isActive()) {
+                            TvInstantRollRuntime.begin(
+                                engine.settings,
+                                quick,
+                                GreenReadRuntime.peekOrSchedule(engine.settings)
+                            )
+                            overlay.status = "IMPACT · TV LIVE · NORMAL 분석"
+                        }
+                    }
+                },
                 onShotReady = { metrics ->
                     runOnUiThread {
                         if (!sessionActive || measurementSuspended) return@runOnUiThread
