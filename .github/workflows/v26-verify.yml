@@ -1,0 +1,54 @@
+name: Verify V26 green visuals and report builder
+
+on:
+  push:
+    branches: [ agent/v26-green-visuals-report-builder ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v26-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wire V26 systems
+        run: |
+          python3 ci/v26_apply.py
+          if ! git diff --quiet; then
+            git config user.name "puttvision-v26-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/MainActivity.kt \
+                    app/src/main/java/com/puttvision/screen/ProductSetupDialog.kt \
+                    app/src/main/java/com/puttvision/screen/GameEngine.kt \
+                    app/src/main/java/com/puttvision/screen/GreenPhysics.kt \
+                    app/src/main/java/com/puttvision/screen/GreenReadAdvisor.kt \
+                    app/src/main/java/com/puttvision/screen/V13Reliability.kt \
+                    app/src/main/java/com/puttvision/screen/V18OpenGlSimulator.kt \
+                    app/src/main/java/com/puttvision/screen/V17SimulatorTvView.kt \
+                    app/src/main/java/com/puttvision/screen/V25FlagInfo.kt \
+                    app/src/main/java/com/puttvision/screen/V22ReportExporter.kt \
+                    app/src/main/java/com/puttvision/screen/V26ReportBuilder.kt \
+                    FEATURE_MATRIX.json
+            git diff --cached --check
+            git commit -m "feat: wire V26 green insight and move ball"
+            git push origin HEAD:agent/v26-green-visuals-report-builder
+          fi
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Unit and regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+      - name: Compile consumer and developer APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
