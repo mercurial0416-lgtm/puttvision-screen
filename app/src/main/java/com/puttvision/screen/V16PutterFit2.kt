@@ -1,7 +1,5 @@
 package com.puttvision.screen
 
-import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -30,6 +28,15 @@ data class V16PutterFit2Snapshot(
     val currentRecommendation: V15PutterFitRecommendation?,
     val verdict: String
 )
+
+object V16PutterFit2Runtime {
+    @Volatile var snapshot: V16PutterFit2Snapshot = V16PutterFit2.analyze(emptyList())
+        private set
+
+    fun update(records: List<ShotRecord>) {
+        snapshot = V16PutterFit2.analyze(records)
+    }
+}
 
 object V16PutterFit2 {
     fun analyze(recordsRaw: List<ShotRecord>, currentName: String = ProductRuntime.putterProfileName): V16PutterFit2Snapshot {
