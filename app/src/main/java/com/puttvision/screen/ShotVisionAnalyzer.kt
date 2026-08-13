@@ -20,6 +20,8 @@ class ShotVisionAnalyzer(
     private val tracker: ShotTracker,
     private val onOverlay: (VisionOverlay) -> Unit,
     private val onQuality: (LiveQualityGateSnapshot) -> Unit = {},
+    private val baselineMarkerPoints: List<PointF> = emptyList(),
+    private val onCalibrationDrift: (CalibrationDriftSnapshot) -> Unit = {},
     private val onShotReady: (ShotMetrics) -> Unit
 ) : ImageAnalysis.Analyzer {
 
@@ -28,8 +30,10 @@ class ShotVisionAnalyzer(
     private var lastToe: PointF? = null
     private val qualityEstimator = CameraQualityEstimator()
     private var qualityFrame = 0
+    private var driftFrame = 0
     private var ballReadiness = 0.0
     private var putterReadiness = 0.0
+    private val driftWatchdog = baselineMarkerPoints.takeIf { it.size == 4 }?.let { CalibrationDriftWatchdog(it) }
 
     override fun analyze(image: ImageProxy) {
         try {
@@ -44,6 +48,16 @@ class ShotVisionAnalyzer(
 
             val w = image.width
             val h = image.height
+
+            if (++driftFrame % 18 == 0) {
+                driftWatchdog?.evaluateLuma(
+                    luma = y,
+                    width = w,
+                    height = h,
+                    rowStride = yPlane.rowStride,
+                    pixelStride = yPlane.pixelStride
+                )?.let(onCalibrationDrift)
+            }
 
             val ball = findWhiteBall(
                 y, w, h, yPlane.rowStride, yPlane.pixelStride, lastBall
