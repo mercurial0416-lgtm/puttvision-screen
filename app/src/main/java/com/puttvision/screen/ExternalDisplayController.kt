@@ -2,10 +2,12 @@ package com.puttvision.screen
 
 import android.app.Presentation
 import android.content.Context
+import android.graphics.Color
 import android.hardware.display.DisplayManager
 import android.os.Bundle
 import android.view.Display
 import android.view.WindowManager
+import android.widget.FrameLayout
 
 class GamePresentation(
     context: Context,
@@ -15,7 +17,10 @@ class GamePresentation(
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setContentView(GreenView(context, engine))
+        val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
+        root.addView(GreenView(context, engine), FrameLayout.LayoutParams(-1, -1))
+        root.addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
+        setContentView(root)
     }
 }
 
