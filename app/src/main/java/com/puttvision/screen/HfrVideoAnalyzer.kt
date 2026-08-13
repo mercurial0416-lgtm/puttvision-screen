@@ -700,6 +700,16 @@ private fun scanMarkerLayoutBlocking(
                     (if (matData.decelMps2 != null) 0.05 else 0.0)
                 ).coerceIn(0.0, 1.0)
 
+        val uncertainty = MeasurementUncertaintyEstimator.forHfr(
+            fps = fps,
+            ballDetectionRatio = ballDetected,
+            headDetectionRatio = headDetected,
+            matDecelAvailable = matData.decelMps2 != null,
+            ballSpeedMps = correctedBallSpeed,
+            headSpeedMps = headSpeed,
+            impactOffsetMm = impactOffsetMm
+        )
+
         return ShotMetrics(
             ballSpeedMps = correctedBallSpeed,
             launchAngleDeg = launchAngle,
@@ -718,7 +728,8 @@ private fun scanMarkerLayoutBlocking(
             rawBallSpeedMps = matData.rawBallSpeedMps,
             estimatedMatDecelMps2 = matData.decelMps2,
             estimatedMatStimpM = matData.stimpM,
-            confidence = confidence
+            confidence = confidence,
+            uncertainty = uncertainty
         ) to impactFrame
     }
 

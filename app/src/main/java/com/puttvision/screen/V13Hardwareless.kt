@@ -98,7 +98,7 @@ object HardwarelessShotFactory {
             val t = (i - impact) / fps.toFloat()
             val angle = Math.toRadians(metrics.launchAngleDeg)
             val after = max(0f, t)
-            val ballForward = if (i < impact) 0f else (metrics.ballSpeedMps * after * 380f)
+            val ballForward = if (i < impact) 0f else (metrics.ballSpeedMps * after.toDouble() * 380.0).toFloat()
             val ballX = width * .5f + sin(angle).toFloat() * ballForward
             val ballY = height * .73f - cos(angle).toFloat() * ballForward
 
