@@ -1,0 +1,49 @@
+name: Verify V15 product-grade bundle
+
+on:
+  push:
+    branches: [ agent/v15-product-grade-putting ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v15-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure V15 commercial UI is wired
+        run: |
+          python3 ci/v15_ui_patch.py
+          python3 ci/v15_green_patch.py
+          if ! git diff --quiet -- app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/GreenView.kt; then
+            git config user.name "puttvision-v15-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/MainActivity.kt app/src/main/java/com/puttvision/screen/GreenView.kt
+            git diff --cached --check
+            git commit -m "feat: wire V15 game and ghost TV UI"
+            git push origin HEAD:agent/v15-product-grade-putting
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Unit regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Compile debug APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug

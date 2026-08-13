@@ -1,12 +1,24 @@
 {
-  "version": "0.4.0-alpha-ultimate",
+  "version": "1.1.0-v15",
   "features": {
     "autoplay": true,
+    "automatic_shot_flow_state_machine": true,
     "hfr_240_120_fallback": true,
     "impact_replay": true,
     "tempo_analysis": true,
+    "robust_trajectory_false_positive_gate": true,
+    "marked_ball_skid_roll_analysis": true,
+    "markerless_mat_fallback": true,
+    "physical_cup_detection": true,
+    "live_phone_placement_guidance": true,
     "mat_friction_auto_cal": true,
-    "local_coach": true,
+    "local_ai_coach_v15": true,
+    "personal_training_plan": true,
+    "stroke_signature_repeatability": true,
+    "putter_fitting_after_20_shots": true,
+    "ghost_best_shot_comparison": true,
+    "multi_phone_camera_fusion": true,
+    "lan_companion_camera_transport": true,
     "perfect_stroke_score": true,
     "green_read_flow_dots": true,
     "green_aim_line": true,
@@ -17,8 +29,13 @@
       "18-hole",
       "streak",
       "pressure",
-      "random-slope"
+      "random-slope",
+      "dart",
+      "curling",
+      "battle",
+      "ghost"
     ],
+    "multiplayer_local_1_to_4": true,
     "persistent_stats": true,
     "tv_dispersion_heatmap": true,
     "generic_qr_marker_fallback": true
@@ -26,6 +43,7 @@
   "validation": {
     "pure_kotlin_core_compiled": true,
     "android_full_build_executed": false,
-    "reason": "Android SDK/Gradle runtime not available in the artifact sandbox; device runtime still required."
+    "v15_ci_workflow": "Verify V15 product-grade bundle",
+    "device_runtime_still_required": true
   }
 }

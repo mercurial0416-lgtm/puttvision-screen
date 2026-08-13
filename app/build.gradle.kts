@@ -16,8 +16,8 @@ android {
         applicationId = "com.puttvision.screen"
         minSdk = 26
         targetSdk = 36
-        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 103
-        versionName = System.getenv("PV_VERSION_NAME") ?: "1.0.3-build-fix"
+        versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 104
+        versionName = System.getenv("PV_VERSION_NAME") ?: "1.1.0-v15"
         buildConfigField("String", "LICENSE_PUBLIC_KEY_B64", "\"$licensePublicKey\"")
     }
 

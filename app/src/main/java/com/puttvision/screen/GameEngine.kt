@@ -28,6 +28,18 @@ class GameEngine {
         private set
 
     @Volatile
+    var performanceSnapshot: V15PerformanceSnapshot? = null
+        private set
+
+    @Volatile
+    var putterFitRecommendation: V15PutterFitRecommendation? = null
+        private set
+
+    @Volatile
+    var ghostComparison: V15GhostComparison? = null
+        private set
+
+    @Volatile
     var recentRecords: List<ShotRecord> = emptyList()
         private set
 
@@ -42,33 +54,40 @@ class GameEngine {
     var onRecordFinalized: ((ShotRecord) -> Unit)? = null
 
     fun seedHistory(records: List<ShotRecord>) {
-        recentRecords = records.takeLast(40)
+        recentRecords = records.takeLast(80)
+        V15GhostRuntime.seed(records.takeLast(240))
+        V15PutterFitRuntime.update(records)
+        putterFitRecommendation = V15PutterFitRuntime.latest
     }
 
     @Synchronized
     fun launch(metrics: ShotMetrics) {
-        currentShot = metrics
+        val effectiveMetrics = V15CompanionRuntime.fusePrimary(metrics)
+        currentShot = effectiveMetrics
         lastResult = null
         latestRecord = null
+        ghostComparison = null
 
-        metrics.estimatedMatStimpM?.let { estimate ->
+        effectiveMetrics.estimatedMatStimpM?.let { estimate ->
             matStimpEstimateM =
                 matStimpEstimateM?.let { old -> old * 0.78 + estimate * 0.22 } ?: estimate
         }
 
+        performanceSnapshot = V15PerformanceAnalyzer.analyze(effectiveMetrics, recentRecords)
         strokeScore = StrokeScorer.score(
-            metrics = metrics,
+            metrics = effectiveMetrics,
             result = null,
             recent = recentRecords
         )
 
         coachFeedback = CoachEngine.diagnose(
-            metrics = metrics,
+            metrics = effectiveMetrics,
             score = strokeScore!!,
             recent = recentRecords
         )
 
-        state = physics.launch(metrics, settings)
+        V15AutoFlowRuntime.rolling()
+        state = physics.launch(effectiveMetrics, settings)
     }
 
     @Synchronized
@@ -89,6 +108,7 @@ class GameEngine {
 
                 val finalScore = StrokeScorer.score(metrics = metrics, result = r, recent = recentRecords)
                 strokeScore = finalScore
+                performanceSnapshot = V15PerformanceAnalyzer.analyze(metrics, recentRecords)
                 coachFeedback = CoachEngine.diagnose(metrics = metrics, score = finalScore, recent = recentRecords)
 
                 val record = ShotRecord(
@@ -108,9 +128,14 @@ class GameEngine {
                 )
 
                 latestRecord = record
-                recentRecords = (recentRecords + record).takeLast(40)
+                ghostComparison = V15GhostRuntime.compare(record, s.trail)
+                V15GhostRuntime.consider(record)
+                recentRecords = (recentRecords + record).takeLast(80)
+                V15PutterFitRuntime.update(recentRecords)
+                putterFitRecommendation = V15PutterFitRuntime.latest
                 onRecordFinalized?.invoke(record)
                 gameModes.onResult(r)
+                V15AutoFlowRuntime.result()
             }
         }
         return r
@@ -123,6 +148,9 @@ class GameEngine {
         lastResult = null
         strokeScore = null
         coachFeedback = null
+        performanceSnapshot = null
+        ghostComparison = null
         latestRecord = null
+        V15AutoFlowRuntime.rearm()
     }
 }
