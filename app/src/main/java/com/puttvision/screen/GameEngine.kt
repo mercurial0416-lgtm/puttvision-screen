@@ -7,85 +7,66 @@ class GameEngine {
 
     private val physics = GreenPhysics()
 
-    @Volatile
-    var currentShot: ShotMetrics? = null
+    @Volatile var currentShot: ShotMetrics? = null
         private set
-
-    @Volatile
-    var state: SimState? = null
+    @Volatile var state: SimState? = null
         private set
-
-    @Volatile
-    var lastResult: SimResult? = null
+    @Volatile var lastResult: SimResult? = null
         private set
-
-    @Volatile
-    var strokeScore: StrokeScore? = null
+    @Volatile var strokeScore: StrokeScore? = null
         private set
-
-    @Volatile
-    var coachFeedback: CoachFeedback? = null
+    @Volatile var coachFeedback: CoachFeedback? = null
         private set
-
-    @Volatile
-    var performanceSnapshot: V15PerformanceSnapshot? = null
+    @Volatile var performanceSnapshot: V15PerformanceSnapshot? = null
         private set
-
-    @Volatile
-    var putterFitRecommendation: V15PutterFitRecommendation? = null
+    @Volatile var metricConfidence: V16MetricConfidence? = null
         private set
-
-    @Volatile
-    var ghostComparison: V15GhostComparison? = null
+    @Volatile var personalCoachSnapshot: V16PersonalCoachSnapshot? = null
         private set
-
-    @Volatile
-    var recentRecords: List<ShotRecord> = emptyList()
+    @Volatile var dailyTrainingPlan: V16DailyTrainingPlan = V16TrainingPlanner.build(null)
         private set
-
-    @Volatile
-    var latestRecord: ShotRecord? = null
+    @Volatile var putterFitRecommendation: V15PutterFitRecommendation? = null
         private set
-
-    @Volatile
-    var matStimpEstimateM: Double? = null
+    @Volatile var ghostComparison: V15GhostComparison? = null
+        private set
+    @Volatile var recentRecords: List<ShotRecord> = emptyList()
+        private set
+    @Volatile var latestRecord: ShotRecord? = null
+        private set
+    @Volatile var matStimpEstimateM: Double? = null
         private set
 
     var onRecordFinalized: ((ShotRecord) -> Unit)? = null
 
     fun seedHistory(records: List<ShotRecord>) {
-        recentRecords = records.takeLast(80)
+        recentRecords = records.takeLast(120)
         V15GhostRuntime.seed(records.takeLast(240))
         V15PutterFitRuntime.update(records)
+        V16PutterFit2Runtime.update(records)
         putterFitRecommendation = V15PutterFitRuntime.latest
+        V16Runtime.update(records)
+        personalCoachSnapshot = V16Runtime.personalCoach
+        dailyTrainingPlan = V16Runtime.trainingPlan
     }
 
     @Synchronized
     fun launch(metrics: ShotMetrics) {
-        val effectiveMetrics = V15CompanionRuntime.fusePrimary(metrics)
+        val deviceAdjusted = V16DeviceAutoCalibrationRuntime.applyFallback(metrics)
+        V16CompanionLinkRuntime.publishIfCompanion(deviceAdjusted)
+        val effectiveMetrics = V15CompanionRuntime.fusePrimary(deviceAdjusted)
         currentShot = effectiveMetrics
+        metricConfidence = V16MetricConfidenceEstimator.estimate(effectiveMetrics)
         lastResult = null
         latestRecord = null
         ghostComparison = null
 
         effectiveMetrics.estimatedMatStimpM?.let { estimate ->
-            matStimpEstimateM =
-                matStimpEstimateM?.let { old -> old * 0.78 + estimate * 0.22 } ?: estimate
+            matStimpEstimateM = matStimpEstimateM?.let { old -> old * 0.78 + estimate * 0.22 } ?: estimate
         }
 
         performanceSnapshot = V15PerformanceAnalyzer.analyze(effectiveMetrics, recentRecords)
-        strokeScore = StrokeScorer.score(
-            metrics = effectiveMetrics,
-            result = null,
-            recent = recentRecords
-        )
-
-        coachFeedback = CoachEngine.diagnose(
-            metrics = effectiveMetrics,
-            score = strokeScore!!,
-            recent = recentRecords
-        )
-
+        strokeScore = StrokeScorer.score(effectiveMetrics, null, recentRecords)
+        coachFeedback = CoachEngine.diagnose(effectiveMetrics, strokeScore!!, recentRecords)
         V15AutoFlowRuntime.rolling()
         state = physics.launch(effectiveMetrics, settings)
     }
@@ -106,10 +87,12 @@ class GameEngine {
                 val sideSlope = settings.sideSlopePct
                 val longSlope = settings.longSlopePct
 
-                val finalScore = StrokeScorer.score(metrics = metrics, result = r, recent = recentRecords)
+                val finalScore = StrokeScorer.score(metrics, r, recentRecords)
                 strokeScore = finalScore
                 performanceSnapshot = V15PerformanceAnalyzer.analyze(metrics, recentRecords)
-                coachFeedback = CoachEngine.diagnose(metrics = metrics, score = finalScore, recent = recentRecords)
+                metricConfidence = V16MetricConfidenceEstimator.estimate(metrics)
+                coachFeedback = CoachEngine.diagnose(metrics, finalScore, recentRecords)
+                V16DeviceAutoCalibrationRuntime.observe(metrics)
 
                 val record = ShotRecord(
                     metrics = metrics,
@@ -130,9 +113,13 @@ class GameEngine {
                 latestRecord = record
                 ghostComparison = V15GhostRuntime.compare(record, s.trail)
                 V15GhostRuntime.consider(record)
-                recentRecords = (recentRecords + record).takeLast(80)
+                recentRecords = (recentRecords + record).takeLast(120)
                 V15PutterFitRuntime.update(recentRecords)
+                V16PutterFit2Runtime.update(recentRecords)
                 putterFitRecommendation = V15PutterFitRuntime.latest
+                V16Runtime.update(recentRecords)
+                personalCoachSnapshot = V16Runtime.personalCoach
+                dailyTrainingPlan = V16Runtime.trainingPlan
                 onRecordFinalized?.invoke(record)
                 gameModes.onResult(r)
                 V15AutoFlowRuntime.result()
@@ -149,6 +136,7 @@ class GameEngine {
         strokeScore = null
         coachFeedback = null
         performanceSnapshot = null
+        metricConfidence = null
         ghostComparison = null
         latestRecord = null
         V15AutoFlowRuntime.rearm()

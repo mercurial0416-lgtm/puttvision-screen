@@ -254,6 +254,8 @@ class MainActivity : AppCompatActivity() {
 
         putterProfileStore = PutterProfileStore(this)
         matCalibrationManager = MatCalibrationManager(this)
+        V16MatGeometryStore(this)
+        V16DeviceAutoCalibrationRuntime.install(this)
         voiceCoach = HandsFreeVoiceCoach(this)
         accuracyValidationLab = AccuracyValidationLab(this)
         accuracyAutoTuner = AccuracyAutoTuner(this, deviceReport.model)

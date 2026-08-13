@@ -102,7 +102,7 @@ class AutoCalibrator(
                     stableHits = 0
                     val q = latestFrameQuality?.overallScore
                     onStatus(buildString {
-                        append("자동 캘 · QR 마커 ${codes.count { it.boundingBox != null }}/4+")
+                        append("자동 캘 · QR ${codes.count { it.boundingBox != null }}/4+ · V16 매트폴백 ON")
                         if (q != null) append(" · Q$q")
                     })
                 }

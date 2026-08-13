@@ -4,7 +4,9 @@ import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Typeface
 import android.view.Gravity
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 fun showProductSetupDialog(
@@ -15,7 +17,11 @@ fun showProductSetupDialog(
 ) {
     val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(context.pvDp(16), context.pvDp(8), context.pvDp(16), context.pvDp(4))
+        setPadding(context.pvDp(16), context.pvDp(8), context.pvDp(16), context.pvDp(8))
+    }
+    val scroll = ScrollView(context).apply {
+        isFillViewport = true
+        addView(root, FrameLayout.LayoutParams(-1, -2))
     }
 
     root.addView(TextView(context).apply {
@@ -26,7 +32,7 @@ fun showProductSetupDialog(
         letterSpacing = .12f
     })
     root.addView(TextView(context).apply {
-        text = "실제 장비 기준을 맞추고 폰을 만지지 않는 자동 세션을 설정합니다."
+        text = "실제 장비 기준, 기기 보정, AI 코칭, 멀티폰 카메라와 무터치 세션을 설정합니다."
         setTextColor(Pv.textMid)
         textSize = context.pvSp(8.5f)
         setPadding(0, context.pvDp(4), 0, context.pvDp(10))
@@ -53,6 +59,7 @@ fun showProductSetupDialog(
                 setTextColor(Pv.textHi)
                 textSize = context.pvSp(9f)
                 typeface = Typeface.DEFAULT_BOLD
+                maxLines = 1
             })
             addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
             addView(TextView(context).apply {
@@ -67,50 +74,56 @@ fun showProductSetupDialog(
             setOnClickListener { onClick() }
         }
 
+    fun addAction(view: LinearLayout) {
+        root.addView(view, LinearLayout.LayoutParams(-1, context.pvDp(48)).apply {
+            if (root.childCount > 2) topMargin = context.pvDp(5)
+        })
+    }
+
     val current = putterStore.current()
-    root.addView(
-        action("PUTTER PROFILE", "${current.name} · ${"%.1f".format(current.headWidthCm)}cm") {
-            dialog.dismiss()
-            showPutterProfileManager(context, putterStore) { }
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52))
-    )
+    addAction(action("PUTTER PROFILE", "${current.name} · ${"%.1f".format(current.headWidthCm)}cm") {
+        dialog.dismiss()
+        showPutterProfileManager(context, putterStore) { }
+    })
 
-    val fit = V15PutterFitRuntime.latest
-    val fitTitle = fit?.let {
-        "${it.balance.label} · ${it.head.label} · ${(it.confidence * 100).toInt()}%"
-    } ?: "${V15PutterFitRuntime.currentSampleCount}/20구 · 분석 중"
-    root.addView(
-        action("AI PUTTER FIT", fitTitle) {
-            showV15PutterFitDialog(context)
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52)).apply { topMargin = context.pvDp(6) }
-    )
+    val fit2 = V16PutterFit2Runtime.snapshot
+    val fitTitle = fit2.current?.let {
+        "적합도 ${it.fitScore} · ${fit2.currentRecommendation?.head?.label ?: "분석중"}"
+    } ?: "${V15PutterFitRuntime.currentSampleCount}/8구 · 비교 데이터 수집"
+    addAction(action("AI PUTTER FIT 2.0", fitTitle) { showV16PutterFit2Dialog(context) })
 
-    root.addView(
-        action("PHYSICAL MAT", matManager.statusLabel()) {
-            showMatCalibrationManager(context, matManager)
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52)).apply { topMargin = context.pvDp(6) }
-    )
+    val coach = V16Runtime.personalCoach
+    addAction(action(
+        "PERSONAL AI COACH",
+        coach?.let { "${it.primary.headline} · 개선 ${it.improvementScore}" } ?: "8구부터 개인 패턴 학습"
+    ) { showV16PersonalCoachDialog(context) })
 
-    root.addView(
-        action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {
-            val enabled = voiceCoach.toggle()
-            dialog.dismiss()
-            showProductSetupDialog(context, putterStore, matManager, voiceCoach)
-            android.widget.Toast.makeText(
-                context,
-                if (enabled) "음성 안내 ON" else "음성 안내 OFF",
-                android.widget.Toast.LENGTH_SHORT
-            ).show()
-        },
-        LinearLayout.LayoutParams(-1, context.pvDp(52)).apply { topMargin = context.pvDp(6) }
-    )
+    addAction(action("DEVICE AUTO CAL", V16DeviceAutoCalibrationRuntime.statusLabel()) {
+        showV16DeviceCalibrationDialog(context)
+    })
+
+    addAction(action("MULTI PHONE CAMERA", V16CompanionLinkRuntime.status().label) {
+        showV16CompanionDialog(context)
+    })
+
+    addAction(action("PHYSICAL MAT", "${matManager.statusLabel()} · ${"%.0f".format(V16MatGeometryRuntime.lengthCm)}cm") {
+        showV16MatSetupDialog(context, matManager)
+    })
+
+    addAction(action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {
+        val enabled = voiceCoach.toggle()
+        dialog.dismiss()
+        showProductSetupDialog(context, putterStore, matManager, voiceCoach)
+        android.widget.Toast.makeText(
+            context,
+            if (enabled) "음성 안내 ON" else "음성 안내 OFF",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    })
 
     dialog = AlertDialog.Builder(context)
         .setTitle("제품 설정")
-        .setView(root)
+        .setView(scroll)
         .setNegativeButton("닫기", null)
         .create()
     dialog.show()

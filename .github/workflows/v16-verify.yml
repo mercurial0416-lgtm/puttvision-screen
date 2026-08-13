@@ -1,0 +1,52 @@
+name: Verify V16 simulator UI and intelligence
+
+on:
+  push:
+    branches: [ agent/v16-friends-like-tv-and-polish ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-v16-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply V16 integrations
+        run: |
+          python3 ci/v16_apply.py
+          if ! git diff --quiet; then
+            git config user.name "puttvision-v16-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add app/src/main/java/com/puttvision/screen/HfrVideoAnalyzer.kt \
+                    app/src/main/java/com/puttvision/screen/ProductSetupDialog.kt \
+                    app/src/main/java/com/puttvision/screen/AutoCalibrator.kt \
+                    app/src/main/java/com/puttvision/screen/V16SimulatorTvView.kt \
+                    app/src/main/java/com/puttvision/screen/MainActivity.kt
+            git diff --cached --check
+            git commit -m "feat: wire V16 markerless setup TV framing and startup runtimes"
+            git push origin HEAD:agent/v16-friends-like-tv-and-polish
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Unit tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Compile both debug APKs
+        run: gradle assembleConsumerDebug assembleDeveloperDebug
