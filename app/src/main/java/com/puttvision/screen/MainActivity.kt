@@ -93,6 +93,10 @@ class MainActivity : AppCompatActivity() {
     private var recordingStartedAtMs = 0L
     private var hfrRecordingGeneration = 0
     private var hfrRetryAfterMs = 0L
+    private var offlineTestMode = false
+    private var calibrationShotsSinceCheck = 0
+    private var calibrationDriftRecovering = false
+    private var hardwarelessSequence = 0
 
     private var autoPlayEnabled = true
     private var simulationTicking = false
@@ -225,8 +229,8 @@ class MainActivity : AppCompatActivity() {
             if (granted) {
                 openProvider()
             } else {
-                toast("카메라 권한이 필요합니다")
-                if (sessionActive) showHomeMenu()
+                toast("카메라 권한 없음 · 메인 화면의 ‘장비 없이 테스트’는 사용 가능")
+                if (sessionActive && !offlineTestMode) showHomeMenu()
             }
         }
 
@@ -246,6 +250,7 @@ class MainActivity : AppCompatActivity() {
         thermalHfrPolicy = ThermalHfrPolicy(this)
         sessionRecoveryStore = SessionRecoveryStore(this)
         statsRepository = StatsRepository(this)
+        GreenReadRuntime.install(this)
 
         putterProfileStore = PutterProfileStore(this)
         matCalibrationManager = MatCalibrationManager(this)
@@ -270,7 +275,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         engine.onRecordFinalized = { record ->
-            statsRepository.add(record)
+            if (!offlineTestMode) statsRepository.add(record)
         }
 
         buildUi()
@@ -560,7 +565,7 @@ class MainActivity : AppCompatActivity() {
         textSize = pvSp(if (compact) 7.2f else 8.4f)
         typeface = Typeface.DEFAULT_BOLD
         includeFontPadding = false
-        maxLines = 1
+        maxLines = 2
     }
     stateBlock.addView(shotPanelTitle)
     stateBlock.addView(metricText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(1) })
@@ -825,6 +830,7 @@ class MainActivity : AppCompatActivity() {
 
     val utility = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
     utility.addView(pvButton("샷 기록", PvButtonStyle.GHOST, textSp = if (compact) 6.5f else 7.5f, scaled = true, radiusDp = 100f) { showStats() }, LinearLayout.LayoutParams(0, sdp(if (compact) 30 else 34), 1f))
+    utility.addView(pvButton("장비 없이 테스트", PvButtonStyle.GHOST, textSp = if (compact) 6.2f else 7.2f, scaled = true, radiusDp = 100f) { showHardwarelessTestLab() }, LinearLayout.LayoutParams(0, sdp(if (compact) 30 else 34), 1.25f).apply { marginStart = sdp(6) })
     utility.addView(pvButton("업데이트", PvButtonStyle.GHOST, textSp = if (compact) 6.5f else 7.5f, scaled = true, radiusDp = 100f) { appUpdater.check(silent = false) }, LinearLayout.LayoutParams(0, sdp(if (compact) 30 else 34), 1f).apply { marginStart = sdp(6) })
     actionPanel.addView(utility, LinearLayout.LayoutParams(-1, -2).apply { topMargin = sdp(if (compact) 9 else 12) })
 
@@ -1904,6 +1910,7 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun saveSessionRecovery() {
+        if (offlineTestMode) return
         if (!::sessionRecoveryStore.isInitialized || !sessionActive) return
         sessionRecoveryStore.save(
             SessionRecoverySnapshot(
@@ -2404,6 +2411,9 @@ class MainActivity : AppCompatActivity() {
     tools.addView(tool("TV PREVIEW", "TV 화면을 이 기기에서 미리보기") {
         closeThen { showTvPreview() }
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
+    tools.addView(tool("SIM LAB", "카메라 · TV 없이 전체 장비 테스트") {
+        if (wasActiveSession) toast("실제 세션을 끝낸 뒤 SIM LAB을 실행하세요") else closeThen { showHardwarelessTestLab() }
+    }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
     tools.addView(tool("BACKUP", "기록 · 설정 백업 / 복원") {
         showBackupDialog(this, productBackupManager) { backupImport.launch("application/json") }
     }, LinearLayout.LayoutParams(-1, pvDp(if (compact) 44 else 50)).apply { topMargin = pvDp(6) })
@@ -2473,6 +2483,7 @@ class MainActivity : AppCompatActivity() {
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         val tv = GreenView(this, engine)
         root.addView(tv, FrameLayout.LayoutParams(-1, -1))
+        root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
 
         val close = pvButton("닫기", PvButtonStyle.GHOST) { dialog.dismiss() }
         root.addView(close, FrameLayout.LayoutParams(pvDp(84), pvDp(42), Gravity.TOP or Gravity.END).apply {
@@ -2492,6 +2503,259 @@ class MainActivity : AppCompatActivity() {
         }
         dialog.setOnDismissListener {
             if (resumeAfter && sessionActive) mainHandler.post { armPrecision() }
+        }
+        dialog.show()
+    }
+
+    private fun showHardwarelessTestLab() {
+        if (sessionActive) {
+            toast("실제 세션을 끝낸 뒤 장비 없이 테스트를 실행하세요")
+            return
+        }
+
+        val oldSettings = engine.settings.copy()
+        val oldMode = engine.gameModes.snapshot()
+        val oldAuto = autoPlayEnabled
+        val oldPracticeCount = practiceCount
+        val oldPracticeShots = practiceShotsTaken
+        val oldPracticePatternShot = practicePatternShotIndex
+        val oldSessionStarted = sessionStartedAtMs
+        val oldActiveGame = activeSessionIsGame
+        val oldSuspended = measurementSuspended
+        var profile = 8
+        val distances = intArrayOf(3, 5, 7, 10)
+        var distanceIndex = 1
+        var suiteToken = 0
+
+        offlineTestMode = true
+        autoPlayEnabled = false
+        updateAutoButton()
+        cancelPendingAuto()
+        stopSimulation()
+        stopHfrRecordingOnly()
+        tracker.cancel()
+        if (::analysis.isInitialized) analysis.clearAnalyzer()
+        sessionActive = true
+        measurementSuspended = false
+        activeSessionIsGame = false
+        sessionStartedAtMs = System.currentTimeMillis()
+        practiceCount = 999
+        practiceShotsTaken = 0
+        practicePatternShotIndex = 0
+        engine.gameModes.setMode(PracticeMode.PRACTICE)
+        engine.settings.stimpMeters = 2.8
+        engine.settings.holeDistanceM = 5.0
+        engine.settings.sideSlopePct = 0.0
+        engine.settings.longSlopePct = 0.0
+        engine.settings.terrainProfileId = profile
+        engine.resetSimulation()
+        GreenReadRuntime.prefetch(engine.settings)
+
+        val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        root.addView(GreenView(this, engine), FrameLayout.LayoutParams(-1, -1))
+        root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
+
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = pvRounded(Color.argb(238, 4, 8, 10), Pv.rLg, Pv.line)
+            setPadding(pvDp(12), pvDp(10), pvDp(12), pvDp(10))
+        }
+        controls.addView(TextView(this).apply {
+            text = "NO HARDWARE LAB"
+            setTextColor(Pv.primary)
+            textSize = pvSp(8f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .12f
+            includeFontPadding = false
+        })
+        controls.addView(TextView(this).apply {
+            text = "CAMERA MOCK ●  ·  TV LOCAL ●\n실제 측정 파이프라인에 합성 샷을 주입합니다."
+            setTextColor(Pv.textMid)
+            textSize = pvSp(7f)
+            setPadding(0, pvDp(3), 0, pvDp(8))
+        })
+        val status = TextView(this).apply {
+            text = "READY · 5m · GREEN 08"
+            setTextColor(Pv.textHi)
+            textSize = pvSp(8f)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            background = pvRounded(Pv.surfaceLo, Pv.rMd, Pv.lineSoft)
+            setPadding(pvDp(8), pvDp(7), pvDp(8), pvDp(7))
+        }
+        controls.addView(status)
+
+        fun applyLabTarget() {
+            engine.settings.holeDistanceM = distances[distanceIndex].toDouble()
+            engine.settings.stimpMeters = 2.8
+            engine.settings.sideSlopePct = 0.0
+            engine.settings.longSlopePct = 0.0
+            engine.settings.terrainProfileId = profile
+            engine.resetSimulation()
+            GreenReadRuntime.prefetch(engine.settings)
+            status.text = "READY · ${distances[distanceIndex]}m · GREEN ${"%02d".format(profile)}"
+        }
+
+        fun inject(scenario: HardwarelessScenario): Boolean {
+            if (!offlineTestMode || engine.state?.running == true) return false
+            hardwarelessSequence++
+            engine.resetSimulation()
+            val metrics = HardwarelessShotFactory.metrics(scenario, engine.settings, hardwarelessSequence)
+            val replay = HardwarelessShotFactory.replay(metrics)
+            val accepted = handleMeasuredShot(metrics, replay, "PRECISION SIM 240fps")
+            status.text = if (accepted) {
+                "${scenario.label} · ACCEPTED · 물리/TV 실행중"
+            } else {
+                "${scenario.label} · REJECTED · 품질 게이트 정상"
+            }
+            return accepted
+        }
+
+        controls.addView(TextView(this).apply {
+            text = "SHOT INJECTION"
+            setTextColor(Pv.textLo)
+            textSize = pvSp(6f)
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = .12f
+            setPadding(0, pvDp(10), 0, pvDp(4))
+        })
+        HardwarelessScenario.entries.forEach { scenario ->
+            controls.addView(
+                pvButton(scenario.label, if (scenario == HardwarelessScenario.CENTER) PvButtonStyle.PRIMARY else PvButtonStyle.GHOST, textSp = 7f) {
+                    inject(scenario)
+                },
+                LinearLayout.LayoutParams(-1, pvDp(36)).apply { topMargin = pvDp(4) }
+            )
+        }
+
+        val targetRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        targetRow.addView(pvButton("거리 변경", PvButtonStyle.GHOST, textSp = 6.8f) {
+            if (engine.state?.running == true) return@pvButton
+            distanceIndex = (distanceIndex + 1) % distances.size
+            applyLabTarget()
+        }, LinearLayout.LayoutParams(0, pvDp(36), 1f))
+        targetRow.addView(pvButton("그린 +1", PvButtonStyle.GHOST, textSp = 6.8f) {
+            if (engine.state?.running == true) return@pvButton
+            profile = (profile + 1) % 24
+            applyLabTarget()
+        }, LinearLayout.LayoutParams(0, pvDp(36), 1f).apply { marginStart = pvDp(5) })
+        controls.addView(targetRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pvDp(7) })
+
+        controls.addView(pvButton("자동 시나리오 전체검사", PvButtonStyle.PRIMARY, textSp = 7f) {
+            val token = ++suiteToken
+            val cases = listOf(
+                HardwarelessScenario.LOW_QUALITY,
+                HardwarelessScenario.CENTER,
+                HardwarelessScenario.PUSH,
+                HardwarelessScenario.PULL,
+                HardwarelessScenario.SHORT,
+                HardwarelessScenario.LONG,
+                HardwarelessScenario.BREAK_TEST
+            )
+            val profiles = intArrayOf(0, 6, 8, 12, 14, 19, 23)
+            var index = 0
+            var passed = 0
+            fun advance() {
+                if (!offlineTestMode || token != suiteToken) return
+                if (engine.state?.running == true) {
+                    mainHandler.postDelayed({ advance() }, 120L)
+                    return
+                }
+                if (index >= cases.size) {
+                    status.text = "AUTO SUITE · $passed/${cases.size} PASS"
+                    status.setTextColor(if (passed == cases.size) Pv.primary else Pv.amber)
+                    return
+                }
+                profile = profiles[index]
+                distanceIndex = index % distances.size
+                applyLabTarget()
+                val scenario = cases[index]
+                val accepted = inject(scenario)
+                val expected = scenario != HardwarelessScenario.LOW_QUALITY
+                if (accepted == expected) passed++
+                index++
+                mainHandler.postDelayed({ advance() }, if (accepted) 160L else 350L)
+            }
+            advance()
+        }, LinearLayout.LayoutParams(-1, pvDp(40)).apply { topMargin = pvDp(8) })
+
+        controls.addView(pvButton("24 GREEN 엔진 스모크", PvButtonStyle.GHOST, textSp = 7f) {
+            status.text = "24 GREEN · 계산중"
+            cameraExecutor.execute {
+                var completed = 0
+                for (id in 0..23) {
+                    val settings = GreenSettings(2.8, 5.0, 0.0, 0.0, id)
+                    val metrics = ShotMetrics(
+                        ballSpeedMps = 1.45,
+                        launchAngleDeg = 0.0,
+                        headSpeedMps = 0.95,
+                        faceAngleDeg = 0.0,
+                        pathAngleDeg = 0.0,
+                        faceToPathDeg = 0.0,
+                        smash = 1.52,
+                        impactOffsetMm = 0.0,
+                        measuredAtNs = 0L,
+                        confidence = .95,
+                        uncertainty = MeasurementUncertaintyEstimator.synthetic()
+                    )
+                    if (HardwarelessEngineSmoke.run(settings, metrics).completed) completed++
+                }
+                runOnUiThread {
+                    if (offlineTestMode) {
+                        status.text = "24 GREEN ENGINE · $completed/24 PASS"
+                        status.setTextColor(if (completed == 24) Pv.primary else Pv.amber)
+                    }
+                }
+            }
+        }, LinearLayout.LayoutParams(-1, pvDp(38)).apply { topMargin = pvDp(6) })
+
+        controls.addView(pvButton("닫기", PvButtonStyle.GHOST, textSp = 7f) { dialog.dismiss() }, LinearLayout.LayoutParams(-1, pvDp(38)).apply { topMargin = pvDp(8) })
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            addView(controls, FrameLayout.LayoutParams(-1, -2))
+        }
+        root.addView(scroll, FrameLayout.LayoutParams(pvDp(if (compactLandscape) 250 else 300), -1, Gravity.END).apply {
+            topMargin = pvDp(8)
+            bottomMargin = pvDp(8)
+            marginEnd = pvDp(8)
+        })
+
+        dialog.setContentView(root)
+        dialog.setOnShowListener {
+            dialog.window?.let { window ->
+                window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                WindowCompat.setDecorFitsSystemWindows(window, false)
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    hide(WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
+        }
+        dialog.setOnDismissListener {
+            suiteToken++
+            TvImpactReplayBus.clear()
+            stopSimulation()
+            tracker.cancel()
+            engine.resetSimulation()
+            engine.settings.stimpMeters = oldSettings.stimpMeters
+            engine.settings.holeDistanceM = oldSettings.holeDistanceM
+            engine.settings.sideSlopePct = oldSettings.sideSlopePct
+            engine.settings.longSlopePct = oldSettings.longSlopePct
+            engine.settings.terrainProfileId = oldSettings.terrainProfileId
+            engine.gameModes.restore(oldMode)
+            practiceCount = oldPracticeCount
+            practiceShotsTaken = oldPracticeShots
+            practicePatternShotIndex = oldPracticePatternShot
+            sessionStartedAtMs = oldSessionStarted
+            activeSessionIsGame = oldActiveGame
+            sessionActive = false
+            measurementSuspended = oldSuspended
+            offlineTestMode = false
+            autoPlayEnabled = oldAuto
+            updateAutoButton()
+            engine.seedHistory(statsRepository.recent(40))
+            updateSettingLabels()
+            showHomeMenu()
         }
         dialog.show()
     }
@@ -2742,13 +3006,15 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         homography = result.homography
+                        calibrationShotsSinceCheck = 0
+                        calibrationDriftRecovering = false
                         overlay.status = "CAL ${quality.score} · ${quality.grade}"
                         shotPanelTitle.text = "CAL ${quality.score} · ${quality.grade}"
                         shotPanelTitle.setTextColor(if (quality.score >= 80) Pv.primary else Pv.amber)
                         metricText.text = quality.hint
                         overlay.invalidate()
 
-                        installNormalAnalyzer(result.homography)
+                        installNormalAnalyzer(result.homography, result.imagePoints)
                         maybeShowFirstRunWizard()
                         maybeAutoStartAfterCalibration()
                     }
@@ -2781,7 +3047,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun installNormalAnalyzer(
-        h: Homography
+        h: Homography,
+        markerPoints: List<android.graphics.PointF> = emptyList()
     ) {
         analysis.clearAnalyzer()
 
@@ -2805,6 +3072,10 @@ class MainActivity : AppCompatActivity() {
                         updateLiveQualityStatus(quality)
                     }
                 },
+                baselineMarkerPoints = markerPoints,
+                onCalibrationDrift = { drift ->
+                    runOnUiThread { handleCalibrationDrift(drift) }
+                },
                 onShotReady = { metrics ->
                     runOnUiThread {
                         if (!sessionActive || measurementSuspended) return@runOnUiThread
@@ -2821,6 +3092,38 @@ class MainActivity : AppCompatActivity() {
             cameraExecutor,
             analyzer
         )
+    }
+
+    private fun handleCalibrationDrift(snapshot: CalibrationDriftSnapshot) {
+        if (offlineTestMode || !sessionActive || measurementSuspended || calibrationDriftRecovering) return
+        if (!snapshot.blocked) {
+            if (snapshot.driftPx >= 5.0) {
+                overlay.status = snapshot.detail
+                overlay.invalidate()
+            }
+            return
+        }
+        calibrationDriftRecovering = true
+        calibrationShotsSinceCheck = 0
+        cancelPendingAuto()
+        impactPolling = false
+        tracker.cancel()
+        stopHfrRecordingOnly()
+        homography = null
+        measurementSuspended = true
+        overlay.status = "CAL DRIFT · RECALIBRATE"
+        shotPanelTitle.text = "CAMERA MOVED"
+        shotPanelTitle.setTextColor(Pv.amber)
+        metricText.text = snapshot.detail
+        overlay.invalidate()
+        mainHandler.postDelayed({
+            if (!sessionActive || offlineTestMode) {
+                calibrationDriftRecovering = false
+                return@postDelayed
+            }
+            measurementSuspended = false
+            beginAutoCalibration()
+        }, 350L)
     }
 
     private fun maybeShowFirstRunWizard(force: Boolean = false) {
@@ -2914,6 +3217,17 @@ class MainActivity : AppCompatActivity() {
                 "자동 캘리브레이션 먼저"
             )
 
+            return
+        }
+
+        if (!offlineTestMode && calibrationShotsSinceCheck >= 6) {
+            calibrationShotsSinceCheck = 0
+            shotPanelTitle.text = "CAL CHECK"
+            shotPanelTitle.setTextColor(Pv.primary)
+            metricText.text = "6샷 주기 카메라 위치 재검증"
+            overlay.status = "CAL WATCH · QUICK CHECK"
+            overlay.invalidate()
+            beginAutoCalibration()
             return
         }
 
@@ -3348,7 +3662,9 @@ class MainActivity : AppCompatActivity() {
             return false
         }
 
-        val baseMetrics = if (::matCalibrationManager.isInitialized) {
+        val baseMetrics = if (offlineTestMode) {
+            metrics
+        } else if (::matCalibrationManager.isInitialized) {
             matCalibrationManager.applyFallback(metrics)
         } else metrics
         val confidence = baseMetrics.confidence
@@ -3373,16 +3689,17 @@ class MainActivity : AppCompatActivity() {
             shotPanelTitle.setTextColor(if (pct >= 80) Pv.primary else Pv.amber)
         }
 
-        if (::matCalibrationManager.isInitialized) {
+        if (!offlineTestMode && ::matCalibrationManager.isInitialized) {
             matCalibrationManager.observe(baseMetrics)
         }
-        if (::accuracyValidationLab.isInitialized) {
+        if (!offlineTestMode && ::accuracyValidationLab.isInitialized) {
             accuracyValidationLab.capture(baseMetrics)
         }
-        if (::accuracyAutoTuner.isInitialized && ::accuracyValidationLab.isInitialized) {
+        if (!offlineTestMode && ::accuracyAutoTuner.isInitialized && ::accuracyValidationLab.isInitialized) {
             accuracyAutoTuner.refresh(accuracyValidationLab.matched())
         }
-        val processedMetrics = if (::accuracyAutoTuner.isInitialized) accuracyAutoTuner.apply(baseMetrics) else baseMetrics
+        val processedMetrics = if (!offlineTestMode && ::accuracyAutoTuner.isInitialized) accuracyAutoTuner.apply(baseMetrics) else baseMetrics
+        if (!offlineTestMode) calibrationShotsSinceCheck++
         updateMetricCards(processedMetrics)
 
         engine.launch(
@@ -3392,6 +3709,7 @@ class MainActivity : AppCompatActivity() {
         startSimulationTicker()
 
         replay?.let {
+            TvImpactReplayBus.publish(it, processedMetrics, synthetic = offlineTestMode || source.contains("SIM"))
             replayView.play(
                 it,
                 processedMetrics,
@@ -3413,6 +3731,7 @@ class MainActivity : AppCompatActivity() {
       append("샷 측정 완료")
       preScore?.let { append(" · SCORE ${it.total}") }
       coach?.let { append(" · ${it.headline}") }
+      processedMetrics.uncertainty?.let { append("\n${it.compact()}") }
   }
 
         overlay.invalidate()
@@ -3509,6 +3828,8 @@ class MainActivity : AppCompatActivity() {
                 append(
                     if (result.holed) {
                         "HOLE IN"
+                    } else if (result.lipOut) {
+                        "LIP OUT · 컵까지 ${"%.0f".format(result.distanceToCupM * 100)}cm"
                     } else {
                         "컵까지 ${"%.0f".format(result.distanceToCupM * 100)}cm"
                     }
@@ -3555,10 +3876,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-        if (::voiceCoach.isInitialized) {
+        if (!offlineTestMode && ::voiceCoach.isInitialized) {
             voiceCoach.speakResult(result, engine.currentShot?.launchAngleDeg)
         }
-        if (::previewView.isInitialized) previewView.productHaptic()
+        if (!offlineTestMode && ::previewView.isInitialized) previewView.productHaptic()
     }
 
     private fun scheduleAutoNext() {
@@ -3762,6 +4083,7 @@ class MainActivity : AppCompatActivity() {
                     "  Q ${"%.0f".format(it * 100)}%"
                 )
             }
+            m.uncertainty?.let { append("\n${it.compact()}") }
         }
     }
 

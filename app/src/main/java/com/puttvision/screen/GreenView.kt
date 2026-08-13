@@ -42,8 +42,12 @@ class GreenView(
         drawResult(canvas)
         if (ProductSessionRuntime.tvCalibrationGuide) drawTvCalibrationGuide(canvas)
         canvas.restoreToCount(save)
-        val dynamic = engine.state?.running == true || engine.lastResult == null || ProductSessionRuntime.tvCalibrationGuide
-        if (dynamic) postInvalidateOnAnimation() else postInvalidateDelayed(200L)
+        when {
+            engine.state?.running == true -> postInvalidateOnAnimation()
+            ProductSessionRuntime.tvCalibrationGuide -> postInvalidateDelayed(33L)
+            engine.lastResult == null -> postInvalidateDelayed(50L)
+            else -> postInvalidateDelayed(250L)
+        }
     }
 
     private fun drawTvCalibrationGuide(c: Canvas) {
@@ -149,9 +153,9 @@ class GreenView(
             val t = (y / maxY).coerceIn(0.0, 1.0).toFloat()
             return bottomY - (bottomY - horizonY) * t
         }
-        val originHeight = GreenTerrain.heightAt(settings.terrainProfileId, 0.0, 0.0, settings.holeDistanceM)
+        val originHeight = GreenTerrain.effectiveHeightAt(settings, 0.0, 0.0)
         fun sySurface(x: Double, y: Double): Float {
-            val z = GreenTerrain.heightAt(settings.terrainProfileId, x, y, settings.holeDistanceM)
+            val z = GreenTerrain.effectiveHeightAt(settings, x, y)
             val relief = ((z - originHeight) * h * 1.35).toFloat()
             return syBase(y) - relief
         }
@@ -165,6 +169,39 @@ class GreenView(
             val sideRange = max(1.15, settings.holeDistanceM * .20)
             return centerX + (x / sideRange).toFloat() * halfWidthAt(yp)
         }
+
+        // V13 relief mesh. Vertices are projected from the same effective height
+        // field used by GreenPhysics, so highlights/valleys are geometry-derived.
+        val meshSave = c.save()
+        c.clipPath(greenShape)
+        val meshRows = 14
+        val meshCols = 10
+        val meshSideRange = max(1.15, settings.holeDistanceM * .20)
+        for (row in 0 until meshRows) {
+            val y0 = maxY * row / meshRows.toDouble()
+            val y1 = maxY * (row + 1) / meshRows.toDouble()
+            for (col in 0 until meshCols) {
+                val x0 = -meshSideRange + meshSideRange * 2.0 * col / meshCols.toDouble()
+                val x1 = -meshSideRange + meshSideRange * 2.0 * (col + 1) / meshCols.toDouble()
+                val mx = (x0 + x1) * .5
+                val my = (y0 + y1) * .5
+                val slope = GreenTerrain.effectiveSlopeAt(settings, mx, my)
+                val z = GreenTerrain.effectiveHeightAt(settings, mx, my) - originHeight
+                val light = (-slope.sidePct * .50 + slope.longPct * .34 + z * 310.0).coerceIn(-2.5, 2.5)
+                val alpha = (12 + abs(light) * 8.0).toInt().coerceIn(12, 34)
+                p.color = if (light >= 0.0) Color.argb(alpha, 225, 255, 228) else Color.argb(alpha, 0, 12, 5)
+                val cell = Path().apply {
+                    moveTo(sx(x0, y0), sySurface(x0, y0))
+                    lineTo(sx(x1, y0), sySurface(x1, y0))
+                    lineTo(sx(x1, y1), sySurface(x1, y1))
+                    lineTo(sx(x0, y1), sySurface(x0, y1))
+                    close()
+                }
+                p.style = Paint.Style.FILL
+                c.drawPath(cell, p)
+            }
+        }
+        c.restoreToCount(meshSave)
 
         p.style = Paint.Style.STROKE
         p.strokeCap = Paint.Cap.BUTT
@@ -305,7 +342,7 @@ class GreenView(
 
         engine.state?.trail?.takeIf { it.size >= 2 }?.let { trail ->
             val actual = Path().apply {
-                moveTo(sx(trail.first().first, trail.first().second), sy(trail.first().second))
+                moveTo(sx(trail.first().first, trail.first().second), sySurface(trail.first().first, trail.first().second))
                 trail.drop(1).forEach { point -> lineTo(sx(point.first, point.second), sySurface(point.first, point.second)) }
             }
             p.strokeWidth = max(4f, w * .0028f)
@@ -477,6 +514,12 @@ class GreenView(
         p.color = Pv.textLo
         c.drawText(item.third, x + colW * .61f, top + h * .071f, p)
     }
+    shot.uncertainty?.let { u ->
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(8f, w * .0058f)
+        p.color = Color.argb(165, 188, 205, 196)
+        c.drawText(u.compact(), left + pad, bottom - h * .010f, p)
+    }
 }
 
         private fun drawResult(c: Canvas) {
@@ -502,7 +545,7 @@ class GreenView(
     p.typeface = Typeface.DEFAULT_BOLD
     p.textSize = max(10f, w * .0075f)
     p.color = if (result.holed) Pv.amber else Pv.primary
-    c.drawText(if (result.holed) "HOLED" else "RESULT", x, top + h * .034f, p)
+    c.drawText(if (result.holed) "HOLED" else if (result.lipOut) "LIP OUT" else "RESULT", x, top + h * .034f, p)
 
     p.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     p.textSize = max(34f, w * .027f)

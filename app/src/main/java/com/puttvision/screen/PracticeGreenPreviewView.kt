@@ -56,7 +56,7 @@ class PracticeGreenPreviewView(context: Context) : View(context) {
                 val xNorm = (col + .5) / cols.toDouble() * 2.0 - 1.0
                 val realX = xNorm * max(.8, holeDistanceM * .22)
                 val s = GreenTerrain.effectiveSlopeAt(settings, realX, realY)
-                val z = GreenTerrain.heightAt(styleIndex, realX, realY, holeDistanceM)
+                val z = GreenTerrain.effectiveHeightAt(settings, realX, realY)
                 val mag = hypot(s.sidePct, s.longPct)
                 p.color = surfaceColor(z, s.sidePct, s.longPct, mag)
                 val l = r.left + col * cellW
