@@ -76,6 +76,17 @@ fun showProductSetupDialog(
         LinearLayout.LayoutParams(-1, context.pvDp(52))
     )
 
+    val fit = V15PutterFitRuntime.latest
+    val fitTitle = fit?.let {
+        "${it.balance.label} · ${it.head.label} · ${(it.confidence * 100).toInt()}%"
+    } ?: "${V15PutterFitRuntime.currentSampleCount}/20구 · 분석 중"
+    root.addView(
+        action("AI PUTTER FIT", fitTitle) {
+            showV15PutterFitDialog(context)
+        },
+        LinearLayout.LayoutParams(-1, context.pvDp(52)).apply { topMargin = context.pvDp(6) }
+    )
+
     root.addView(
         action("PHYSICAL MAT", matManager.statusLabel()) {
             showMatCalibrationManager(context, matManager)
