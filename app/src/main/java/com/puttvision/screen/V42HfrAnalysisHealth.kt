@@ -25,16 +25,18 @@ data class V42HfrAnalysisHealth(
         get() = "$calibrationMode · CAL ${calibrationMs}ms · TOTAL ${totalAnalysisMs}ms · ${fps}fps · TRACK $ballTrackFrames/$putterTrackFrames"
 }
 
-/** Latest successful precision-analysis health snapshot; numeric only, no video/frame retention. */
+/** Latest successful precision-analysis health snapshot plus a bounded long-session numeric window. */
 object V42HfrAnalysisHealthRuntime {
     @Volatile var latest: V42HfrAnalysisHealth? = null
         private set
 
     fun publish(value: V42HfrAnalysisHealth) {
         latest = value
+        V43HfrHealthWindow.publish(value)
     }
 
     fun clear() {
         latest = null
+        V43HfrHealthWindow.clear()
     }
 }
