@@ -35,11 +35,18 @@ class HighSpeedCaptureController(
     private var activeFile: File? = null
     private var selectedFps: Int = 0
     private val stability = CameraStabilityController()
+    private val failureCircuit = V43HfrFailureCircuit()
 
     fun isRecording(): Boolean = recording != null
     fun fps(): Int = selectedFps
 
     fun bindBest(maxFps: Int = 240): ActiveHfrSession? {
+        if (!failureCircuit.allow()) {
+            val seconds = ((failureCircuit.remainingMs() + 999L) / 1000L).coerceAtLeast(1L)
+            status("HFR 자동복구 대기 ${seconds}s · NORMAL 사용")
+            return null
+        }
+
         stability.release()
         provider.unbindAll()
 
@@ -123,6 +130,7 @@ class HighSpeedCaptureController(
             status("PRECISION ${chosen.upper}fps 준비 · AF/AE LOCK")
             ActiveHfrSession(chosen.upper, desc, resolution)
         } catch (t: Throwable) {
+            failureCircuit.recordFailure()
             recorder = null
             videoCapture = null
             selectedFps = 0
@@ -138,11 +146,27 @@ class HighSpeedCaptureController(
         if (recording != null) return
         val rec = recorder ?: return
 
+        if (!failureCircuit.allow()) {
+            val error = IllegalStateException("HFR failure cooldown")
+            status("HFR 자동복구 대기 · NORMAL 사용")
+            callbackExecutor.execute { onFinalize(null, selectedFps, error) }
+            return
+        }
+
         val fpsAtStart = selectedFps
         val dir = File(context.cacheDir, "puttvision_hfr").apply { mkdirs() }
-        val file = File(dir, "shot_${System.currentTimeMillis()}_${fpsAtStart}fps.mp4")
-        activeFile = file
+        val storage = V43HfrStorageGuard.prepare(dir)
+        if (!storage.ok) {
+            failureCircuit.recordFailure()
+            status(storage.label)
+            callbackExecutor.execute {
+                onFinalize(null, fpsAtStart, IllegalStateException(storage.label))
+            }
+            return
+        }
 
+        val file = V43CaptureFileNamer.create(dir, fpsAtStart)
+        activeFile = file
         val output = FileOutputOptions.Builder(file).build()
 
         recording = rec.prepareRecording(context, output)
@@ -154,15 +178,26 @@ class HighSpeedCaptureController(
                     }
 
                     is VideoRecordEvent.Finalize -> {
-                        val error = if (event.hasError()) {
+                        val recorderError = if (event.hasError()) {
                             RuntimeException(
                                 "record error=${event.error}; ${event.cause?.message ?: ""}"
                             )
                         } else null
+                        val validFile = file.takeIf { it.exists() && it.length() > 0L }
+                        val finalError = recorderError ?: if (validFile == null) {
+                            RuntimeException("HFR recording finalized without a valid video")
+                        } else null
 
                         if (activeFile == file) activeFile = null
                         recording = null
-                        onFinalize(file.takeIf { it.exists() }, fpsAtStart, error)
+
+                        if (finalError != null) {
+                            failureCircuit.recordFailure()
+                            runCatching { file.delete() }
+                        } else {
+                            failureCircuit.recordSuccess()
+                        }
+                        onFinalize(validFile.takeIf { finalError == null }, fpsAtStart, finalError)
                     }
                 }
             }
@@ -180,6 +215,7 @@ class HighSpeedCaptureController(
             try {
                 current.stop()
             } catch (_: Throwable) {
+                failureCircuit.recordFailure()
                 recording = null
                 activeFile?.let { runCatching { it.delete() } }
                 activeFile = null
