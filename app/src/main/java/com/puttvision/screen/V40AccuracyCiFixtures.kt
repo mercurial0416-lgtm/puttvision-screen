@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import java.io.File
+import java.util.Locale
 
 /** Exports the exact two CSV files consumed by ci/v20_accuracy_gate.py. */
 object V40AccuracyCiFixtures {
@@ -14,6 +15,32 @@ object V40AccuracyCiFixtures {
     private const val faceToleranceDeg = .55
     private const val pathToleranceDeg = .65
 
+    internal fun referenceCsv(samples: List<ValidationSample>): String = buildString {
+        appendLine("id,ball_speed_mps,ball_tol_mps,launch_deg,launch_tol_deg,face_deg,face_tol_deg,path_deg,path_tol_deg")
+        samples.forEach { s ->
+            appendLine(listOf(
+                csvCell(s.id),
+                number(s.refBall), if (s.refBall != null) number(ballToleranceMps) else "",
+                number(s.refLaunch), if (s.refLaunch != null) number(launchToleranceDeg) else "",
+                number(s.refFace), if (s.refFace != null) number(faceToleranceDeg) else "",
+                number(s.refPath), if (s.refPath != null) number(pathToleranceDeg) else ""
+            ).joinToString(","))
+        }
+    }
+
+    internal fun measuredCsv(samples: List<ValidationSample>): String = buildString {
+        appendLine("id,ball_speed_mps,launch_deg,face_deg,path_deg")
+        samples.forEach { s ->
+            appendLine(listOf(
+                csvCell(s.id),
+                number(s.measuredBall),
+                number(s.measuredLaunch),
+                number(s.measuredFace),
+                number(s.measuredPath)
+            ).joinToString(","))
+        }
+    }
+
     fun export(activity: Activity, lab: AccuracyValidationLab): Result<Int> = runCatching {
         val matched = lab.matched()
         require(matched.isNotEmpty()) { "기준장비 값과 매칭된 샷이 없습니다" }
@@ -21,32 +48,8 @@ object V40AccuracyCiFixtures {
         val dir = File(activity.cacheDir, "exports/v20-ci").apply { mkdirs() }
         val reference = File(dir, "v20_reference.csv")
         val measured = File(dir, "v20_measured.csv")
-
-        reference.bufferedWriter().use { out ->
-            out.appendLine("id,ball_speed_mps,ball_tol_mps,launch_deg,launch_tol_deg,face_deg,face_tol_deg,path_deg,path_tol_deg")
-            matched.forEach { s ->
-                out.appendLine(listOf(
-                    s.id,
-                    number(s.refBall), if (s.refBall != null) ballToleranceMps else "",
-                    number(s.refLaunch), if (s.refLaunch != null) launchToleranceDeg else "",
-                    number(s.refFace), if (s.refFace != null) faceToleranceDeg else "",
-                    number(s.refPath), if (s.refPath != null) pathToleranceDeg else ""
-                ).joinToString(","))
-            }
-        }
-
-        measured.bufferedWriter().use { out ->
-            out.appendLine("id,ball_speed_mps,launch_deg,face_deg,path_deg")
-            matched.forEach { s ->
-                out.appendLine(listOf(
-                    s.id,
-                    number(s.measuredBall),
-                    number(s.measuredLaunch),
-                    number(s.measuredFace),
-                    number(s.measuredPath)
-                ).joinToString(","))
-            }
-        }
+        reference.writeText(referenceCsv(matched))
+        measured.writeText(measuredCsv(matched))
 
         sharePair(activity, reference, measured, matched.size)
         matched.size
@@ -93,5 +96,11 @@ object V40AccuracyCiFixtures {
         activity.startActivity(Intent.createChooser(intent, "PuttVision CI 정확도 2파일 공유"))
     }
 
-    private fun number(value: Double?): Any = value?.takeIf { it.isFinite() }?.let { "%.6f".format(java.util.Locale.US, it) } ?: ""
+    private fun number(value: Double?): String =
+        value?.takeIf { it.isFinite() }?.let { "%.6f".format(Locale.US, it) } ?: ""
+
+    private fun csvCell(value: String): String {
+        if (value.none { it == ',' || it == '"' || it == '\n' || it == '\r' }) return value
+        return "\"${value.replace("\"", "\"\"")}\""
+    }
 }
