@@ -225,13 +225,17 @@ class V43CompanionSequenceGate {
 data class V43FeatureTrackPacket(
     val cameraId: String,
     val view: V15CameraView,
+    /** Physical impact/event wall-clock used only for pairing the same shot across cameras. */
     val capturedAtMs: Long,
     val sequence: Long,
-    val track: HfrFeatureTrack
+    val track: HfrFeatureTrack,
+    /** Host receive time used for cache freshness; analysis may finish seconds after impact. */
+    val receivedAtMs: Long = capturedAtMs
 )
 
 object V43FeatureTrackWire {
     const val MAX_FRAMES = 32
+    const val MAX_EVENT_AGE_MS = 15_000L
 
     fun encode(code: String, packet: V43FeatureTrackPacket): String = JSONObject().apply {
         put("pv", V28CompanionProtocol.VERSION)
@@ -268,7 +272,7 @@ object V43FeatureTrackWire {
             require(j.optInt("pv") == V28CompanionProtocol.VERSION && j.optString("type") == "feature_track")
             require(j.optString("code") == expectedCode)
             val captured = j.getLong("capturedAtMs")
-            require(nowMs - captured in -300L..2200L)
+            require(nowMs - captured in -300L..MAX_EVENT_AGE_MS)
             val arr = j.getJSONArray("frames")
             require(arr.length() in 1..MAX_FRAMES)
             fun value(o: JSONObject, key: String): Double? = o.optDouble(key, Double.NaN).takeIf { it.isFinite() }
@@ -293,7 +297,8 @@ object V43FeatureTrackWire {
                 view = view,
                 capturedAtMs = captured,
                 sequence = j.getLong("seq").also { require(it >= 0L) },
-                track = normalized
+                track = normalized,
+                receivedAtMs = nowMs
             )
         }.getOrNull()
 }
@@ -301,38 +306,56 @@ object V43FeatureTrackWire {
 /** Host-side compact feature geometry only; no bitmaps/video cross the network. */
 object V43RemoteFeatureTrackRuntime {
     private const val MAX_CAMERAS = 3
-    private val tracks = ConcurrentHashMap<String, V43FeatureTrackPacket>()
+    private const val MAX_TRACKS_PER_CAMERA = 4
+    private val tracks = ConcurrentHashMap<String, ArrayDeque<V43FeatureTrackPacket>>()
 
     fun publish(packet: V43FeatureTrackPacket): Boolean {
         val normalized = V44TrackValidator.normalize(packet.track, packet.view) ?: return false
         val incoming = packet.copy(track = normalized)
-        var accepted = false
-        tracks.compute(incoming.cameraId) { _, current ->
-            val newer = current == null || incoming.sequence > current.sequence ||
-                (incoming.sequence == current.sequence && incoming.capturedAtMs > current.capturedAtMs)
-            if (newer) {
-                accepted = true
-                incoming
-            } else current
+        synchronized(tracks) {
+            val queue = tracks.getOrPut(incoming.cameraId) { ArrayDeque() }
+            val latest = queue.lastOrNull()
+            val newer = latest == null || incoming.sequence > latest.sequence ||
+                (incoming.sequence == latest.sequence && incoming.capturedAtMs > latest.capturedAtMs)
+            if (!newer) return false
+            queue.addLast(incoming)
+            while (queue.size > MAX_TRACKS_PER_CAMERA) queue.removeFirst()
+            trimToCameraBudgetLocked()
         }
-        trimToCameraBudget()
-        return accepted
+        return true
     }
 
-    fun fresh(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 2200L): List<V43FeatureTrackPacket> {
-        tracks.entries.removeIf { nowMs - it.value.capturedAtMs !in -300L..maxAgeMs }
-        return tracks.values.sortedByDescending { it.capturedAtMs }
-    }
+    /**
+     * Freshness is based on host receive time, not physical impact time. HFR analysis is allowed
+     * to finish several seconds after the shot; capturedAtMs remains available for same-shot pairing.
+     */
+    fun fresh(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 10_000L): List<V43FeatureTrackPacket> =
+        synchronized(tracks) {
+            val cameraIterator = tracks.entries.iterator()
+            while (cameraIterator.hasNext()) {
+                val entry = cameraIterator.next()
+                val queue = entry.value
+                while (queue.isNotEmpty() && nowMs - queue.first().receivedAtMs !in -300L..maxAgeMs) {
+                    queue.removeFirst()
+                }
+                if (queue.isEmpty()) cameraIterator.remove()
+            }
+            tracks.values.flatMap { it.toList() }.sortedByDescending { it.capturedAtMs }
+        }
 
-    fun clear() = tracks.clear()
+    fun clear() = synchronized(tracks) { tracks.clear() }
 
-    internal fun size(): Int = tracks.size
+    /** Camera count, retained for existing diagnostics/tests. */
+    internal fun size(): Int = synchronized(tracks) { tracks.size }
 
-    private fun trimToCameraBudget() {
+    internal fun retainedTrackCount(): Int = synchronized(tracks) { tracks.values.sumOf { it.size } }
+
+    private fun trimToCameraBudgetLocked() {
         if (tracks.size <= MAX_CAMERAS) return
-        tracks.values.sortedByDescending { it.capturedAtMs }
+        tracks.entries
+            .sortedByDescending { it.value.lastOrNull()?.receivedAtMs ?: Long.MIN_VALUE }
             .drop(MAX_CAMERAS)
-            .forEach { tracks.remove(it.cameraId, it) }
+            .forEach { tracks.remove(it.key) }
     }
 }
 
