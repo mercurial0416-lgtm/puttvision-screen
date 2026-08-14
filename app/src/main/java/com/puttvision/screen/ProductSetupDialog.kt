@@ -33,7 +33,7 @@ fun showProductSetupDialog(
         letterSpacing = .12f
     })
     root.addView(TextView(context).apply {
-        text = "장비 기준, 기기 보정, AI 코칭, 커스텀 그린, 사운드와 멀티폰 카메라를 설정합니다."
+        text = "장비 기준, 기기 보정, AI 코칭, 훈련, 진단, 사운드와 멀티폰 카메라를 설정합니다."
         setTextColor(Pv.textMid)
         textSize = context.pvSp(8.5f)
         setPadding(0, context.pvDp(4), 0, context.pvDp(10))
@@ -103,6 +103,26 @@ fun showProductSetupDialog(
         showV47SoloHealthDialog(context)
     })
 
+    val training = V31TrainingSessionRuntime.progress()
+    val trainingLabel = when {
+        training.running && training.paused -> "일시정지 · ${training.completionPct}%"
+        training.running -> "진행 ${training.completionPct}% · ETA ${training.estimatedRemainingMinutes}분"
+        training.lastCompletedSummary != null -> training.lastCompletedSummary
+        else -> "15분 훈련 제어 · 약점 재훈련"
+    }
+    addAction(action("TRAINING CONTROL", trainingLabel) {
+        showV49TrainingControlDialog(context)
+    })
+
+    val liveInsights = V49LiveSessionInsights.snapshot()
+    addAction(action("LIVE SESSION", liveInsights.headline) {
+        showV49SessionInsightsDialog(context)
+    })
+
+    addAction(action("SOLO DIAGNOSTICS", "HFR · FUSION · TRAINING · 공유/초기화") {
+        showV49DiagnosticsDialog(context)
+    })
+
     addAction(action("GREEN READ TRAINING", "${V20GreenReadTrainingRuntime.mode.label} · 샷 후 정답 공개") {
         showV20GreenReadModeDialog(context)
     })
@@ -165,7 +185,7 @@ fun showProductSetupDialog(
         val enabled = V22AudioRuntime.toggle(context)
         dialog.dismiss()
         showProductSetupDialog(context, putterStore, matManager, voiceCoach)
-        android.widget.Toast.makeText(context, if (enabled) "퍼팅 사운드 ON" else "사운드 OFF", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(context, if (enabled) "퍼팅 사운드 ON" else "퍼팅 사운드 OFF", android.widget.Toast.LENGTH_SHORT).show()
     })
 
     addAction(action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {
