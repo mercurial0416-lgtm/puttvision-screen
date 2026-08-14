@@ -16,7 +16,6 @@ import javax.crypto.spec.GCMParameterSpec
 private const val V36_ENDPOINT = "https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-online"
 private const val V36_API_KEY = "sb_publishable_fjgUBLTNcWG5-f8EDFpLyw_P5wXmmFS"
 
-/** Live, server-authoritative ONLINE LEAGUE state used by phone and TV UI. */
 data class V36OnlinePlayerState(
     val id: String,
     val name: String,
@@ -47,27 +46,36 @@ object V36OnlinePresenceRuntime {
     private const val securePrefs = "puttvision_online_secure"
     private const val keyAlias = "puttvision.online.player.v1"
     private const val heartbeatMs = 12_000L
+    private const val stateSyncMs = 2_000L
     private const val finishedHoldMs = 45_000L
 
     @Volatile private var appContext: Context? = null
     @Volatile private var latest: V36OnlineSnapshot? = null
     private val installed = AtomicBoolean(false)
-    private val requestRunning = AtomicBoolean(false)
+    private val heartbeatRunning = AtomicBoolean(false)
+    private val syncRunning = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
 
-    private val tick = object : Runnable {
+    private val heartbeatTick = object : Runnable {
         override fun run() {
             val context = appContext ?: return
             val matchId = V31OnlineRuntime.activeMatchId
             if (matchId != null) heartbeat(context, matchId)
             else if (V31OnlineRuntime.player != null) {
                 V31OnlineRuntime.resume(context) { result ->
-                    if (result.isSuccess && V31OnlineRuntime.activeMatchId != null) {
-                        heartbeat(context, V31OnlineRuntime.activeMatchId!!)
-                    }
+                    if (result.isSuccess) V31OnlineRuntime.activeMatchId?.let { heartbeat(context, it) }
                 }
             }
             main.postDelayed(this, heartbeatMs)
+        }
+    }
+
+    private val syncTick = object : Runnable {
+        override fun run() {
+            val context = appContext ?: return
+            val matchId = V31OnlineRuntime.activeMatchId ?: latest?.takeIf { !it.finished() }?.matchId
+            if (matchId != null) syncState(context, matchId)
+            main.postDelayed(this, stateSyncMs)
         }
     }
 
@@ -78,12 +86,16 @@ object V36OnlinePresenceRuntime {
             V31OnlineRuntime.refreshMe(context) { me ->
                 if (me.isSuccess) {
                     V31OnlineRuntime.resume(context) { resume ->
-                        if (resume.isSuccess) V31OnlineRuntime.activeMatchId?.let { heartbeat(context, it) }
+                        if (resume.isSuccess) V31OnlineRuntime.activeMatchId?.let {
+                            heartbeat(context, it)
+                            syncState(context, it)
+                        }
                     }
                 }
             }
         }
-        main.post(tick)
+        main.post(heartbeatTick)
+        main.post(syncTick)
     }
 
     fun snapshot(): V36OnlineSnapshot? {
@@ -95,11 +107,12 @@ object V36OnlinePresenceRuntime {
         return value
     }
 
+    /** Explicit UI refresh is read-only; liveness writes remain on the 12s heartbeat cadence. */
     fun forceRefresh(context: Context, done: (Result<V36OnlineSnapshot>) -> Unit = {}) {
         val id = V31OnlineRuntime.activeMatchId
             ?: latest?.matchId
             ?: return done(Result.failure(IllegalStateException("진행 중인 온라인 경기 없음")))
-        request(context, "heartbeat", JSONObject().put("matchId", id)) { result ->
+        request(context, "match-state", JSONObject().put("matchId", id)) { result ->
             val mapped = result.mapCatching(::parse)
             mapped.onSuccess(::accept)
             done(mapped)
@@ -111,8 +124,8 @@ object V36OnlinePresenceRuntime {
             ?: return done(Result.failure(IllegalStateException("진행 중인 온라인 경기 없음")))
         request(context, "forfeit", JSONObject().put("matchId", id)) { result ->
             result.onFailure { done(Result.failure(it)); return@request }
-            request(context, "heartbeat", JSONObject().put("matchId", id)) { heartbeat ->
-                val mapped = heartbeat.mapCatching(::parse)
+            request(context, "match-state", JSONObject().put("matchId", id)) { state ->
+                val mapped = state.mapCatching(::parse)
                 mapped.onSuccess(::accept)
                 done(mapped)
             }
@@ -120,9 +133,17 @@ object V36OnlinePresenceRuntime {
     }
 
     private fun heartbeat(context: Context, matchId: String) {
-        if (!requestRunning.compareAndSet(false, true)) return
+        if (!heartbeatRunning.compareAndSet(false, true)) return
         request(context, "heartbeat", JSONObject().put("matchId", matchId)) { result ->
-            requestRunning.set(false)
+            heartbeatRunning.set(false)
+            result.mapCatching(::parse).onSuccess(::accept)
+        }
+    }
+
+    private fun syncState(context: Context, matchId: String) {
+        if (!syncRunning.compareAndSet(false, true)) return
+        request(context, "match-state", JSONObject().put("matchId", matchId)) { result ->
+            syncRunning.set(false)
             result.mapCatching(::parse).onSuccess(::accept)
         }
     }
