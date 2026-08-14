@@ -4,45 +4,97 @@ import math
 import sys
 from pathlib import Path
 
+MIN_EXPECTED_SHOTS = 20
+MIN_METRIC_SAMPLES = 20
+METRICS = (
+    ('ball', 'ball_speed_mps', 'ball_tol_mps', 0.08),
+    ('launch', 'launch_deg', 'launch_tol_deg', 0.35),
+    ('face', 'face_deg', 'face_tol_deg', 0.55),
+    ('path', 'path_deg', 'path_tol_deg', 0.65),
+)
 
-def number(row, key, default=None):
+
+def number(row, key, default=None, *, label='value'):
     value = (row.get(key) or '').strip()
     if value == '':
         return default
-    return float(value)
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise SystemExit(f'accuracy gate: invalid {label} {key}={value!r}') from exc
+    if not math.isfinite(parsed):
+        raise SystemExit(f'accuracy gate: non-finite {label} {key}={value!r}')
+    return parsed
 
 
 def load(path):
+    rows = {}
     with Path(path).open(encoding='utf-8-sig', newline='') as f:
-        return {row['id'].strip(): row for row in csv.DictReader(f) if row.get('id', '').strip()}
+        reader = csv.DictReader(f)
+        if not reader.fieldnames or 'id' not in reader.fieldnames:
+            raise SystemExit(f'accuracy gate: {path} missing id column')
+        for line_no, row in enumerate(reader, start=2):
+            shot_id = (row.get('id') or '').strip()
+            if not shot_id:
+                continue
+            if shot_id in rows:
+                raise SystemExit(f'accuracy gate: duplicate id {shot_id!r} in {path} line {line_no}')
+            rows[shot_id] = row
+    return rows
+
+
+def validate_expected(expected):
+    if len(expected) < MIN_EXPECTED_SHOTS:
+        raise SystemExit(
+            f'accuracy gate: expected fixture needs at least {MIN_EXPECTED_SHOTS} unique shots; got {len(expected)}'
+        )
+
+    coverage = {metric: 0 for metric, *_ in METRICS}
+    for shot_id, row in expected.items():
+        for metric, key, tolerance_key, default_tolerance in METRICS:
+            expected_value = number(row, key, label=f'expected[{shot_id}]')
+            if expected_value is None:
+                continue
+            tolerance = number(
+                row,
+                tolerance_key,
+                default_tolerance,
+                label=f'tolerance[{shot_id}]',
+            )
+            if tolerance is None or tolerance <= 0.0:
+                raise SystemExit(
+                    f'accuracy gate: tolerance must be > 0 for {shot_id} {metric}; got {tolerance}'
+                )
+            coverage[metric] += 1
+
+    missing = [f'{metric}={count}' for metric, count in coverage.items() if count < MIN_METRIC_SAMPLES]
+    if missing:
+        raise SystemExit(
+            'accuracy gate: insufficient reference coverage; need '
+            f'{MIN_METRIC_SAMPLES} finite samples per metric, got ' + ', '.join(missing)
+        )
 
 
 def main(expected_path, measured_path):
     expected = load(expected_path)
     measured = load(measured_path)
-    if not expected:
-        raise SystemExit('accuracy gate: expected fixture is empty')
+    validate_expected(expected)
 
     failed = []
-    totals = {'ball': [], 'launch': [], 'face': [], 'path': []}
+    totals = {metric: [] for metric, *_ in METRICS}
     for shot_id, e in expected.items():
         m = measured.get(shot_id)
         if m is None:
             failed.append((shot_id, 'missing measurement'))
             continue
 
-        checks = [
-            ('ball', 'ball_speed_mps', number(e, 'ball_tol_mps', 0.08)),
-            ('launch', 'launch_deg', number(e, 'launch_tol_deg', 0.35)),
-            ('face', 'face_deg', number(e, 'face_tol_deg', 0.55)),
-            ('path', 'path_deg', number(e, 'path_tol_deg', 0.65)),
-        ]
         reasons = []
-        for metric, key, tolerance in checks:
-            ev = number(e, key)
+        for metric, key, tolerance_key, default_tolerance in METRICS:
+            ev = number(e, key, label=f'expected[{shot_id}]')
             if ev is None:
                 continue
-            mv = number(m, key)
+            tolerance = number(e, tolerance_key, default_tolerance, label=f'tolerance[{shot_id}]')
+            mv = number(m, key, label=f'measured[{shot_id}]')
             if mv is None:
                 reasons.append(f'{metric}=missing')
                 continue
@@ -53,10 +105,14 @@ def main(expected_path, measured_path):
         if reasons:
             failed.append((shot_id, ', '.join(reasons)))
 
+    measured_only = sorted(set(measured) - set(expected))
+    if measured_only:
+        print(f'accuracy gate: ignoring {len(measured_only)} measured-only rows')
+
     print(f'accuracy gate: {len(expected)-len(failed)}/{len(expected)} passed')
     for metric, errors in totals.items():
         if errors:
-            print(f'  {metric} MAE={sum(errors)/len(errors):.4f}')
+            print(f'  {metric} MAE={sum(errors)/len(errors):.4f} n={len(errors)}')
     for shot_id, reason in failed:
         print(f'FAIL {shot_id}: {reason}')
     if failed:

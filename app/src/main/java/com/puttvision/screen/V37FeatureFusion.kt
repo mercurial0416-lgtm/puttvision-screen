@@ -24,16 +24,31 @@ private data class V37FusedValue(val value: Double?, val contributors: Int, val 
 
 object V37FeatureFusion {
     private const val maxAgeMs = 1_300L
+    private val emptyDiagnostics = V37FusionDiagnostics(0, 0, 0, null, .0, .0)
 
-    @Volatile var diagnostics = V37FusionDiagnostics(0, 0, 0, null, .0, .0)
+    @Volatile var diagnostics = emptyDiagnostics
         private set
+
+    internal fun resetDiagnostics() {
+        diagnostics = emptyDiagnostics
+    }
 
     fun fuse(measurementsRaw: List<V15CameraMeasurement>, nowMs: Long = System.currentTimeMillis()): ShotMetrics? {
         val measurements = measurementsRaw
             .filter { it.cameraId.isNotBlank() && nowMs - it.receivedAtMs in -250L..maxAgeMs }
-            .distinctBy { it.cameraId }
-        if (measurements.isEmpty()) return null
-        val primary = measurements.firstOrNull { it.view == V15CameraView.PRIMARY } ?: measurements.maxByOrNull { it.confidence } ?: return null
+            .groupBy { it.cameraId }
+            .values
+            .mapNotNull { sameCamera -> sameCamera.maxByOrNull { it.receivedAtMs } }
+        if (measurements.isEmpty()) {
+            resetDiagnostics()
+            return null
+        }
+        val primary = measurements.firstOrNull { it.view == V15CameraView.PRIMARY }
+            ?: measurements.maxByOrNull { it.confidence }
+            ?: run {
+                resetDiagnostics()
+                return null
+            }
 
         var acceptedFeatures = 0
         var rejectedOutliers = 0
@@ -134,7 +149,6 @@ object V37FeatureFusion {
         val sumWeight = accepted.sumOf { it.weight }
         if (sumWeight <= .0) return V37FusedValue(reference, accepted.size, rejected)
         val value = if (feature in setOf(V37Feature.START_LINE, V37Feature.FACE, V37Feature.PATH)) {
-            // Putting angles are normally close to zero; unwrap each around the robust reference before averaging.
             normalizeAngle(reference + accepted.sumOf { shortestAngleDelta(it.value, reference) * it.weight } / sumWeight)
         } else accepted.sumOf { it.value * it.weight } / sumWeight
         return V37FusedValue(value, accepted.size, rejected)
@@ -227,11 +241,16 @@ object V37FeatureFusionRuntime {
 
     fun submit(measurement: V15CameraMeasurement) {
         if (measurement.cameraId.isBlank() || measurement.view == V15CameraView.PRIMARY) return
-        latest[measurement.cameraId] = measurement
+        latest.compute(measurement.cameraId) { _, current ->
+            if (current == null || measurement.receivedAtMs >= current.receivedAtMs) measurement else current
+        }
         cleanup()
     }
 
-    fun clear() = latest.clear()
+    fun clear() {
+        latest.clear()
+        V37FeatureFusion.resetDiagnostics()
+    }
 
     fun fusePrimary(primary: ShotMetrics): ShotMetrics {
         cleanup()

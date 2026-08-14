@@ -10,6 +10,7 @@ import java.util.Locale
 
 /** Exports the exact two CSV files consumed by ci/v20_accuracy_gate.py. */
 object V40AccuracyCiFixtures {
+    internal const val MIN_CI_SHOTS = 20
     private const val ballToleranceMps = .08
     private const val launchToleranceDeg = .35
     private const val faceToleranceDeg = .55
@@ -41,9 +42,29 @@ object V40AccuracyCiFixtures {
         }
     }
 
+    internal fun readinessIssue(samples: List<ValidationSample>): String? {
+        if (samples.size < MIN_CI_SHOTS) {
+            return "CI 기준 데이터는 최소 ${MIN_CI_SHOTS}샷이 필요합니다 · 현재 ${samples.size}샷"
+        }
+        val uniqueIds = samples.map { it.id.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (uniqueIds.size != samples.size) return "샷 ID가 비어 있거나 중복되었습니다"
+
+        fun coverage(label: String, ref: (ValidationSample) -> Double?, measured: (ValidationSample) -> Double?): String? {
+            val count = samples.count { s ->
+                ref(s)?.isFinite() == true && measured(s)?.isFinite() == true
+            }
+            return if (count < MIN_CI_SHOTS) "$label 기준/측정 매칭이 ${MIN_CI_SHOTS}개 필요합니다 · 현재 ${count}개" else null
+        }
+        return coverage("BALL", { it.refBall }, { it.measuredBall })
+            ?: coverage("START", { it.refLaunch }, { it.measuredLaunch })
+            ?: coverage("FACE", { it.refFace }, { it.measuredFace })
+            ?: coverage("PATH", { it.refPath }, { it.measuredPath })
+    }
+
     fun export(activity: Activity, lab: AccuracyValidationLab): Result<Int> = runCatching {
         val matched = lab.matched()
         require(matched.isNotEmpty()) { "기준장비 값과 매칭된 샷이 없습니다" }
+        readinessIssue(matched)?.let { error(it) }
 
         val dir = File(activity.cacheDir, "exports/v20-ci").apply { mkdirs() }
         val reference = File(dir, "v20_reference.csv")
@@ -57,12 +78,14 @@ object V40AccuracyCiFixtures {
 
     fun show(activity: Activity) {
         val lab = AccuracyValidationLab(activity)
-        val matched = lab.matched().size
+        val samples = lab.matched()
+        val matched = samples.size
         val total = lab.all().size
+        val issue = readinessIssue(samples)
         val readiness = when {
-            matched >= 30 -> "충분한 샷 수 · 배포 회귀 기준으로 사용 권장"
-            matched >= 20 -> "LAB P95 READY · CI 기준값으로 사용 가능"
-            matched > 0 -> "내보내기 가능 · 20샷 이상 권장"
+            issue == null && matched >= 30 -> "충분한 샷 수 · 배포 회귀 기준으로 사용 권장"
+            issue == null -> "CI READY · BALL/START/FACE/PATH 각 ${MIN_CI_SHOTS}개 이상"
+            matched > 0 -> issue
             else -> "먼저 ACCURACY LAB에서 기준장비 값을 매칭하세요"
         }
         AlertDialog.Builder(activity)
@@ -70,7 +93,7 @@ object V40AccuracyCiFixtures {
             .setMessage(
                 "측정 $total 샷 · 기준값 매칭 $matched 샷\n\n" +
                     "$readiness\n\n" +
-                    "내보내면 CI가 그대로 읽는 v20_reference.csv + v20_measured.csv 두 파일이 생성됩니다. " +
+                    "CI용 공식 2파일은 최소 ${MIN_CI_SHOTS}개의 완전한 BALL / START / FACE / PATH 페어가 있어야 생성됩니다. " +
                     "기본 허용오차: BALL ±0.08 m/s · START ±0.35° · FACE ±0.55° · PATH ±0.65°."
             )
             .setPositiveButton("CI 2파일 내보내기") { _, _ ->

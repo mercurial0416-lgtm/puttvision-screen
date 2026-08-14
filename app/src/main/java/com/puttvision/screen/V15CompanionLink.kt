@@ -127,12 +127,16 @@ class V15CompanionServer(
     private fun publish() = onStatus?.invoke(status())
 
     override fun close() {
-        if (!running.compareAndSet(true, false)) return
+        if (!running.compareAndSet(true, false)) {
+            V37FeatureFusionRuntime.clear()
+            return
+        }
         clients.forEach { runCatching { it.close() } }
         clients.clear()
         runCatching { server?.close() }
         server = null
         io.shutdownNow()
+        V37FeatureFusionRuntime.clear()
         publish()
     }
 

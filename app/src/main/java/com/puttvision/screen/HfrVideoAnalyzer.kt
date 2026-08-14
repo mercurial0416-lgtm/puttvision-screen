@@ -19,7 +19,8 @@ data class HfrAnalysisResult(
     val metrics: ShotMetrics,
     val fps: Int,
     val impactFrame: Int,
-    val analyzedFrames: Int
+    val analyzedFrames: Int,
+    val featureTrack: HfrFeatureTrack? = null
 )
 
 class HfrVideoAnalyzer {
@@ -69,6 +70,7 @@ class HfrVideoAnalyzer {
         requestedFps: Int,
         onProgress: (String) -> Unit = {}
     ): HfrAnalysisResult? {
+        V41HfrFeatureTrackRuntime.clear()
         if (!file.exists() || file.length() == 0L) return null
         if (android.os.Build.VERSION.SDK_INT < 28) return null
 
@@ -168,12 +170,15 @@ class HfrVideoAnalyzer {
             }
 
             val calculated = calculate(samples, startBall, fps) ?: return null
+            val featureTrack = buildFeatureTrack(samples, calculated.second, fps)
+            V41HfrFeatureTrackRuntime.publish(featureTrack)
 
             return HfrAnalysisResult(
                 metrics = calculated.first,
                 fps = fps,
                 impactFrame = calculated.second,
-                analyzedFrames = samples.size
+                analyzedFrames = samples.size,
+                featureTrack = featureTrack
             )
         } finally {
             clearFrameCache()
@@ -205,7 +210,33 @@ class HfrVideoAnalyzer {
         val o = origin ?: return null
         if (impact < 0) return null
         val calculated = calculate(samples, o, fps) ?: return null
-        return HfrAnalysisResult(calculated.first, fps, calculated.second, samples.size)
+        val featureTrack = buildFeatureTrack(samples, calculated.second, fps)
+        return HfrAnalysisResult(calculated.first, fps, calculated.second, samples.size, featureTrack)
+    }
+
+    private fun buildFeatureTrack(samples: List<Sample>, impactFrame: Int, fps: Int): HfrFeatureTrack {
+        val radiusFrames = max(8, (fps * .075).toInt())
+        val compact = samples
+            .asSequence()
+            .filter { abs(it.frame - impactFrame) <= radiusFrames }
+            .sortedBy { abs(it.frame - impactFrame) }
+            .take(32)
+            .sortedBy { it.frame }
+            .map { s ->
+                HfrFeatureFrame(
+                    frame = s.frame,
+                    timeFromImpactMs = (s.frame - impactFrame) * 1000.0 / fps,
+                    ballXcm = s.ballCm?.x?.toDouble(),
+                    ballYcm = s.ballCm?.y?.toDouble(),
+                    heelXcm = s.heelCm?.x?.toDouble(),
+                    heelYcm = s.heelCm?.y?.toDouble(),
+                    toeXcm = s.toeCm?.x?.toDouble(),
+                    toeYcm = s.toeCm?.y?.toDouble(),
+                    markerAngleDeg = s.markerAngleDeg
+                )
+            }
+            .toList()
+        return HfrFeatureTrack(fps = fps, impactFrame = impactFrame, frames = compact)
     }
 
     private fun clearFrameCache() {
