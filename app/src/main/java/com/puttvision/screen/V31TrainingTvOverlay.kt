@@ -47,19 +47,28 @@ class V31TrainingTvOverlay(context: Context) : View(context) {
 
         p.textSize = 17f * d
         p.color = Color.WHITE
-        canvas.drawText(s.blockTitle, left + 16f * d, top + 50f * d, p)
+        canvas.drawText(if (s.finished) s.summary else s.blockTitle, left + 16f * d, top + 50f * d, p)
 
         p.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         p.textSize = 11f * d
         p.color = Color.rgb(205, 214, 220)
-        val blockNo = if (s.blockCount > 0) "BLOCK ${s.blockIndex + 1}/${s.blockCount}" else "BLOCK --"
-        val shotNo = if (s.shotsInBlock > 0) "SHOT ${s.shotInBlock}/${s.shotsInBlock}" else "SHOT --"
+        val blockNo = when {
+            s.finished && s.blockCount > 0 -> "BLOCK ${s.blockCount}/${s.blockCount}"
+            s.blockCount > 0 -> "BLOCK ${(s.blockIndex + 1).coerceAtMost(s.blockCount)}/${s.blockCount}"
+            else -> "BLOCK --"
+        }
+        val shotNo = when {
+            s.finished && s.shotsInBlock > 0 -> "SHOT ${s.shotsInBlock}/${s.shotsInBlock}"
+            s.shotsInBlock > 0 -> "SHOT ${s.shotInBlock.coerceIn(0, s.shotsInBlock)}/${s.shotsInBlock}"
+            else -> "SHOT --"
+        }
         val streak = "STREAK ${s.streak}"
         canvas.drawText("$blockNo   $shotNo   $streak", left + 16f * d, top + 70f * d, p)
 
         p.textSize = 10f * d
         p.color = Color.rgb(255, 200, 80)
-        canvas.drawText("TARGET ${"%.1f".format(s.targetDistanceM)}m   SUCCESS ${s.totalSuccesses}/${s.totalShots}", left + 16f * d, top + 88f * d, p)
+        val targetText = if (s.finished) "COMPLETE" else "TARGET ${"%.1f".format(s.targetDistanceM)}m"
+        canvas.drawText("$targetText   SUCCESS ${s.totalSuccesses}/${s.totalShots}", left + 16f * d, top + 88f * d, p)
 
         val barLeft = left + 16f * d
         val barTop = top + 98f * d
