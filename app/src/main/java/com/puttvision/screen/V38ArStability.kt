@@ -13,6 +13,7 @@ data class V38CornerDecision(
 
 /**
  * Keeps AR locked through normal 1-2px calibration jitter, but refuses to smear a real camera move.
+ * Detector corner ordering is canonicalized against the current lock before motion is evaluated.
  * A large move must repeat for three frames before the new geometry is adopted.
  */
 class V38CornerStabilizer {
@@ -33,16 +34,17 @@ class V38CornerStabilizer {
             return V38CornerDecision(locked!!, stable = false, reacquired = false, stability = .45)
         }
 
-        val maxDelta = current.indices.maxOf { distance(current[it], input[it]) }
-        val meanDelta = current.indices.map { distance(current[it], input[it]) }.average()
+        val aligned = alignTo(current, input)
+        val maxDelta = current.indices.maxOf { distance(current[it], aligned[it]) }
+        val meanDelta = current.indices.map { distance(current[it], aligned[it]) }.average()
         if (maxDelta <= movePx) {
             candidate = null
             candidateFrames = 0
             val alpha = if (maxDelta <= jitterPx) .18f else .08f
             locked = current.indices.map { i ->
                 V38Point(
-                    current[i].x + (input[i].x - current[i].x) * alpha,
-                    current[i].y + (input[i].y - current[i].y) * alpha
+                    current[i].x + (aligned[i].x - current[i].x) * alpha,
+                    current[i].y + (aligned[i].y - current[i].y) * alpha
                 )
             }
             stableFrames = (stableFrames + 1).coerceAtMost(30)
@@ -52,17 +54,20 @@ class V38CornerStabilizer {
         }
 
         val priorCandidate = candidate
-        val candidateConsistent = priorCandidate != null && priorCandidate.indices.maxOf { distance(priorCandidate[it], input[it]) } <= jitterPx * 2.0
+        val candidateInput = if (priorCandidate != null) alignTo(priorCandidate, input) else aligned
+        val candidateConsistent = priorCandidate != null && priorCandidate.indices.maxOf {
+            distance(priorCandidate[it], candidateInput[it])
+        } <= jitterPx * 2.0
         if (candidateConsistent) {
             candidate = priorCandidate!!.indices.map { i ->
                 V38Point(
-                    priorCandidate[i].x + (input[i].x - priorCandidate[i].x) * .35f,
-                    priorCandidate[i].y + (input[i].y - priorCandidate[i].y) * .35f
+                    priorCandidate[i].x + (candidateInput[i].x - priorCandidate[i].x) * .35f,
+                    priorCandidate[i].y + (candidateInput[i].y - priorCandidate[i].y) * .35f
                 )
             }
             candidateFrames++
         } else {
-            candidate = input.map { it.copy() }
+            candidate = aligned.map { it.copy() }
             candidateFrames = 1
         }
         stableFrames = 0
@@ -82,6 +87,39 @@ class V38CornerStabilizer {
         candidate = null
         candidateFrames = 0
         stableFrames = 0
+    }
+
+    private fun alignTo(reference: List<V38Point>, input: List<V38Point>): List<V38Point> {
+        if (reference.size != 4 || input.size != 4) return input
+        var best = input
+        var bestCost = Double.POSITIVE_INFINITY
+        val used = BooleanArray(4)
+        val order = IntArray(4)
+
+        fun visit(depth: Int) {
+            if (depth == 4) {
+                var cost = 0.0
+                for (i in 0 until 4) {
+                    val d = distance(reference[i], input[order[i]])
+                    cost += d * d
+                }
+                if (cost < bestCost) {
+                    bestCost = cost
+                    best = order.map { input[it] }
+                }
+                return
+            }
+            for (i in 0 until 4) {
+                if (used[i]) continue
+                used[i] = true
+                order[depth] = i
+                visit(depth + 1)
+                used[i] = false
+            }
+        }
+
+        visit(0)
+        return best
     }
 
     private fun distance(a: V38Point, b: V38Point): Double = hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble())
