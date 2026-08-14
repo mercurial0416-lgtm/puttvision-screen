@@ -1,0 +1,44 @@
+name: Verify Supabase public updater
+
+on:
+  push:
+    branches: [ agent/supabase-update-bootstrap ]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish latest consumer APK to Supabase Storage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
+          MANIFEST_URL: https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/update.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")
+          TAG=$(jq -r '.tag_name' <<<"$RELEASE")
+          VERSION_CODE=${TAG#pv-}
+          VERSION_NAME=$(jq -r '.name' <<<"$RELEASE" | sed -E 's/^PuttVision[[:space:]]+//; s/^v//')
+          ASSET_URL=$(jq -r '.assets[] | select(.name == "puttvision-consumer.apk") | .url' <<<"$RELEASE")
+          DIGEST=$(jq -r '.assets[] | select(.name == "puttvision-consumer.apk") | .digest' <<<"$RELEASE")
+          SHA=${DIGEST#sha256:}
+          test -n "$ASSET_URL"
+          [[ "$SHA" =~ ^[0-9a-f]{64}$ ]]
+
+          RESPONSE=$(curl --fail-with-body --silent --show-error \
+            -X POST "$PUBLISH_URL" \
+            -H "content-type: application/json" \
+            -H "x-github-token: $GH_TOKEN" \
+            --data-binary "$(jq -nc --argjson vc "$VERSION_CODE" --arg vn "$VERSION_NAME" --arg asset "$ASSET_URL" --arg sha "$SHA" '{versionCode:$vc,versionName:$vn,assetApiUrl:$asset,sha256:$sha}')")
+          echo "$RESPONSE" | jq -e '.ok == true' >/dev/null
+          echo "$RESPONSE" | jq '{ok,versionCode,versionName,manifestUrl,apkUrl}'
+
+          LIVE=$(curl --fail-with-body --silent --show-error -H 'Cache-Control: no-cache' "$MANIFEST_URL")
+          echo "$LIVE" | jq -e --argjson vc "$VERSION_CODE" --arg sha "$SHA" '.versionCode == $vc and .sha256 == $sha' >/dev/null
+          echo "$LIVE" | jq .
