@@ -1,6 +1,8 @@
 package com.puttvision.screen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,6 +31,9 @@ class V40AccuracyCiFixturesTest {
         refFace = refFace,
         refPath = refPath
     )
+
+    private fun readySamples(): List<ValidationSample> =
+        (0 until V40AccuracyCiFixtures.MIN_CI_SHOTS).map { i -> sample(id = "shot-${"%03d".format(i)}") }
 
     @Test fun referenceCsvMatchesProductionGateSchemaAndTolerances() {
         val csv = V40AccuracyCiFixtures.referenceCsv(listOf(sample()))
@@ -66,5 +71,24 @@ class V40AccuracyCiFixturesTest {
         val csv = V40AccuracyCiFixtures.measuredCsv(listOf(sample(id = "shot,\"A\"")))
         val row = csv.trim().lines()[1]
         assertTrue(row.startsWith("\"shot,\"\"A\"\"\",1.480000,0.300000"))
+    }
+
+    @Test fun officialFixtureRequiresAtLeastTwentyCompleteShots() {
+        assertNotNull(V40AccuracyCiFixtures.readinessIssue(readySamples().dropLast(1)))
+        assertNull(V40AccuracyCiFixtures.readinessIssue(readySamples()))
+    }
+
+    @Test fun missingFaceCoverageBlocksOfficialFixture() {
+        val samples = readySamples().mapIndexed { index, value ->
+            if (index == 0) sample(id = value.id, refFace = null) else value
+        }
+        val issue = V40AccuracyCiFixtures.readinessIssue(samples)
+        assertTrue(issue?.contains("FACE") == true)
+    }
+
+    @Test fun duplicateShotIdsBlockOfficialFixture() {
+        val samples = readySamples().toMutableList()
+        samples[samples.lastIndex] = sample(id = samples.first().id)
+        assertTrue(V40AccuracyCiFixtures.readinessIssue(samples)?.contains("ID") == true)
     }
 }
