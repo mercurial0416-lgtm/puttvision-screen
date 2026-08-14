@@ -88,7 +88,10 @@ class GameEngine {
         val fused = V21CaptureConsistencyRuntime.adjust(
             V37FeatureFusionRuntime.fusePrimary(cleanPrimary)
         )
-        val finalGuard = V47ShotGuard.normalize(fused)
+        val rawFinalGuard = V47ShotGuard.normalize(fused)
+        val finalGuard = rawFinalGuard.copy(
+            sanitizedFields = (primaryGuard.sanitizedFields + rawFinalGuard.sanitizedFields).distinct()
+        )
         V47SoloIntegrityRuntime.recordShot(finalGuard)
         val effectiveMetrics = finalGuard.metrics
         if (!finalGuard.accepted || effectiveMetrics == null) {
@@ -186,7 +189,7 @@ class GameEngine {
                 performanceCompare = V20PerformanceRuntime.report
                 V31TrainingSessionRuntime.onRecord(record)
                 onRecordFinalized?.invoke(record)
-                gameModes.onResult(record.result ?: r)
+                record.result?.let(gameModes::onResult)
                 V15AutoFlowRuntime.result()
             }
         }
