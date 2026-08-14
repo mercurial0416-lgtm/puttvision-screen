@@ -1,16 +1,16 @@
-name: V34+ service and release verify
+name: Solo accuracy and release verify
 
 on:
   pull_request:
     branches: [ main ]
   push:
-    branches: [ 'agent/v34-*', 'agent/v35-*' ]
+    branches: [ 'agent/v34-*', 'agent/v35-*', 'agent/solo-*' ]
 
 permissions:
   contents: read
 
 concurrency:
-  group: service-release-verify-${{ github.ref }}
+  group: solo-release-verify-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -50,6 +50,9 @@ jobs:
           grep -q 'Real-device measurement regression gate' .github/workflows/release-apk.yml
           grep -q 'python3 ci/v20_accuracy_gate.py' .github/workflows/release-apk.yml
           grep -q 'Accuracy fixture set is incomplete' .github/workflows/release-apk.yml
+
+      - name: Accuracy gate self-tests
+        run: python3 -m unittest ci.test_v20_accuracy_gate
 
       - uses: actions/setup-java@v5
         with:
