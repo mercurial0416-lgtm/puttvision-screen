@@ -154,7 +154,11 @@ class V43ReliabilityTest {
         assertEquals(7L, decoded.sequence)
         assertEquals(V15CameraView.TOP, decoded.view)
         assertEquals(32, decoded.track.frames.size)
-        assertEquals(packet.track.frames.first().ballXcm, decoded.track.frames.first().ballXcm, 1e-9)
+        assertEquals(
+            requireNotNull(packet.track.frames.first().ballXcm),
+            requireNotNull(decoded.track.frames.first().ballXcm),
+            1e-9
+        )
     }
 
     @Test fun remoteFeatureRuntimeDropsStaleTracksFromFreshView() {
