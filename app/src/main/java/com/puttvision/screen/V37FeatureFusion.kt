@@ -14,41 +14,42 @@ data class V37FusionDiagnostics(
     val rejectedOutliers: Int,
     val freshestAgeMs: Long?,
     val confidenceBefore: Double,
-    val confidenceAfter: Double
+    val confidenceAfter: Double,
+    val activeViews: String = "-",
+    val droppedPackets: Int = 0,
+    val diversityScore: Int = 0
 ) {
-    val label: String get() = if (companionCount == 0) "단일폰" else "${companionCount + 1}폰 · feature ${acceptedFeatures} · outlier ${rejectedOutliers}"
+    val label: String get() = if (companionCount == 0) {
+        "단일폰${if (droppedPackets > 0) " · drop $droppedPackets" else ""}"
+    } else {
+        "${companionCount + 1}폰 · $activeViews · feature $acceptedFeatures · outlier $rejectedOutliers · drop $droppedPackets"
+    }
 }
 
 private data class V37Candidate(val measurement: V15CameraMeasurement, val value: Double, val weight: Double)
 private data class V37FusedValue(val value: Double?, val contributors: Int, val rejected: Int)
 
 object V37FeatureFusion {
-    private const val maxAgeMs = 1_300L
+    private const val maxAgeMs = V49FusionPolicy.MAX_AGE_MS
     private val emptyDiagnostics = V37FusionDiagnostics(0, 0, 0, null, .0, .0)
 
     @Volatile var diagnostics = emptyDiagnostics
         private set
 
-    internal fun resetDiagnostics() {
-        diagnostics = emptyDiagnostics
-    }
+    internal fun resetDiagnostics() { diagnostics = emptyDiagnostics }
 
     fun fuse(measurementsRaw: List<V15CameraMeasurement>, nowMs: Long = System.currentTimeMillis()): ShotMetrics? {
-        val measurements = measurementsRaw
-            .filter { it.cameraId.isNotBlank() && nowMs - it.receivedAtMs in -250L..maxAgeMs }
-            .groupBy { it.cameraId }
-            .values
-            .mapNotNull { sameCamera -> sameCamera.maxByOrNull { it.receivedAtMs } }
+        val selection = V49FusionPolicy.select(measurementsRaw, nowMs)
+        val measurements = selection.measurements
         if (measurements.isEmpty()) {
-            resetDiagnostics()
+            diagnostics = emptyDiagnostics.copy(
+                droppedPackets = selection.droppedInvalid + selection.droppedStale + selection.droppedSameView
+            )
             return null
         }
         val primary = measurements.firstOrNull { it.view == V15CameraView.PRIMARY }
             ?: measurements.maxByOrNull { it.confidence }
-            ?: run {
-                resetDiagnostics()
-                return null
-            }
+            ?: run { resetDiagnostics(); return null }
 
         var acceptedFeatures = 0
         var rejectedOutliers = 0
@@ -79,24 +80,36 @@ object V37FeatureFusion {
 
         val faceToPath = if (face != null && path != null) normalizeAngle(face - path) else primary.metrics.faceToPathDeg
         val smash = if (head != null && head > .03) (ball / head).coerceIn(.05, 3.0) else primary.metrics.smash
-        val agreeingCompanions = measurements.count { it.view != V15CameraView.PRIMARY && featureAgreement(primary, it) >= .55 }
+        val agreeingViews = measurements
+            .filter { it.view != V15CameraView.PRIMARY && featureAgreement(primary, it) >= .55 }
+            .mapTo(linkedSetOf()) { it.view }
         val primaryConfidence = (primary.metrics.confidence ?: primary.confidence).coerceIn(.15, .98)
-        val supportBonus = min(.10, agreeingCompanions * .035 + acceptedFeatures * .004)
+        val supportBonus = V49FusionPolicy.confidenceSupportBonus(agreeingViews, acceptedFeatures)
         val penalty = min(.10, rejectedOutliers * .012)
-        val confidence = (primaryConfidence + supportBonus - penalty).coerceIn(.20, .99)
+        val confidenceCeiling = V49FusionPolicy.confidenceCeiling(selection.companionViews)
+        val confidence = (primaryConfidence + supportBonus - penalty).coerceIn(.20, confidenceCeiling)
         val bestRoll = measurements
             .filter { it.metrics.roll != null }
             .maxByOrNull { baseWeight(it, V37Feature.BALL_SPEED, nowMs) }
             ?.metrics?.roll ?: primary.metrics.roll
 
         val companions = measurements.count { it.view != V15CameraView.PRIMARY }
+        val diversityScore = when (selection.companionViews.size) {
+            0 -> 0
+            1 -> 45
+            2 -> 78
+            else -> 100
+        }
         diagnostics = V37FusionDiagnostics(
             companionCount = companions,
             acceptedFeatures = acceptedFeatures,
             rejectedOutliers = rejectedOutliers,
             freshestAgeMs = measurements.filter { it.view != V15CameraView.PRIMARY }.minOfOrNull { max(0L, nowMs - it.receivedAtMs) },
             confidenceBefore = primaryConfidence,
-            confidenceAfter = confidence
+            confidenceAfter = confidence,
+            activeViews = selection.companionViews.joinToString("+") { it.name },
+            droppedPackets = selection.droppedInvalid + selection.droppedStale + selection.droppedSameView,
+            diversityScore = diversityScore
         )
 
         return primary.metrics.copy(
@@ -129,7 +142,7 @@ object V37FeatureFusion {
         val raw = measurements.mapNotNull { m ->
             val value = selector(m)?.takeIf { it.isFinite() } ?: return@mapNotNull null
             val weight = baseWeight(m, feature, nowMs)
-            if (weight <= .0) null else V37Candidate(m, value, weight)
+            if (!weight.isFinite() || weight <= .0) null else V37Candidate(m, value, weight)
         }
         if (raw.isEmpty()) return V37FusedValue(null, 0, 0)
 
@@ -155,6 +168,7 @@ object V37FeatureFusion {
     }
 
     private fun baseWeight(m: V15CameraMeasurement, feature: V37Feature, nowMs: Long): Double {
+        if (!m.confidence.isFinite()) return .0
         val age = max(0L, nowMs - m.receivedAtMs)
         val freshness = when {
             age <= 220L -> 1.0
@@ -240,7 +254,7 @@ object V37FeatureFusionRuntime {
     private val latest = ConcurrentHashMap<String, V15CameraMeasurement>()
 
     fun submit(measurement: V15CameraMeasurement) {
-        if (measurement.cameraId.isBlank() || measurement.view == V15CameraView.PRIMARY) return
+        if (measurement.cameraId.isBlank() || measurement.view == V15CameraView.PRIMARY || !measurement.confidence.isFinite()) return
         latest.compute(measurement.cameraId) { _, current ->
             if (current == null || measurement.receivedAtMs >= current.receivedAtMs) measurement else current
         }
@@ -257,12 +271,12 @@ object V37FeatureFusionRuntime {
         val now = System.currentTimeMillis()
         val measurements = ArrayList<V15CameraMeasurement>()
         measurements += V15CameraMeasurement("primary", V15CameraView.PRIMARY, primary, primary.confidence ?: .60, now)
-        measurements += latest.values.filter { now - it.receivedAtMs in -250L..1_300L }
+        measurements += latest.values
         return V37FeatureFusion.fuse(measurements, now) ?: primary
     }
 
     private fun cleanup() {
         val cutoff = System.currentTimeMillis() - 4_000L
-        latest.entries.removeIf { it.value.receivedAtMs < cutoff }
+        latest.entries.removeIf { it.value.receivedAtMs < cutoff || !it.value.confidence.isFinite() }
     }
 }
