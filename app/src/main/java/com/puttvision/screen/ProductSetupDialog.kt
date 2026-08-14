@@ -98,8 +98,12 @@ fun showProductSetupDialog(
         coach?.let { "${it.primary.headline} · 개선 ${it.improvementScore}" } ?: "8구부터 개인 패턴 학습"
     ) { showV16PersonalCoachDialog(context) })
 
-    addAction(action("ONLINE LEAGUE", "${V31OnlineRuntime.statusLabel(context)} · 서버 검증") {
-        showV34OnlineHub(context)
+    val liveOnline = V31OnlineRuntime.activeMatchId != null || V36OnlinePresenceRuntime.snapshot()?.finished() == false
+    addAction(action(
+        "ONLINE LEAGUE",
+        if (liveOnline) "LIVE MATCH · 상대 진행/재접속/기권" else "${V31OnlineRuntime.statusLabel(context)} · 서버 검증"
+    ) {
+        if (liveOnline) showV36OnlineMatchDialog(context) else showV34OnlineHub(context)
     })
 
     addAction(action("GREEN READ TRAINING", "${V20GreenReadTrainingRuntime.mode.label} · 샷 후 정답 공개") {

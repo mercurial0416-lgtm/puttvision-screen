@@ -28,6 +28,7 @@ object GreenReadRuntime {
         }
         V31TrainingSessionRuntime.install(context)
         V33OnlineOutbox.install(context)
+        V36OnlinePresenceRuntime.install(context)
     }
 
     fun prefetch(settings: GreenSettings) {
@@ -69,8 +70,6 @@ object GreenReadRuntime {
             return
         }
         callbacks.computeIfAbsent(key) { CopyOnWriteArrayList() }.add(onReady)
-        // Re-check after registration to close the race where solving finished
-        // between the first peek and callback registration.
         peek(snapshot)?.let {
             dispatch(key, it)
             return
@@ -113,7 +112,6 @@ object GreenReadRuntime {
     fun clearRuntimeCache() {
         ready.clear()
         callbacks.clear()
-        // Running jobs are intentionally not cancelled; they can finish safely.
     }
 
     fun clearPersistentCache() {
