@@ -25,7 +25,12 @@ data class HfrFeatureTrack(
 
 data class HfrFeatureTrackSnapshot(
     val track: HfrFeatureTrack,
-    val publishedAtMs: Long
+    /** Physical shot/event time used for multi-camera pairing. Kept under the legacy field name. */
+    val publishedAtMs: Long,
+    /** When analysis actually published this compact track; used only for freshness. */
+    val storedAtMs: Long = publishedAtMs,
+    val timeSource: String = "LEGACY",
+    val timeUncertaintyMs: Long = 1_500L
 )
 
 /** Latest compact HFR geometry for diagnostics/companion transport. No bitmaps are retained. */
@@ -34,23 +39,38 @@ object V41HfrFeatureTrackRuntime {
 
     @Volatile var latest: HfrFeatureTrack? = null
         private set
+    /** Legacy name: from V50 onward this is the estimated physical impact wall-clock time. */
     @Volatile var latestPublishedAtMs: Long = 0L
+        private set
+    @Volatile var latestStoredAtMs: Long = 0L
+        private set
+    @Volatile var latestTimeSource: String = "NONE"
+        private set
+    @Volatile var latestTimeUncertaintyMs: Long = 0L
         private set
 
     fun publish(track: HfrFeatureTrack, nowMs: Long = System.currentTimeMillis()) {
+        val estimate = V50HfrCaptureClockRuntime.estimate(track, nowMs)
         latest = track.copy(frames = track.frames.take(MAX_FRAMES).toList())
-        latestPublishedAtMs = nowMs
+        latestPublishedAtMs = estimate.impactAtMs
+        latestStoredAtMs = nowMs
+        latestTimeSource = estimate.source
+        latestTimeUncertaintyMs = estimate.uncertaintyMs
     }
 
-    fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 1_500L): HfrFeatureTrackSnapshot? {
+    fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 10_000L): HfrFeatureTrackSnapshot? {
         val track = latest ?: return null
-        val published = latestPublishedAtMs
-        if (published <= 0L || nowMs - published !in 0L..maxAgeMs) return null
-        return HfrFeatureTrackSnapshot(track, published)
+        val event = latestPublishedAtMs
+        val stored = latestStoredAtMs
+        if (event <= 0L || stored <= 0L || nowMs - stored !in 0L..maxAgeMs) return null
+        return HfrFeatureTrackSnapshot(track, event, stored, latestTimeSource, latestTimeUncertaintyMs)
     }
 
     fun clear() {
         latest = null
         latestPublishedAtMs = 0L
+        latestStoredAtMs = 0L
+        latestTimeSource = "NONE"
+        latestTimeUncertaintyMs = 0L
     }
 }
