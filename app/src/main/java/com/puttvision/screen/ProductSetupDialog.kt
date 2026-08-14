@@ -171,7 +171,7 @@ fun showProductSetupDialog(
         android.widget.Toast.makeText(
             context,
             if (enabled) "음성 안내 ON" else "음성 안내 OFF",
-            Toast.LENGTH_SHORT
+            android.widget.Toast.LENGTH_SHORT
         ).show()
     })
 
