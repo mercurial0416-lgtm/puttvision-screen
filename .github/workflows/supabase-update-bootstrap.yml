@@ -31,13 +31,16 @@ jobs:
           test -n "$ASSET_URL"
           [[ "$SHA" =~ ^[0-9a-f]{64}$ ]]
 
-          RESPONSE=$(curl --fail-with-body --silent --show-error \
+          PAYLOAD=$(jq -nc --argjson vc "$VERSION_CODE" --arg vn "$VERSION_NAME" --arg asset "$ASSET_URL" --arg sha "$SHA" '{versionCode:$vc,versionName:$vn,assetApiUrl:$asset,sha256:$sha}')
+          HTTP_CODE=$(curl --silent --show-error \
             -X POST "$PUBLISH_URL" \
             -H "content-type: application/json" \
             -H "x-github-token: $GH_TOKEN" \
-            --data-binary "$(jq -nc --argjson vc "$VERSION_CODE" --arg vn "$VERSION_NAME" --arg asset "$ASSET_URL" --arg sha "$SHA" '{versionCode:$vc,versionName:$vn,assetApiUrl:$asset,sha256:$sha}')")
-          echo "$RESPONSE" | jq -e '.ok == true' >/dev/null
-          echo "$RESPONSE" | jq '{ok,versionCode,versionName,manifestUrl,apkUrl}'
+            --data-binary "$PAYLOAD" \
+            -o response.json -w '%{http_code}')
+          cat response.json | jq '{ok,error,message,status,versionCode,versionName,manifestUrl,apkUrl}'
+          test "$HTTP_CODE" -ge 200 -a "$HTTP_CODE" -lt 300
+          jq -e '.ok == true' response.json >/dev/null
 
           LIVE=$(curl --fail-with-body --silent --show-error -H 'Cache-Control: no-cache' "$MANIFEST_URL")
           echo "$LIVE" | jq -e --argjson vc "$VERSION_CODE" --arg sha "$SHA" '.versionCode == $vc and .sha256 == $sha' >/dev/null
