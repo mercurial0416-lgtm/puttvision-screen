@@ -144,6 +144,11 @@ fun showProductSetupDialog(
         showV16CompanionDialog(context)
     })
 
+    val stereoPrep = V44StereoPrepRuntime.snapshot()
+    addAction(action("STEREO PREP", stereoPrep.shortLabel) {
+        showV44StereoPrepDialog(context)
+    })
+
     addAction(action("PHYSICAL MAT", "${matManager.statusLabel()} · ${"%.0f".format(V16MatGeometryRuntime.lengthCm)}cm") {
         showV16MatSetupDialog(context, matManager)
     })
@@ -156,7 +161,7 @@ fun showProductSetupDialog(
         val enabled = V22AudioRuntime.toggle(context)
         dialog.dismiss()
         showProductSetupDialog(context, putterStore, matManager, voiceCoach)
-        android.widget.Toast.makeText(context, if (enabled) "퍼팅 사운드 ON" else "퍼팅 사운드 OFF", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(context, if (enabled) "퍼팅 사운드 ON" else "사운드 OFF", android.widget.Toast.LENGTH_SHORT).show()
     })
 
     addAction(action("HANDS FREE VOICE", if (voiceCoach.enabled) "음성 안내 ON" else "음성 안내 OFF") {
@@ -166,7 +171,7 @@ fun showProductSetupDialog(
         android.widget.Toast.makeText(
             context,
             if (enabled) "음성 안내 ON" else "음성 안내 OFF",
-            android.widget.Toast.LENGTH_SHORT
+            Toast.LENGTH_SHORT
         ).show()
     })
 
