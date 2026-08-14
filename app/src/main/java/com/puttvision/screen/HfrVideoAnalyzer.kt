@@ -81,35 +81,65 @@ class HfrVideoAnalyzer {
     ): HfrAnalysisResult? {
         V41HfrFeatureTrackRuntime.clear()
         V42HfrAnalysisHealthRuntime.clear()
+        V45HfrFailureRuntime.recordSuccess()
         val analysisStartedNs = System.nanoTime()
-        if (!file.exists() || file.length() == 0L) return null
-        if (android.os.Build.VERSION.SDK_INT < 28) return null
+
+        fun fail(
+            reason: V45HfrFailureReason,
+            phase: String,
+            fps: Int = 0,
+            frameCount: Int = 0,
+            detail: String = ""
+        ): HfrAnalysisResult? {
+            V45HfrFailureRuntime.publish(
+                V45HfrFailure(
+                    reason = reason,
+                    phase = phase,
+                    elapsedMs = ((System.nanoTime() - analysisStartedNs) / 1_000_000L).coerceAtLeast(0L),
+                    fps = fps,
+                    frameCount = frameCount,
+                    detail = detail.take(96)
+                )
+            )
+            return null
+        }
+
+        if (!file.exists() || file.length() == 0L) return fail(V45HfrFailureReason.FILE_INVALID, "OPEN")
+        if (android.os.Build.VERSION.SDK_INT < 28) return fail(V45HfrFailureReason.API_UNSUPPORTED, "OPEN")
 
         val mmr = MediaMetadataRetriever()
+        var currentFps = 0
+        var currentFrameCount = 0
+        var phase = "OPEN"
 
         try {
             mmr.setDataSource(file.absolutePath)
             clearFrameCache()
             v14Vision.reset()
 
+            phase = "METADATA"
             val frameCount = mmr.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT
-            )?.toIntOrNull() ?: return null
+            )?.toIntOrNull() ?: return fail(V45HfrFailureReason.VIDEO_METADATA, phase)
+            currentFrameCount = frameCount
 
             val captureFps = mmr.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE
             )?.toFloatOrNull()?.toInt()
 
             val fps = (captureFps ?: requestedFps).coerceAtLeast(30)
+            currentFps = fps
 
             onProgress("${fps}fps / ${frameCount}f · HFR 좌표 보정")
 
+            phase = "CALIBRATION"
             val calibrationStartedNs = System.nanoTime()
-            val calibration = findVideoHomography(mmr, frameCount) ?: return null
+            val calibration = findVideoHomography(mmr, frameCount)
+                ?: return fail(V45HfrFailureReason.CALIBRATION, phase, fps, frameCount)
             val calibrationMs = ((System.nanoTime() - calibrationStartedNs) / 1_000_000L).coerceAtLeast(0L)
             val homography = calibration.homography
 
-            // Coarse scan at ~40 samples/sec to find launch.
+            phase = "COARSE_TRACK"
             val coarseStep = max(1, fps / 40)
             var origin: PointF? = null
             var previous: PointF? = null
@@ -147,11 +177,9 @@ class HfrVideoAnalyzer {
                 i += coarseStep
             }
 
-            val startBall = origin ?: return null
-            if (coarseImpact < 0) return null
+            val startBall = origin ?: return fail(V45HfrFailureReason.BALL_ORIGIN, phase, fps, frameCount)
+            if (coarseImpact < 0) return fail(V45HfrFailureReason.IMPACT_NOT_FOUND, phase, fps, frameCount)
 
-            // v0.4 keeps substantially more pre-impact frames so the full
-            // backswing / transition / downswing can be reconstructed.
             val preFrames = max(30, (fps * 0.90).toInt())
             val postFrames = max(45, (fps * 0.70).toInt())
             val start = max(0, coarseImpact - preFrames)
@@ -159,6 +187,7 @@ class HfrVideoAnalyzer {
 
             onProgress("스트로크+임팩트 정밀 분석 ${start}~${end}f")
 
+            phase = "PRECISION_TRACK"
             val samples = ArrayList<Sample>(end - start + 1)
             var prevBall = startBall
             v14Vision.reset()
@@ -183,7 +212,9 @@ class HfrVideoAnalyzer {
                 samples += Sample(frame, ballCm, heelCm, toeCm, d.markerAngleDeg)
             }
 
-            val calculated = calculate(samples, startBall, fps) ?: return null
+            phase = "KINEMATICS"
+            val calculated = calculate(samples, startBall, fps)
+                ?: return fail(V45HfrFailureReason.KINEMATICS, phase, fps, frameCount, "samples=${samples.size}")
             val featureTrack = buildFeatureTrack(samples, calculated.second, fps)
             V41HfrFeatureTrackRuntime.publish(featureTrack)
             val totalAnalysisMs = ((System.nanoTime() - analysisStartedNs) / 1_000_000L).coerceAtLeast(0L)
@@ -198,6 +229,7 @@ class HfrVideoAnalyzer {
                     putterTrackFrames = featureTrack.putterFrames
                 )
             )
+            V45HfrFailureRuntime.recordSuccess()
 
             return HfrAnalysisResult(
                 metrics = calculated.first,
@@ -209,9 +241,17 @@ class HfrVideoAnalyzer {
                 calibrationMs = calibrationMs,
                 totalAnalysisMs = totalAnalysisMs
             )
+        } catch (t: Throwable) {
+            return fail(
+                V45HfrFailureReason.DECODE_EXCEPTION,
+                phase,
+                currentFps,
+                currentFrameCount,
+                t.javaClass.simpleName
+            )
         } finally {
             clearFrameCache()
-            mmr.release()
+            runCatching { mmr.release() }
         }
     }
 
@@ -273,22 +313,34 @@ class HfrVideoAnalyzer {
         frameCache.clear()
     }
 
+    private fun cacheBytes(): Long = frameCache.values.sumOf { bitmap ->
+        if (bitmap.isRecycled) 0L else runCatching { bitmap.allocationByteCount.toLong() }
+            .getOrDefault(bitmap.width.toLong() * bitmap.height.toLong() * 4L)
+    }
+
+    private fun putCached(index: Int, bitmap: Bitmap) {
+        val previous = frameCache.put(index, bitmap)
+        if (previous != null && previous !== bitmap && !previous.isRecycled) previous.recycle()
+        while (V45HfrFrameCachePolicy.shouldEvict(frameCache.size, cacheBytes())) {
+            val key = frameCache.keys.firstOrNull() ?: break
+            val old = frameCache.remove(key)
+            if (old != null && old !== bitmap && !old.isRecycled) old.recycle()
+        }
+    }
+
     private fun safeFrame(
         mmr: MediaMetadataRetriever,
         index: Int
     ): Bitmap? {
         frameCache[index]?.let { if (!it.isRecycled) return it }
-        val batch = runCatching { mmr.getFramesAtIndex(index, 6) }.getOrNull()
+        val batch = runCatching { mmr.getFramesAtIndex(index, V45HfrFrameCachePolicy.BATCH_SIZE) }.getOrNull()
         if (!batch.isNullOrEmpty()) {
-            batch.forEachIndexed { offset, bitmap -> frameCache[index + offset] = bitmap }
-            while (frameCache.size > 24) {
-                val key = frameCache.keys.firstOrNull() ?: break
-                val old = frameCache.remove(key)
-                if (old != null && !old.isRecycled) old.recycle()
-            }
+            batch.forEachIndexed { offset, bitmap -> putCached(index + offset, bitmap) }
             frameCache[index]?.let { if (!it.isRecycled) return it }
         }
-        return runCatching { mmr.getFrameAtIndex(index) }.getOrNull()
+        val single = runCatching { mmr.getFrameAtIndex(index) }.getOrNull() ?: return null
+        putCached(index, single)
+        return frameCache[index]?.takeUnless { it.isRecycled }
     }
 
     private fun findVideoHomography(
@@ -315,8 +367,6 @@ class HfrVideoAnalyzer {
                     )?.let { return VideoCalibration(it, "QR") }
                 }
 
-                // Give QR the first frame. If it is absent and the mat silhouette is exceptionally
-                // clean, do not burn several more ML Kit scans before using markerless geometry.
                 if (attempt == 0 && V16MatGeometryRuntime.markerlessEnabled) {
                     val detected = V15MatDetector.detect(bmp)
                     if (detected != null && V42HfrCalibrationPolicy.canUseFastMarkerless(detected.confidence)) {
@@ -333,7 +383,6 @@ class HfrVideoAnalyzer {
             scanner.close()
         }
 
-        // Markerless fallback keeps the existing weaker threshold only after the precision scan path.
         if (V16MatGeometryRuntime.markerlessEnabled) {
             for (i in indices) {
                 val bmp = safeFrame(mmr, i) ?: continue
@@ -412,7 +461,6 @@ class HfrVideoAnalyzer {
 
         val impactFrame = samples[impactPos].frame
 
-        // V14: fit multiple early post-impact centroids instead of trusting one 10cm frame.
         val fitPoints = samples.drop(impactPos).mapNotNull { sample ->
             val ball = sample.ballCm ?: return@mapNotNull null
             val d = hypot((ball.x-origin.x).toDouble(), (ball.y-origin.y).toDouble())
@@ -447,8 +495,6 @@ class HfrVideoAnalyzer {
             }
 
         val tempo = analyzeTempo(head, impactFrame, fps)
-
-        // Last ~40ms immediately before impact.
         val impactHeadFrames =
             head.filter { it.frame <= impactFrame }
                 .takeLast(max(5, (fps * 0.040).toInt()))
@@ -461,60 +507,34 @@ class HfrVideoAnalyzer {
         if (impactHeadFrames.size >= 2) {
             val a = impactHeadFrames.first()
             val b = impactHeadFrames.last()
-            val hdt =
-                (b.frame - a.frame).coerceAtLeast(1).toDouble() / fps
-
+            val hdt = (b.frame - a.frame).coerceAtLeast(1).toDouble() / fps
             val hdx = (b.center.x - a.center.x).toDouble()
             val hdy = (b.center.y - a.center.y).toDouble()
 
-            headSpeed =
-                (hypot(hdx, hdy) / 100.0) / hdt
-
-            pathAngle =
-                Math.toDegrees(atan2(hdx, hdy))
+            headSpeed = (hypot(hdx, hdy) / 100.0) / hdt
+            pathAngle = Math.toDegrees(atan2(hdx, hdy))
 
             val fx = (b.toe.x - b.heel.x).toDouble()
             val fy = (b.toe.y - b.heel.y).toDouble()
-
-            faceAngle =
-                normalizeFaceAngle(
-                    Math.toDegrees(atan2(fy, fx))
-                )
-
+            faceAngle = normalizeFaceAngle(Math.toDegrees(atan2(fy, fx)))
             impactCenter = b.center
         }
 
-        val faceToPath =
-            if (faceAngle != null && pathAngle != null) {
-                faceAngle - pathAngle
-            } else null
+        val faceToPath = if (faceAngle != null && pathAngle != null) faceAngle - pathAngle else null
+        val smash = if (headSpeed != null && headSpeed > 0.05) correctedBallSpeed / headSpeed else null
+        val impactOffsetMm = impactCenter?.let { (origin.x - it.x) * 10.0 }
 
-        val smash =
-            if (headSpeed != null && headSpeed > 0.05) {
-                correctedBallSpeed / headSpeed
-            } else null
+        val ballDetected = samples.count { it.ballCm != null }.toDouble() / samples.size
+        val headDetected = samples.take(impactPos + 1)
+            .count { it.heelCm != null && it.toeCm != null }
+            .toDouble() / max(1, impactPos + 1)
 
-        val impactOffsetMm =
-            impactCenter?.let {
-                (origin.x - it.x) * 10.0
-            }
-
-        val ballDetected =
-            samples.count { it.ballCm != null }.toDouble() / samples.size
-
-        val headDetected =
-            samples.take(impactPos + 1)
-                .count { it.heelCm != null && it.toeCm != null }
-                .toDouble() /
-                max(1, impactPos + 1)
-
-        val confidence =
-            (
-                0.35 +
-                    ballDetected.coerceIn(0.0, 1.0) * 0.35 +
-                    headDetected.coerceIn(0.0, 1.0) * 0.25 +
-                    (if (matData.decelMps2 != null) 0.05 else 0.0)
-                ).coerceIn(0.0, 1.0)
+        val confidence = (
+            0.35 +
+                ballDetected.coerceIn(0.0, 1.0) * 0.35 +
+                headDetected.coerceIn(0.0, 1.0) * 0.25 +
+                (if (matData.decelMps2 != null) 0.05 else 0.0)
+            ).coerceIn(0.0, 1.0)
 
         val rollSamples = samples.drop(impactPos).mapNotNull { sample ->
             val ball = sample.ballCm ?: return@mapNotNull null
@@ -564,22 +584,15 @@ class HfrVideoAnalyzer {
         fps: Int
     ): TempoData {
         val pre = head.filter { it.frame <= impactFrame }
-        if (pre.size < 8) {
-            return TempoData(null, null, null, null, null)
-        }
+        if (pre.size < 8) return TempoData(null, null, null, null, null)
 
-        // Target direction is +Y, so backswing typically reaches the smallest Y.
-        val transitionIndex =
-            pre.indices.minByOrNull { pre[it].center.y } ?: return TempoData(
-                null, null, null, null, null
-            )
+        val transitionIndex = pre.indices.minByOrNull { pre[it].center.y }
+            ?: return TempoData(null, null, null, null, null)
 
         if (transitionIndex <= 1 || transitionIndex >= pre.lastIndex) {
             return TempoData(null, null, null, null, null)
         }
 
-        // Find motion start by scanning backward from transition and locating
-        // the last mostly-stationary segment before the head begins moving.
         var startIndex = 0
         val speedThresholdMps = 0.045
 
@@ -587,11 +600,10 @@ class HfrVideoAnalyzer {
             val a = pre[i - 1]
             val b = pre[i]
             val dt = (b.frame - a.frame).coerceAtLeast(1).toDouble() / fps
-            val speed =
-                hypot(
-                    (b.center.x - a.center.x).toDouble(),
-                    (b.center.y - a.center.y).toDouble()
-                ) / 100.0 / dt
+            val speed = hypot(
+                (b.center.x - a.center.x).toDouble(),
+                (b.center.y - a.center.y).toDouble()
+            ) / 100.0 / dt
 
             if (speed < speedThresholdMps) {
                 startIndex = i
@@ -602,59 +614,34 @@ class HfrVideoAnalyzer {
         val start = pre[startIndex]
         val transition = pre[transitionIndex]
         val impact = pre.last()
+        val backswingMs = (transition.frame - start.frame).coerceAtLeast(1) * 1000.0 / fps
+        val downswingMs = (impact.frame - transition.frame).coerceAtLeast(1) * 1000.0 / fps
+        val ratio = if (downswingMs > 0.0) backswingMs / downswingMs else null
+        val length = hypot(
+            (transition.center.x - start.center.x).toDouble(),
+            (transition.center.y - start.center.y).toDouble()
+        )
 
-        val backswingMs =
-            (transition.frame - start.frame).coerceAtLeast(1) *
-                1000.0 / fps
-
-        val downswingMs =
-            (impact.frame - transition.frame).coerceAtLeast(1) *
-                1000.0 / fps
-
-        val ratio =
-            if (downswingMs > 0.0) {
-                backswingMs / downswingMs
-            } else null
-
-        val length =
-            hypot(
-                (transition.center.x - start.center.x).toDouble(),
-                (transition.center.y - start.center.y).toDouble()
-            )
-
-        // Peak acceleration from consecutive head-center velocities.
         val velocities = ArrayList<Pair<Int, Double>>()
-
         for (i in 1 until pre.size) {
             val a = pre[i - 1]
             val b = pre[i]
-            val dt =
-                (b.frame - a.frame).coerceAtLeast(1).toDouble() / fps
-
-            val speed =
-                hypot(
-                    (b.center.x - a.center.x).toDouble(),
-                    (b.center.y - a.center.y).toDouble()
-                ) / 100.0 / dt
-
-            if (speed in 0.0..5.0) {
-                velocities += b.frame to speed
-            }
+            val dt = (b.frame - a.frame).coerceAtLeast(1).toDouble() / fps
+            val speed = hypot(
+                (b.center.x - a.center.x).toDouble(),
+                (b.center.y - a.center.y).toDouble()
+            ) / 100.0 / dt
+            if (speed in 0.0..5.0) velocities += b.frame to speed
         }
 
         var peakAcceleration: Double? = null
-
         for (i in 1 until velocities.size) {
             val a = velocities[i - 1]
             val b = velocities[i]
-            val dt =
-                (b.first - a.first).coerceAtLeast(1).toDouble() / fps
-
+            val dt = (b.first - a.first).coerceAtLeast(1).toDouble() / fps
             val acceleration = abs(b.second - a.second) / dt
-
             if (acceleration in 0.0..80.0) {
-                peakAcceleration =
-                    max(peakAcceleration ?: 0.0, acceleration)
+                peakAcceleration = max(peakAcceleration ?: 0.0, acceleration)
             }
         }
 
@@ -682,73 +669,45 @@ class HfrVideoAnalyzer {
             val prev = previous
 
             if (prev != null && prev.ballCm != null) {
-                val dtFrames =
-                    (current.frame - prev.frame).coerceAtLeast(1)
-
+                val dtFrames = (current.frame - prev.frame).coerceAtLeast(1)
                 val dt = dtFrames.toDouble() / fps
-                val dM =
-                    hypot(
-                        (point.x - prev.ballCm.x).toDouble(),
-                        (point.y - prev.ballCm.y).toDouble()
-                    ) / 100.0
-
+                val dM = hypot(
+                    (point.x - prev.ballCm.x).toDouble(),
+                    (point.y - prev.ballCm.y).toDouble()
+                ) / 100.0
                 val speed = dM / dt
-                val timeFromImpact =
-                    (current.frame - samples[impactPos].frame)
-                        .coerceAtLeast(0).toDouble() / fps
+                val timeFromImpact = (current.frame - samples[impactPos].frame)
+                    .coerceAtLeast(0).toDouble() / fps
 
                 if (speed in 0.08..5.0 && timeFromImpact <= 0.55) {
                     velocities += timeFromImpact to speed
                 }
             }
-
             previous = current
         }
 
-        if (velocities.size < 5) {
-            return MatData(
-                rawBallSpeedMps = rawSpeed,
-                correctedImpactSpeedMps = rawSpeed,
-                decelMps2 = null,
-                stimpM = null
-            )
-        }
+        if (velocities.size < 5) return MatData(rawSpeed, rawSpeed, null, null)
 
-        // Linear regression: v(t) = intercept + slope*t.
         val meanT = velocities.map { it.first }.average()
         val meanV = velocities.map { it.second }.average()
-
         var num = 0.0
         var den = 0.0
-
         for ((t, v) in velocities) {
             num += (t - meanT) * (v - meanV)
             den += (t - meanT) * (t - meanT)
         }
 
-        if (den <= 1e-9) {
-            return MatData(rawSpeed, rawSpeed, null, null)
-        }
-
+        if (den <= 1e-9) return MatData(rawSpeed, rawSpeed, null, null)
         val slope = num / den
         val decel = -slope
+        if (decel !in 0.08..6.0) return MatData(rawSpeed, rawSpeed, null, null)
 
-        if (decel !in 0.08..6.0) {
-            return MatData(rawSpeed, rawSpeed, null, null)
-        }
-
-        // Back-extrapolate from the ~10cm measurement point to impact.
-        val corrected =
-            sqrt(
-                (rawSpeed * rawSpeed + 2.0 * decel * 0.10)
-                    .coerceAtLeast(rawSpeed * rawSpeed)
-            )
-
-        // Stimpmeter-equivalent diagnostic for the PHYSICAL mat only.
+        val corrected = sqrt(
+            (rawSpeed * rawSpeed + 2.0 * decel * 0.10)
+                .coerceAtLeast(rawSpeed * rawSpeed)
+        )
         val stimpLaunchMps = 1.95072
-        val stimp =
-            (stimpLaunchMps * stimpLaunchMps / (2.0 * decel))
-                .coerceIn(0.5, 10.0)
+        val stimp = (stimpLaunchMps * stimpLaunchMps / (2.0 * decel)).coerceIn(0.5, 10.0)
 
         return MatData(
             rawBallSpeedMps = rawSpeed,

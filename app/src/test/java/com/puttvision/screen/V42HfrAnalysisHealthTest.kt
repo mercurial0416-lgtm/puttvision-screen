@@ -1,6 +1,8 @@
 package com.puttvision.screen
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,5 +36,27 @@ class V42HfrAnalysisHealthTest {
         assertTrue(health.label.contains("CAL 82ms"))
         assertTrue(health.label.contains("TOTAL 640ms"))
         assertTrue(health.label.contains("TRACK 30/24"))
+    }
+
+    @Test fun perShotClearDoesNotEraseLongSessionWindow() {
+        V42HfrAnalysisHealthRuntime.resetHistory()
+        repeat(5) { i ->
+            V42HfrAnalysisHealthRuntime.publish(
+                V42HfrAnalysisHealth(
+                    calibrationMode = "QR",
+                    calibrationMs = 100L + i,
+                    totalAnalysisMs = 600L + i,
+                    fps = 240,
+                    analyzedFrames = 80,
+                    ballTrackFrames = 28,
+                    putterTrackFrames = 20
+                )
+            )
+            V42HfrAnalysisHealthRuntime.clear()
+            assertNull(V42HfrAnalysisHealthRuntime.latest)
+        }
+        assertEquals(5, V43HfrHealthWindow.summary().samples)
+        V42HfrAnalysisHealthRuntime.resetHistory()
+        assertEquals(0, V43HfrHealthWindow.summary().samples)
     }
 }
