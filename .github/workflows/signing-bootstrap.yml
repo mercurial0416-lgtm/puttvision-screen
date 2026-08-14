@@ -1,0 +1,142 @@
+name: Bootstrap rotated PuttVision signing key
+
+on:
+  push:
+    branches: [ agent/signing-bootstrap ]
+
+permissions:
+  contents: read
+
+env:
+  LEGACY_TAG: pv-100063
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate Android apksigner
+        shell: bash
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -1 || true)
+          if [ -z "$APKSIGNER" ]; then
+            SDKMANAGER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}" -type f -name sdkmanager 2>/dev/null | head -1 || true)
+            if [ -z "$SDKMANAGER" ]; then
+              echo "Android apksigner/sdkmanager not available on runner" >&2
+              exit 1
+            fi
+            yes | "$SDKMANAGER" "build-tools;36.0.0" >/dev/null
+            APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner | sort -V | tail -1)
+          fi
+          echo "APKSIGNER=$APKSIGNER" >> "$GITHUB_ENV"
+
+      - name: Recover legacy signer only for rotation proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+          git rev-parse "$LEGACY_TAG^{commit}" >/dev/null
+          git show "$LEGACY_TAG:ci/puttvision-release.jks.b64" | base64 -d > "$RUNNER_TEMP/legacy-release.jks"
+          chmod 600 "$RUNNER_TEMP/legacy-release.jks"
+
+          LEGACY_WORKFLOW=$(git show "$LEGACY_TAG:.github/workflows/release-apk.yml")
+          OLD_STORE_PASSWORD=$(printf '%s\n' "$LEGACY_WORKFLOW" | sed -n "s/.*PUTTVISION_STORE_PASSWORD:.*|| '\([^']*\)'.*/\1/p" | head -1)
+          OLD_KEY_ALIAS=$(printf '%s\n' "$LEGACY_WORKFLOW" | sed -n "s/.*PUTTVISION_KEY_ALIAS:.*|| '\([^']*\)'.*/\1/p" | head -1)
+          OLD_KEY_PASSWORD=$(printf '%s\n' "$LEGACY_WORKFLOW" | sed -n "s/.*PUTTVISION_KEY_PASSWORD:.*|| '\([^']*\)'.*/\1/p" | head -1)
+          if [ -z "$OLD_STORE_PASSWORD" ] || [ -z "$OLD_KEY_ALIAS" ] || [ -z "$OLD_KEY_PASSWORD" ]; then
+            echo "Unable to recover legacy signer metadata without exposing it" >&2
+            exit 1
+          fi
+          keytool -list -keystore "$RUNNER_TEMP/legacy-release.jks" -storepass "$OLD_STORE_PASSWORD" -alias "$OLD_KEY_ALIAS" >/dev/null
+
+          printf '%s' "$OLD_STORE_PASSWORD" > "$RUNNER_TEMP/legacy-store.pass"
+          printf '%s' "$OLD_KEY_PASSWORD" > "$RUNNER_TEMP/legacy-key.pass"
+          printf '%s' "$OLD_KEY_ALIAS" > "$RUNNER_TEMP/legacy-alias"
+          chmod 600 "$RUNNER_TEMP"/legacy-*.pass "$RUNNER_TEMP/legacy-alias"
+
+      - name: Generate new isolated release signer and lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW_PASSWORD=$(openssl rand -hex 24)
+          NEW_ALIAS="puttvision-rotated-2026"
+          NEW_KEYSTORE="$RUNNER_TEMP/puttvision-rotated.jks"
+          LINEAGE="$RUNNER_TEMP/puttvision-signing-lineage"
+
+          keytool -genkeypair \
+            -keystore "$NEW_KEYSTORE" \
+            -storetype JKS \
+            -storepass "$NEW_PASSWORD" \
+            -keypass "$NEW_PASSWORD" \
+            -alias "$NEW_ALIAS" \
+            -keyalg RSA \
+            -keysize 4096 \
+            -sigalg SHA256withRSA \
+            -validity 10000 \
+            -dname "CN=PuttVision Release 2026,OU=Android,O=PuttVision,L=Seoul,C=KR" >/dev/null
+          chmod 600 "$NEW_KEYSTORE"
+
+          OLD_STORE_PASSWORD=$(cat "$RUNNER_TEMP/legacy-store.pass")
+          OLD_KEY_PASSWORD=$(cat "$RUNNER_TEMP/legacy-key.pass")
+          OLD_KEY_ALIAS=$(cat "$RUNNER_TEMP/legacy-alias")
+
+          "$APKSIGNER" rotate \
+            --out "$LINEAGE" \
+            --old-signer \
+            --ks "$RUNNER_TEMP/legacy-release.jks" \
+            --ks-key-alias "$OLD_KEY_ALIAS" \
+            --ks-pass "pass:$OLD_STORE_PASSWORD" \
+            --key-pass "pass:$OLD_KEY_PASSWORD" \
+            --new-signer \
+            --ks "$NEW_KEYSTORE" \
+            --ks-key-alias "$NEW_ALIAS" \
+            --ks-pass "pass:$NEW_PASSWORD" \
+            --key-pass "pass:$NEW_PASSWORD"
+
+          mkdir -p "$RUNNER_TEMP/signing-bundle"
+          cp "$NEW_KEYSTORE" "$RUNNER_TEMP/signing-bundle/release.jks"
+          cp "$LINEAGE" "$RUNNER_TEMP/signing-bundle/signing-lineage"
+          cat > "$RUNNER_TEMP/signing-bundle/signing.env" <<EOF
+          STORE_PASSWORD=$NEW_PASSWORD
+          KEY_PASSWORD=$NEW_PASSWORD
+          KEY_ALIAS=$NEW_ALIAS
+          ROTATION_MIN_SDK=28
+          EOF
+          chmod 600 "$RUNNER_TEMP/signing-bundle/"*
+
+          tar -C "$RUNNER_TEMP/signing-bundle" -czf "$RUNNER_TEMP/puttvision-signing-bundle.tgz" .
+          base64 -w0 "$RUNNER_TEMP/puttvision-signing-bundle.tgz" > PUTTVISION_SIGNING_BUNDLE_B64.txt
+          chmod 600 PUTTVISION_SIGNING_BUNDLE_B64.txt
+
+          keytool -exportcert -keystore "$RUNNER_TEMP/legacy-release.jks" -storepass "$OLD_STORE_PASSWORD" -alias "$OLD_KEY_ALIAS" -rfc > "$RUNNER_TEMP/legacy-cert.pem"
+          keytool -exportcert -keystore "$NEW_KEYSTORE" -storepass "$NEW_PASSWORD" -alias "$NEW_ALIAS" -rfc > "$RUNNER_TEMP/new-cert.pem"
+          OLD_FP=$(openssl x509 -in "$RUNNER_TEMP/legacy-cert.pem" -noout -fingerprint -sha256 | cut -d= -f2)
+          NEW_FP=$(openssl x509 -in "$RUNNER_TEMP/new-cert.pem" -noout -fingerprint -sha256 | cut -d= -f2)
+          cat > SIGNING_ROTATION_INFO.txt <<EOF
+          PuttVision signing rotation bootstrap
+          Legacy signer SHA-256: $OLD_FP
+          Rotated signer SHA-256: $NEW_FP
+          Rotation minimum SDK: 28
+          Secret to create: PUTTVISION_SIGNING_BUNDLE_B64
+          The secret value is the entire single line in PUTTVISION_SIGNING_BUNDLE_B64.txt.
+          This artifact intentionally expires after 1 day.
+          EOF
+
+      - name: Upload one-day signing bootstrap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PuttVision-Signing-Bootstrap
+          path: |
+            PUTTVISION_SIGNING_BUNDLE_B64.txt
+            SIGNING_ROTATION_INFO.txt
+          retention-days: 1
+          if-no-files-found: error
