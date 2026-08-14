@@ -5,12 +5,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RectF
 import android.graphics.Typeface
 import android.view.View
 import kotlin.math.max
 
-/** Lightweight TV overlay for pace-aware ideal line plus executable training status. */
+/** Lightweight TV overlay for pace-aware ideal line. Training status is rendered by V31TrainingTvOverlay. */
 class V27PaceLineOverlay(context: Context, private val engine: GameEngine) : View(context) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -20,7 +19,6 @@ class V27PaceLineOverlay(context: Context, private val engine: GameEngine) : Vie
         super.onDraw(c)
         val moving = engine.state?.running == true || TvInstantRollRuntime.isAnimating()
         drawPaceLine(c, moving)
-        drawTraining(c)
         val training = V31TrainingSessionRuntime.progress().running
         postInvalidateDelayed(when {
             moving -> 90L
@@ -65,36 +63,5 @@ class V27PaceLineOverlay(context: Context, private val engine: GameEngine) : Vie
             p
         )
         p.textAlign = Paint.Align.LEFT
-    }
-
-    private fun drawTraining(c: Canvas) {
-        val s = V31TrainingSessionRuntime.progress()
-        if (!s.running && !s.finished) return
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val bw = w * .245f
-        val bh = h * .092f
-        val left = w * .018f
-        val top = h * .105f
-        p.style = Paint.Style.FILL
-        p.color = Color.argb(190, 9, 14, 16)
-        c.drawRoundRect(RectF(left, top, left + bw, top + bh), bh * .18f, bh * .18f, p)
-
-        p.typeface = Typeface.DEFAULT_BOLD
-        p.textAlign = Paint.Align.LEFT
-        p.textSize = max(8f, w * .0053f)
-        p.color = Color.rgb(255, 211, 72)
-        c.drawText(if (s.running) "15분 AI 훈련" else "15분 AI 훈련 완료", left + bw * .055f, top + bh * .29f, p)
-
-        p.textSize = max(7.4f, w * .0046f)
-        p.color = Color.WHITE
-        val line = if (s.running) {
-            "${s.blockIndex + 1}/${s.blockCount} · ${s.blockTitle} · ${s.shotInBlock}/${s.shotsInBlock}구 · %.2f m".format(s.targetDistanceM)
-        } else s.summary
-        c.drawText(line, left + bw * .055f, top + bh * .59f, p)
-
-        p.textSize = max(7f, w * .0042f)
-        p.color = Color.argb(205, 210, 224, 220)
-        c.drawText("성공 ${s.totalSuccesses}/${s.totalShots} · 연속 ${s.streak}", left + bw * .055f, top + bh * .83f, p)
     }
 }
