@@ -17,12 +17,13 @@ object V41TrainingTvPolicy {
         val h = viewHeight.coerceAtLeast(1).toFloat()
         val scale = min(w / 1920f, h / 1080f).coerceIn(.65f, 2.0f)
         val margin = 24f * scale
-        val cardWidth = min(360f * scale, w * .42f)
-        val cardHeight = 126f * scale
+        val cardWidth = min(390f * scale, w * .46f)
+        val cardHeight = 168f * scale
         return V41TrainingTvLayout(scale, margin, margin, cardWidth, cardHeight)
     }
 
     fun refreshDelayMs(progress: V31TrainingProgress): Long = when {
+        progress.paused -> 1_000L
         progress.running -> 250L
         progress.finished -> 1_500L
         else -> 1_000L
