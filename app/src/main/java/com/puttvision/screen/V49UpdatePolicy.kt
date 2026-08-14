@@ -1,0 +1,95 @@
+package com.puttvision.screen
+
+import java.io.File
+import java.io.FilterInputStream
+import java.io.InputStream
+import java.net.URI
+
+/** Security and lifecycle policy for self-update. Pure Kotlin so it is regression-testable. */
+object V49UpdatePolicy {
+    const val MAX_APK_BYTES = 220L * 1024L * 1024L
+    const val MAX_MANIFEST_BYTES = 256L * 1024L
+    const val MAX_VERSION_NAME_CHARS = 48
+    const val MAX_UPDATE_CACHE_FILES = 3
+    const val MAX_UPDATE_CACHE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
+
+    data class ManifestCheck(val valid: Boolean, val reason: String? = null)
+    data class CacheCleanup(val deleted: Int, val kept: Int)
+
+    fun validateManifestUrl(url: String): ManifestCheck = validateHttpsUrl(url, "manifest")
+
+    fun validateInfo(info: UpdateInfo, publicChannel: Boolean): ManifestCheck {
+        if (info.versionCode <= 0) return ManifestCheck(false, "versionCode가 1 이상이어야 합니다")
+        val name = info.versionName.trim()
+        if (name.isBlank() || name.length > MAX_VERSION_NAME_CHARS || name.any { it.code < 0x20 }) {
+            return ManifestCheck(false, "versionName 형식이 올바르지 않습니다")
+        }
+        val apk = validateHttpsUrl(info.apkUrl, "apk")
+        if (!apk.valid) return apk
+        val sha = info.sha256?.trim().orEmpty()
+        if (publicChannel && !isSha256(sha)) return ManifestCheck(false, "공개 업데이트 SHA-256이 없거나 잘못되었습니다")
+        if (sha.isNotBlank() && !isSha256(sha)) return ManifestCheck(false, "SHA-256 형식이 잘못되었습니다")
+        return ManifestCheck(true)
+    }
+
+    fun validateContentLength(length: Long): ManifestCheck = when {
+        length < 0L -> ManifestCheck(true)
+        length == 0L -> ManifestCheck(false, "APK Content-Length가 0입니다")
+        length > MAX_APK_BYTES -> ManifestCheck(false, "APK가 허용 크기를 초과합니다")
+        else -> ManifestCheck(true)
+    }
+
+    fun limited(input: InputStream, maxBytes: Long = MAX_APK_BYTES): InputStream = object : FilterInputStream(input) {
+        private var readBytes = 0L
+        private fun account(n: Int) {
+            if (n <= 0) return
+            readBytes += n
+            if (readBytes > maxBytes) throw IllegalStateException("APK 다운로드가 허용 크기를 초과했습니다")
+        }
+        override fun read(): Int = super.read().also { if (it >= 0) account(1) }
+        override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also(::account)
+    }
+
+    fun cleanCache(dir: File, keep: File? = null, nowMs: Long = System.currentTimeMillis()): CacheCleanup {
+        dir.mkdirs()
+        val keepCanonical = runCatching { keep?.canonicalFile }.getOrNull()
+        val files = dir.listFiles()?.filter { it.isFile && it.name.endsWith(".apk", true) }.orEmpty()
+        var deleted = 0
+        files.filter { file ->
+            val canonical = runCatching { file.canonicalFile }.getOrNull()
+            canonical != null && canonical != keepCanonical && nowMs - file.lastModified() > MAX_UPDATE_CACHE_AGE_MS
+        }.forEach { if (runCatching { it.delete() }.getOrDefault(false)) deleted++ }
+
+        val remaining = dir.listFiles()?.filter { it.isFile && it.name.endsWith(".apk", true) }
+            ?.sortedByDescending { it.lastModified() }
+            ?.toMutableList().orEmpty().toMutableList()
+        while (remaining.count { runCatching { it.canonicalFile }.getOrNull() != keepCanonical } > MAX_UPDATE_CACHE_FILES) {
+            val victim = remaining.lastOrNull { runCatching { it.canonicalFile }.getOrNull() != keepCanonical } ?: break
+            if (runCatching { victim.delete() }.getOrDefault(false)) {
+                deleted++
+                remaining.remove(victim)
+            } else break
+        }
+        val kept = dir.listFiles()?.count { it.isFile && it.name.endsWith(".apk", true) } ?: 0
+        return CacheCleanup(deleted, kept)
+    }
+
+    fun pendingPathAllowed(cacheDir: File, rawPath: String): Boolean = runCatching {
+        val updateRoot = File(cacheDir, "updates").canonicalFile
+        val candidate = File(rawPath).canonicalFile
+        candidate.isFile && (candidate.parentFile == updateRoot) && candidate.name.endsWith(".apk", true)
+    }.getOrDefault(false)
+
+    fun isUpgrade(installedVersionCode: Long, candidateVersionCode: Long): Boolean =
+        installedVersionCode >= 0L && candidateVersionCode > installedVersionCode
+
+    fun isSha256(value: String): Boolean = value.length == 64 && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
+
+    private fun validateHttpsUrl(url: String, label: String): ManifestCheck = runCatching {
+        val uri = URI(url.trim())
+        require(uri.scheme.equals("https", true)) { "$label URL은 HTTPS여야 합니다" }
+        require(!uri.host.isNullOrBlank()) { "$label URL host가 없습니다" }
+        require(uri.userInfo == null) { "$label URL에 userinfo를 넣을 수 없습니다" }
+        ManifestCheck(true)
+    }.getOrElse { ManifestCheck(false, it.message ?: "$label URL 형식 오류") }
+}
