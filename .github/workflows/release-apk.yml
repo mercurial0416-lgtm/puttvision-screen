@@ -39,26 +39,34 @@ jobs:
       - name: Regression tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
-      - name: Restore release keystore
+      - name: Require release signing secrets
         shell: bash
         env:
           KEYSTORE_B64: ${{ secrets.PUTTVISION_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.PUTTVISION_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PUTTVISION_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PUTTVISION_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/puttvision-release.jks"
-          elif [ -f ci/puttvision-release.jks.b64 ]; then
-            base64 -d ci/puttvision-release.jks.b64 > "$RUNNER_TEMP/puttvision-release.jks"
-          else
-            echo "No release keystore configured" >&2
-            exit 1
-          fi
+          set -euo pipefail
+          for name in KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required release signing secret: $name" >&2
+              exit 1
+            fi
+          done
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/puttvision-release.jks"
+          chmod 600 "$RUNNER_TEMP/puttvision-release.jks"
+          keytool -list \
+            -keystore "$RUNNER_TEMP/puttvision-release.jks" \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >/dev/null
 
       - name: Build signed consumer and developer APKs
         env:
           PUTTVISION_STORE_FILE: ${{ runner.temp }}/puttvision-release.jks
-          PUTTVISION_STORE_PASSWORD: ${{ secrets.PUTTVISION_STORE_PASSWORD || 'PuttVision_2026_UpdateKey' }}
-          PUTTVISION_KEY_ALIAS: ${{ secrets.PUTTVISION_KEY_ALIAS || 'puttvision' }}
-          PUTTVISION_KEY_PASSWORD: ${{ secrets.PUTTVISION_KEY_PASSWORD || 'PuttVision_2026_UpdateKey' }}
+          PUTTVISION_STORE_PASSWORD: ${{ secrets.PUTTVISION_STORE_PASSWORD }}
+          PUTTVISION_KEY_ALIAS: ${{ secrets.PUTTVISION_KEY_ALIAS }}
+          PUTTVISION_KEY_PASSWORD: ${{ secrets.PUTTVISION_KEY_PASSWORD }}
           PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
         run: gradle assembleConsumerRelease assembleDeveloperRelease
 
