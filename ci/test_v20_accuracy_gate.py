@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import v20_accuracy_gate as gate
+from ci import v20_accuracy_gate as gate
 
 
 class AccuracyGateTest(unittest.TestCase):
