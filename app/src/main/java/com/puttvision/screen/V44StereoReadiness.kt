@@ -30,14 +30,10 @@ object V44TrackValidator {
         if (view == V15CameraView.PRIMARY) return V44TrackValidation(false, "보조폰 view가 PRIMARY")
         if (track.fps !in MIN_FPS..MAX_FPS) return V44TrackValidation(false, "비정상 FPS ${track.fps}")
         if (track.impactFrame < 0) return V44TrackValidation(false, "비정상 impact frame")
-        if (track.frames.size !in MIN_FRAMES..MAX_FRAMES) {
-            return V44TrackValidation(false, "프레임 수 ${track.frames.size}")
-        }
+        if (track.frames.size !in MIN_FRAMES..MAX_FRAMES) return V44TrackValidation(false, "프레임 수 ${track.frames.size}")
 
         val sorted = track.frames.sortedBy { it.frame }
-        if (sorted.map { it.frame }.distinct().size != sorted.size) {
-            return V44TrackValidation(false, "중복 frame id")
-        }
+        if (sorted.map { it.frame }.distinct().size != sorted.size) return V44TrackValidation(false, "중복 frame id")
         if (sorted.first().frame < 0 || track.impactFrame !in sorted.first().frame..sorted.last().frame) {
             return V44TrackValidation(false, "impact frame이 track 범위 밖")
         }
@@ -48,16 +44,12 @@ object V44TrackValidator {
             if (!frame.timeFromImpactMs.isFinite() || abs(frame.timeFromImpactMs) > MAX_RELATIVE_TIME_MS) {
                 return V44TrackValidation(false, "비정상 상대시간")
             }
-            if (frame.timeFromImpactMs <= previousTime) {
-                return V44TrackValidation(false, "시간축 역전/중복")
-            }
+            if (frame.timeFromImpactMs <= previousTime) return V44TrackValidation(false, "시간축 역전/중복")
             previousTime = frame.timeFromImpactMs
 
             val expectedTime = (frame.frame - track.impactFrame) * frameMs
             val timingTolerance = max(3.0, frameMs * 1.55)
-            if (abs(frame.timeFromImpactMs - expectedTime) > timingTolerance) {
-                return V44TrackValidation(false, "frame/time 불일치")
-            }
+            if (abs(frame.timeFromImpactMs - expectedTime) > timingTolerance) return V44TrackValidation(false, "frame/time 불일치")
 
             if (!pairValid(frame.ballXcm, frame.ballYcm)) return V44TrackValidation(false, "BALL 좌표 불완전")
             val putterValues = listOf(frame.heelXcm, frame.heelYcm, frame.toeXcm, frame.toeYcm)
@@ -72,15 +64,11 @@ object V44TrackValidator {
             }
         }
 
-        if (sorted.count { it.ballXcm != null && it.ballYcm != null } < 3) {
-            return V44TrackValidation(false, "BALL track 부족")
-        }
-
+        if (sorted.count { it.ballXcm != null && it.ballYcm != null } < 3) return V44TrackValidation(false, "BALL track 부족")
         return V44TrackValidation(true, "OK", track.copy(frames = sorted))
     }
 
-    fun normalize(track: HfrFeatureTrack, view: V15CameraView): HfrFeatureTrack? =
-        inspect(track, view).normalized
+    fun normalize(track: HfrFeatureTrack, view: V15CameraView): HfrFeatureTrack? = inspect(track, view).normalized
 
     private fun pairValid(x: Double?, y: Double?): Boolean {
         if ((x == null) != (y == null)) return false
@@ -100,24 +88,14 @@ data class V44MatchedFrame(
 )
 
 object V44StereoMatcher {
-    private data class Candidate(
-        val local: HfrFeatureFrame,
-        val remote: HfrFeatureFrame,
-        val deltaMs: Double
-    )
+    private data class Candidate(val local: HfrFeatureFrame, val remote: HfrFeatureFrame, val deltaMs: Double)
 
     fun match(local: HfrFeatureTrack, remote: HfrFeatureTrack): List<V44MatchedFrame> {
         val maxDeltaMs = min(12.0, max(6.0, 1000.0 / min(local.fps, remote.fps) * 1.35))
-
-        // Pick the globally closest time pairs first. A local-first greedy walk lets an
-        // intermediate 240fps frame consume the exact 120fps counterpart that belongs to the
-        // next frame, which inflates jitter even when both tracks are perfectly synchronized.
         val candidates = buildList {
-            for (lf in local.frames) {
-                for (rf in remote.frames) {
-                    val delta = abs(rf.timeFromImpactMs - lf.timeFromImpactMs)
-                    if (delta <= maxDeltaMs) add(Candidate(lf, rf, delta))
-                }
+            for (lf in local.frames) for (rf in remote.frames) {
+                val delta = abs(rf.timeFromImpactMs - lf.timeFromImpactMs)
+                if (delta <= maxDeltaMs) add(Candidate(lf, rf, delta))
             }
         }.sortedWith(
             compareBy<Candidate> { it.deltaMs }
@@ -136,19 +114,17 @@ object V44StereoMatcher {
             selected += candidate
         }
 
-        return selected
-            .sortedBy { it.local.timeFromImpactMs }
-            .map { candidate ->
-                val lf = candidate.local
-                val rf = candidate.remote
-                V44MatchedFrame(
-                    local = lf,
-                    remote = rf,
-                    deltaMs = candidate.deltaMs,
-                    ballDeltaCm = distance(lf.ballXcm, lf.ballYcm, rf.ballXcm, rf.ballYcm),
-                    putterCenterDeltaCm = putterCenterDistance(lf, rf)
-                )
-            }
+        return selected.sortedBy { it.local.timeFromImpactMs }.map { candidate ->
+            val lf = candidate.local
+            val rf = candidate.remote
+            V44MatchedFrame(
+                local = lf,
+                remote = rf,
+                deltaMs = candidate.deltaMs,
+                ballDeltaCm = distance(lf.ballXcm, lf.ballYcm, rf.ballXcm, rf.ballYcm),
+                putterCenterDeltaCm = putterCenterDistance(lf, rf)
+            )
+        }
     }
 
     private fun distance(ax: Double?, ay: Double?, bx: Double?, by: Double?): Double? {
@@ -157,14 +133,10 @@ object V44StereoMatcher {
     }
 
     private fun putterCenterDistance(a: HfrFeatureFrame, b: HfrFeatureFrame): Double? {
-        val ahx = a.heelXcm ?: return null
-        val ahy = a.heelYcm ?: return null
-        val atx = a.toeXcm ?: return null
-        val aty = a.toeYcm ?: return null
-        val bhx = b.heelXcm ?: return null
-        val bhy = b.heelYcm ?: return null
-        val btx = b.toeXcm ?: return null
-        val bty = b.toeYcm ?: return null
+        val ahx = a.heelXcm ?: return null; val ahy = a.heelYcm ?: return null
+        val atx = a.toeXcm ?: return null; val aty = a.toeYcm ?: return null
+        val bhx = b.heelXcm ?: return null; val bhy = b.heelYcm ?: return null
+        val btx = b.toeXcm ?: return null; val bty = b.toeYcm ?: return null
         return hypot((ahx + atx) / 2.0 - (bhx + btx) / 2.0, (ahy + aty) / 2.0 - (bhy + bty) / 2.0)
     }
 }
@@ -217,7 +189,7 @@ object V44StereoReadinessEngine {
         maxAgeMs: Long = 10_000L
     ): V44StereoReadiness {
         val localSnapshot = local ?: return empty("메인폰 HFR track 없음")
-        if (localSnapshot.publishedAtMs <= 0L || nowMs - localSnapshot.publishedAtMs !in 0L..maxAgeMs) {
+        if (localSnapshot.storedAtMs <= 0L || nowMs - localSnapshot.storedAtMs !in 0L..maxAgeMs) {
             return empty("메인폰 track 오래됨")
         }
         val localTrack = normalizeLocal(localSnapshot.track) ?: return empty("메인폰 track 품질 부족")
@@ -234,8 +206,8 @@ object V44StereoReadinessEngine {
         maxAgeMs: Long
     ): V44StereoReadiness? {
         val remoteTrack = V44TrackValidator.normalize(packet.track, packet.view) ?: return null
-        val age = nowMs - packet.capturedAtMs
-        if (age !in 0L..maxAgeMs) return null
+        val receiveAge = nowMs - packet.receivedAtMs
+        if (receiveAge !in 0L..maxAgeMs) return null
         val skew = abs(packet.capturedAtMs - localSnapshot.publishedAtMs)
         val matches = V44StereoMatcher.match(localTrack, remoteTrack)
         val ball = matches.mapNotNull { it.ballDeltaCm }
@@ -258,7 +230,7 @@ object V44StereoReadinessEngine {
         val ballCoverage = (ball.size / 10.0).coerceIn(0.0, 1.0) * 25.0
         val putterCoverage = (putter.size / 8.0).coerceIn(0.0, 1.0) * 20.0
         val agreement = medianBall?.let { (20.0 * (1.0 - it / 8.0)).coerceIn(0.0, 20.0) } ?: 0.0
-        val freshness = (10.0 * (1.0 - age.toDouble() / maxAgeMs.coerceAtLeast(1L))).coerceIn(0.0, 10.0)
+        val freshness = (10.0 * (1.0 - receiveAge.toDouble() / maxAgeMs.coerceAtLeast(1L))).coerceIn(0.0, 10.0)
         val viewBonus = when (packet.view) {
             V15CameraView.TOP -> 1.0
             V15CameraView.FACE_ON -> .98
@@ -293,8 +265,7 @@ object V44StereoReadinessEngine {
 
     private fun median(values: List<Double>): Double? {
         if (values.isEmpty()) return null
-        val sorted = values.sorted()
-        val mid = sorted.size / 2
+        val sorted = values.sorted(); val mid = sorted.size / 2
         return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2.0
     }
 
@@ -314,11 +285,12 @@ object V44StereoReadinessEngine {
 }
 
 object V44StereoPrepRuntime {
+    private const val TRACK_CACHE_MAX_AGE_MS = 15_000L
+
     fun snapshot(nowMs: Long = System.currentTimeMillis()): V44StereoReadiness {
-        val published = V41HfrFeatureTrackRuntime.latestPublishedAtMs
-        val local = V41HfrFeatureTrackRuntime.latest?.let { HfrFeatureTrackSnapshot(it, published) }
-        val remotes = V43RemoteFeatureTrackRuntime.fresh(nowMs = nowMs, maxAgeMs = 10_000L)
-        return V44StereoReadinessEngine.best(local, remotes, nowMs, 10_000L)
+        val local = V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = nowMs, maxAgeMs = TRACK_CACHE_MAX_AGE_MS)
+        val remotes = V43RemoteFeatureTrackRuntime.fresh(nowMs = nowMs, maxAgeMs = TRACK_CACHE_MAX_AGE_MS)
+        return V44StereoReadinessEngine.best(local, remotes, nowMs, TRACK_CACHE_MAX_AGE_MS)
     }
 }
 
