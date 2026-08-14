@@ -8,7 +8,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 fun showV49SessionInsightsDialog(context: Context) {
-    val s = V49SessionInsightsRuntime.snapshot
+    val s = V49LiveSessionInsights.snapshot()
     val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(context.pvDp(18), context.pvDp(8), context.pvDp(18), context.pvDp(6))
