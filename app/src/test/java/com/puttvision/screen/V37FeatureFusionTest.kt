@@ -96,4 +96,26 @@ class V37FeatureFusionTest {
         val oldFused = requireNotNull(V37FeatureFusion.fuse(listOf(primary, old), now))
         assertTrue(freshFused.ballSpeedMps > oldFused.ballSpeedMps)
     }
+
+    @Test fun duplicateCameraIdUsesNewestPacketNotListOrder() {
+        val now = 60_000L
+        val primary = measurement("primary", V15CameraView.PRIMARY, metrics(ball = 1.4), now)
+        val oldPacket = measurement("top", V15CameraView.TOP, metrics(ball = 1.8), now, ageMs = 900L)
+        val newestPacket = measurement("top", V15CameraView.TOP, metrics(ball = 1.2), now, ageMs = 80L)
+        val fused = requireNotNull(V37FeatureFusion.fuse(listOf(primary, oldPacket, newestPacket), now))
+        assertTrue(fused.ballSpeedMps < 1.4)
+        assertEquals(1, V37FeatureFusion.diagnostics.companionCount)
+    }
+
+    @Test fun runtimeClearImmediatelyResetsStaleMultiPhoneDiagnostics() {
+        V37FeatureFusionRuntime.clear()
+        val now = System.currentTimeMillis()
+        V37FeatureFusionRuntime.submit(
+            measurement("top", V15CameraView.TOP, metrics(ball = 1.6), now)
+        )
+        V37FeatureFusionRuntime.fusePrimary(metrics(ball = 1.4))
+        assertEquals(1, V37FeatureFusion.diagnostics.companionCount)
+        V37FeatureFusionRuntime.clear()
+        assertEquals(0, V37FeatureFusion.diagnostics.companionCount)
+    }
 }
