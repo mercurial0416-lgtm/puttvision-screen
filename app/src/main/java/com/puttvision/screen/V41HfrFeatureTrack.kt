@@ -58,7 +58,7 @@ object V41HfrFeatureTrackRuntime {
         latestTimeUncertaintyMs = estimate.uncertaintyMs
     }
 
-    fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 10_000L): HfrFeatureTrackSnapshot? {
+    fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 1_500L): HfrFeatureTrackSnapshot? {
         val track = latest ?: return null
         val event = latestPublishedAtMs
         val stored = latestStoredAtMs
