@@ -59,49 +59,42 @@ jobs:
             -H "x-github-token: $GH_TOKEN" \
             --data-binary "$PAYLOAD" > prepare.json
           jq -e '.ok == true and .action == "prepare"' prepare.json >/dev/null
-          echo "PV_UPLOAD_TOKEN=$(jq -r '.uploadToken' prepare.json)" >> "$GITHUB_ENV"
-          echo "PV_TUS_ENDPOINT=$(jq -r '.tusEndpoint' prepare.json)" >> "$GITHUB_ENV"
+          TOKEN=$(jq -r '.uploadToken' prepare.json)
+          echo "::add-mask::$TOKEN"
+          echo "PV_UPLOAD_TOKEN=$TOKEN" >> "$GITHUB_ENV"
           echo "PV_OBJECT_PATH=$(jq -r '.objectPath' prepare.json)" >> "$GITHUB_ENV"
           echo "PV_APK_URL=$(jq -r '.apkUrl' prepare.json)" >> "$GITHUB_ENV"
           echo "PV_MANIFEST_URL=$(jq -r '.manifestUrl' prepare.json)" >> "$GITHUB_ENV"
 
-      - name: Upload APK directly with signed TUS token
+      - name: Upload APK directly with signed Storage URL
+        env:
+          SUPABASE_URL: https://razejagceyznnajioxgx.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_fjgUBLTNcWG5-f8EDFpLyw_P5wXmmFS
         shell: bash
         run: |
           set -euo pipefail
-          npm install --no-save --no-package-lock tus-js-client@4.3.1 >/dev/null
+          npm install --no-save --no-package-lock @supabase/supabase-js@2.57.4 >/dev/null
           node <<'NODE'
           const fs = require('fs');
-          const tus = require('tus-js-client');
-          const file = 'puttvision-consumer.apk';
-          const size = fs.statSync(file).size;
-          const upload = new tus.Upload(fs.createReadStream(file), {
-            endpoint: process.env.PV_TUS_ENDPOINT,
-            uploadSize: size,
-            retryDelays: [0, 1000, 3000, 5000, 10000],
-            headers: { 'x-signature': process.env.PV_UPLOAD_TOKEN },
-            uploadDataDuringCreation: true,
-            removeFingerprintOnSuccess: true,
-            chunkSize: 6 * 1024 * 1024,
-            metadata: {
-              bucketName: 'puttvision-update',
-              objectName: process.env.PV_OBJECT_PATH,
-              contentType: 'application/vnd.android.package-archive',
-              cacheControl: '31536000',
-            },
-            onError(error) {
-              console.error(error);
-              process.exit(1);
-            },
-            onProgress(uploaded, total) {
-              const pct = ((uploaded / total) * 100).toFixed(1);
-              console.log(`TUS ${pct}%`);
-            },
-            onSuccess() {
-              console.log('TUS upload complete');
-            },
+          const { createClient } = require('@supabase/supabase-js');
+          (async () => {
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+            });
+            const apk = fs.readFileSync('puttvision-consumer.apk');
+            const { data, error } = await supabase.storage
+              .from('puttvision-update')
+              .uploadToSignedUrl(process.env.PV_OBJECT_PATH, process.env.PV_UPLOAD_TOKEN, apk, {
+                contentType: 'application/vnd.android.package-archive',
+                cacheControl: '31536000',
+              });
+            if (error) throw error;
+            if (!data?.path) throw new Error('signed upload completed without object path');
+            console.log(`Signed upload complete: ${data.path}`);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
           });
-          upload.start();
           NODE
 
       - name: Verify public APK SHA before publishing manifest
