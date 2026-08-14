@@ -27,6 +27,8 @@ class GameEngine {
         private set
     @Volatile var personalCoachSnapshot: V16PersonalCoachSnapshot? = null
         private set
+    @Volatile var adaptiveCoachSnapshot: V46AdaptiveCoachSnapshot? = null
+        private set
     @Volatile var dailyTrainingPlan: V16DailyTrainingPlan = V16TrainingPlanner.build(null)
         private set
     @Volatile var putterFitRecommendation: V15PutterFitRecommendation? = null
@@ -62,7 +64,9 @@ class GameEngine {
         putterFitRecommendation = V15PutterFitRuntime.latest
         V16Runtime.update(records)
         personalCoachSnapshot = V16Runtime.personalCoach
-        dailyTrainingPlan = V16Runtime.trainingPlan
+        V46AdaptiveCoachRuntime.update(records)
+        adaptiveCoachSnapshot = V46AdaptiveCoachRuntime.snapshot
+        dailyTrainingPlan = V46AdaptiveTrainingPlan.adapt(V16Runtime.trainingPlan, adaptiveCoachSnapshot)
         V20PerformanceRuntime.update(records)
         performanceCompare = V20PerformanceRuntime.report
     }
@@ -154,7 +158,9 @@ class GameEngine {
                 putterFitRecommendation = V15PutterFitRuntime.latest
                 V16Runtime.update(recentRecords)
                 personalCoachSnapshot = V16Runtime.personalCoach
-                dailyTrainingPlan = V16Runtime.trainingPlan
+                V46AdaptiveCoachRuntime.update(recentRecords)
+                adaptiveCoachSnapshot = V46AdaptiveCoachRuntime.snapshot
+                dailyTrainingPlan = V46AdaptiveTrainingPlan.adapt(V16Runtime.trainingPlan, adaptiveCoachSnapshot)
                 V20PerformanceRuntime.update(recentRecords)
                 performanceCompare = V20PerformanceRuntime.report
                 V31TrainingSessionRuntime.onRecord(record)
