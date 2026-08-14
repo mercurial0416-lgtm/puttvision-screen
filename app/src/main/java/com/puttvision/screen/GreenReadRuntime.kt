@@ -27,6 +27,7 @@ object GreenReadRuntime {
             }
         }
         V31TrainingSessionRuntime.install(context)
+        V33OnlineOutbox.install(context)
     }
 
     fun prefetch(settings: GreenSettings) {
