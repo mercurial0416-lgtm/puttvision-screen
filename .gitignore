@@ -3,3 +3,6 @@
 local.properties
 *.iml
 .idea/
+*.jks
+*.keystore
+ci/*.jks.b64
