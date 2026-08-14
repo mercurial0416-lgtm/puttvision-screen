@@ -11,6 +11,40 @@ data class V38CornerDecision(
     val stability: Double
 )
 
+/** Keeps the detector's four physical corners matched to the prior lock even if detector ordering flips. */
+object V44CornerOrdering {
+    fun align(reference: List<V38Point>, input: List<V38Point>): List<V38Point> {
+        if (reference.size != 4 || input.size != 4) return input
+        var best = input
+        var bestCost = Double.POSITIVE_INFINITY
+        val p = IntArray(4)
+        val used = BooleanArray(4)
+        fun visit(depth: Int) {
+            if (depth == 4) {
+                var cost = 0.0
+                for (i in 0..3) {
+                    val dx = reference[i].x - input[p[i]].x
+                    val dy = reference[i].y - input[p[i]].y
+                    cost += dx * dx + dy * dy
+                }
+                if (cost < bestCost) {
+                    bestCost = cost
+                    best = p.map { input[it] }
+                }
+                return
+            }
+            for (i in 0..3) if (!used[i]) {
+                used[i] = true
+                p[depth] = i
+                visit(depth + 1)
+                used[i] = false
+            }
+        }
+        visit(0)
+        return best
+    }
+}
+
 /**
  * Keeps AR locked through normal 1-2px calibration jitter, but refuses to smear a real camera move.
  * A large move must repeat for three frames before the new geometry is adopted.
@@ -32,17 +66,17 @@ class V38CornerStabilizer {
             stableFrames = 1
             return V38CornerDecision(locked!!, stable = false, reacquired = false, stability = .45)
         }
-
-        val maxDelta = current.indices.maxOf { distance(current[it], input[it]) }
-        val meanDelta = current.indices.map { distance(current[it], input[it]) }.average()
+        val aligned = V44CornerOrdering.align(current, input)
+        val maxDelta = current.indices.maxOf { distance(current[it], aligned[it]) }
+        val meanDelta = current.indices.map { distance(current[it], aligned[it]) }.average()
         if (maxDelta <= movePx) {
             candidate = null
             candidateFrames = 0
             val alpha = if (maxDelta <= jitterPx) .18f else .08f
             locked = current.indices.map { i ->
                 V38Point(
-                    current[i].x + (input[i].x - current[i].x) * alpha,
-                    current[i].y + (input[i].y - current[i].y) * alpha
+                    current[i].x + (aligned[i].x - current[i].x) * alpha,
+                    current[i].y + (aligned[i].y - current[i].y) * alpha
                 )
             }
             stableFrames = (stableFrames + 1).coerceAtMost(30)
@@ -52,17 +86,18 @@ class V38CornerStabilizer {
         }
 
         val priorCandidate = candidate
-        val candidateConsistent = priorCandidate != null && priorCandidate.indices.maxOf { distance(priorCandidate[it], input[it]) } <= jitterPx * 2.0
+        val candidateAligned = priorCandidate?.let { V44CornerOrdering.align(it, aligned) } ?: aligned
+        val candidateConsistent = priorCandidate != null && priorCandidate.indices.maxOf { distance(priorCandidate[it], candidateAligned[it]) } <= jitterPx * 2.0
         if (candidateConsistent) {
             candidate = priorCandidate!!.indices.map { i ->
                 V38Point(
-                    priorCandidate[i].x + (input[i].x - priorCandidate[i].x) * .35f,
-                    priorCandidate[i].y + (input[i].y - priorCandidate[i].y) * .35f
+                    priorCandidate[i].x + (candidateAligned[i].x - priorCandidate[i].x) * .35f,
+                    priorCandidate[i].y + (candidateAligned[i].y - priorCandidate[i].y) * .35f
                 )
             }
             candidateFrames++
         } else {
-            candidate = input.map { it.copy() }
+            candidate = aligned.map { it.copy() }
             candidateFrames = 1
         }
         stableFrames = 0
