@@ -25,7 +25,7 @@ data class V42HfrAnalysisHealth(
         get() = "$calibrationMode · CAL ${calibrationMs}ms · TOTAL ${totalAnalysisMs}ms · ${fps}fps · TRACK $ballTrackFrames/$putterTrackFrames"
 }
 
-/** Latest successful precision-analysis health snapshot plus a bounded long-session numeric window. */
+/** Latest successful precision-analysis snapshot. The V43 window intentionally survives per-shot clears. */
 object V42HfrAnalysisHealthRuntime {
     @Volatile var latest: V42HfrAnalysisHealth? = null
         private set
@@ -35,7 +35,13 @@ object V42HfrAnalysisHealthRuntime {
         V43HfrHealthWindow.publish(value)
     }
 
+    /** Called before each analysis: clear only the per-shot snapshot, not long-session history. */
     fun clear() {
+        latest = null
+    }
+
+    /** Explicit session/reset hook when long-session history really should be discarded. */
+    fun resetHistory() {
         latest = null
         V43HfrHealthWindow.clear()
     }
