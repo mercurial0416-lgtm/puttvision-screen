@@ -159,6 +159,7 @@ class GameEngine {
                 performanceCompare = V20PerformanceRuntime.report
                 V31TrainingSessionRuntime.onRecord(record)
                 V33OnlineOutbox.onRecord(record)
+                V34WeeklyRuntime.onRecord(record)
                 onRecordFinalized?.invoke(record)
                 gameModes.onResult(r)
                 V15AutoFlowRuntime.result()

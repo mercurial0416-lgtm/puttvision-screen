@@ -98,8 +98,8 @@ fun showProductSetupDialog(
         coach?.let { "${it.primary.headline} · 개선 ${it.improvementScore}" } ?: "8구부터 개인 패턴 학습"
     ) { showV16PersonalCoachDialog(context) })
 
-    addAction(action("ONLINE LEAGUE", V31OnlineRuntime.statusLabel(context)) {
-        showV31OnlineLeagueDialog(context)
+    addAction(action("ONLINE LEAGUE", "${V31OnlineRuntime.statusLabel(context)} · 서버 검증") {
+        showV34OnlineHub(context)
     })
 
     addAction(action("GREEN READ TRAINING", "${V20GreenReadTrainingRuntime.mode.label} · 샷 후 정답 공개") {

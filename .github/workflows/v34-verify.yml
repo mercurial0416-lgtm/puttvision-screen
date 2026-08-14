@@ -1,0 +1,55 @@
+name: V34 verify
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ 'agent/v34-*' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v34-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject tracked signing material
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden=$(git ls-files | grep -E '(^|/).+\.(jks|keystore)$|(^|/)ci/.+\.jks\.b64$' || true)
+          if [ -n "$forbidden" ]; then
+            echo "Tracked signing material is forbidden:" >&2
+            echo "$forbidden" >&2
+            exit 1
+          fi
+
+      - name: Reject release-signing fallback credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -nE "PUTTVISION_(STORE_PASSWORD|KEY_PASSWORD|KEY_ALIAS).*\|\|" .github/workflows/release-apk.yml; then
+            echo "Release signing secrets must not have fallback values" >&2
+            exit 1
+          fi
+          grep -q 'Missing required release signing secret' .github/workflows/release-apk.yml
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Kotlin regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
