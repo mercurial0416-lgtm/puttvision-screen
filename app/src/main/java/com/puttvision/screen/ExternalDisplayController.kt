@@ -20,6 +20,7 @@ class GamePresentation(
         val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
         root.addView(V18SimulatorFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
         root.addView(V27PaceLineOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
+        root.addView(V36OnlineMatchOverlay(context), FrameLayout.LayoutParams(-1, -1))
         root.addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
     }
