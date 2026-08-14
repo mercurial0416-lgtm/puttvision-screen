@@ -16,12 +16,11 @@ jobs:
       - name: Download signing escrow with repository token only
         env:
           GH_TOKEN: ${{ github.token }}
-          ESCROW_TAG: puttvision-signing-vault-v1
         shell: bash
         run: |
           set -euo pipefail
           ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq '.[] | select(.draft == true and .tag_name == env.ESCROW_TAG) | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
+            --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v1") | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
           if [ -z "$ASSET_ID" ]; then
             echo "Private signing escrow asset not found" >&2
             exit 1
