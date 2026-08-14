@@ -285,28 +285,55 @@ object V43FeatureTrackWire {
                     ))
                 }
             }
+            val view = runCatching { V15CameraView.valueOf(j.getString("view")) }.getOrDefault(V15CameraView.PRIMARY)
+            val rawTrack = HfrFeatureTrack(j.getInt("fps"), j.getInt("impact"), frames)
+            val normalized = V44TrackValidator.normalize(rawTrack, view) ?: error("invalid feature track")
             V43FeatureTrackPacket(
-                cameraId = j.getString("camera"),
-                view = runCatching { V15CameraView.valueOf(j.getString("view")) }.getOrDefault(V15CameraView.PRIMARY),
+                cameraId = j.getString("camera").trim().takeIf { it.isNotEmpty() } ?: error("camera"),
+                view = view,
                 capturedAtMs = captured,
-                sequence = j.getLong("seq"),
-                track = HfrFeatureTrack(j.getInt("fps"), j.getInt("impact"), frames)
+                sequence = j.getLong("seq").also { require(it >= 0L) },
+                track = normalized
             )
         }.getOrNull()
 }
 
 /** Host-side compact feature geometry only; no bitmaps/video cross the network. */
 object V43RemoteFeatureTrackRuntime {
+    private const val MAX_CAMERAS = 3
     private val tracks = ConcurrentHashMap<String, V43FeatureTrackPacket>()
 
-    fun publish(packet: V43FeatureTrackPacket) {
-        tracks[packet.cameraId] = packet.copy(track = packet.track.copy(frames = packet.track.frames.take(V43FeatureTrackWire.MAX_FRAMES)))
+    fun publish(packet: V43FeatureTrackPacket): Boolean {
+        val normalized = V44TrackValidator.normalize(packet.track, packet.view) ?: return false
+        val incoming = packet.copy(track = normalized)
+        var accepted = false
+        tracks.compute(incoming.cameraId) { _, current ->
+            val newer = current == null || incoming.sequence > current.sequence ||
+                (incoming.sequence == current.sequence && incoming.capturedAtMs > current.capturedAtMs)
+            if (newer) {
+                accepted = true
+                incoming
+            } else current
+        }
+        trimToCameraBudget()
+        return accepted
     }
 
-    fun fresh(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 2200L): List<V43FeatureTrackPacket> =
-        tracks.values.filter { nowMs - it.capturedAtMs in 0L..maxAgeMs }.sortedByDescending { it.capturedAtMs }
+    fun fresh(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 2200L): List<V43FeatureTrackPacket> {
+        tracks.entries.removeIf { nowMs - it.value.capturedAtMs !in -300L..maxAgeMs }
+        return tracks.values.sortedByDescending { it.capturedAtMs }
+    }
 
     fun clear() = tracks.clear()
+
+    internal fun size(): Int = tracks.size
+
+    private fun trimToCameraBudget() {
+        if (tracks.size <= MAX_CAMERAS) return
+        tracks.values.sortedByDescending { it.capturedAtMs }
+            .drop(MAX_CAMERAS)
+            .forEach { tracks.remove(it.cameraId, it) }
+    }
 }
 
 
