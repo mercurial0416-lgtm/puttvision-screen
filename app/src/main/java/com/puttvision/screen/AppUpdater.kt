@@ -159,7 +159,7 @@ class AppUpdater(
     private fun downloadAndInstall(info: UpdateInfo) {
         if (!downloadInFlight.compareAndSet(false, true)) return
         executor.execute {
-            var apk: File? = null
+            var failedApk: File? = null
             try {
                 val validation = V49UpdatePolicy.validateInfo(info, publicChannel = info.githubToken.isNullOrBlank())
                 require(validation.valid) { validation.reason ?: "업데이트 정보 검증 실패" }
@@ -169,7 +169,8 @@ class AppUpdater(
 
                 val dir = File(activity.cacheDir, "updates").apply { mkdirs() }
                 V49UpdatePolicy.cleanCache(dir)
-                apk = File(dir, "puttvision-${info.versionCode}.apk")
+                val targetApk = File(dir, "puttvision-${info.versionCode}.apk")
+                failedApk = targetApk
 
                 val input = if (!info.githubToken.isNullOrBlank() && info.apkUrl.startsWith("https://api.github.com/")) {
                     openGithubAsset(info.apkUrl, info.githubToken)
@@ -177,24 +178,25 @@ class AppUpdater(
                     openHttpStream(info.apkUrl)
                 }
 
-                input.use { source -> apk.outputStream().use { output -> source.copyTo(output) } }
-                require(apk.length() in (32 * 1024L + 1)..V49UpdatePolicy.MAX_APK_BYTES) {
+                input.use { source -> targetApk.outputStream().use { output -> source.copyTo(output) } }
+                require(targetApk.length() in (32 * 1024L + 1)..V49UpdatePolicy.MAX_APK_BYTES) {
                     "다운로드된 APK 파일 크기가 비정상적입니다."
                 }
 
                 info.sha256?.let { expected ->
-                    val actual = sha256(apk)
+                    val actual = sha256(targetApk)
                     require(actual.equals(expected, ignoreCase = true)) { "APK SHA-256 검증 실패" }
                 }
 
-                val candidateCode = verifyApkIdentity(apk)
+                val candidateCode = verifyApkIdentity(targetApk)
                 require(V49UpdatePolicy.isUpgrade(currentInstalledVersionCode(), candidateCode)) {
                     "다운로드 APK가 현재 버전보다 새 버전이 아닙니다"
                 }
 
-                onUi { install(apk, info) }
+                failedApk = null
+                onUi { install(targetApk, info) }
             } catch (t: Throwable) {
-                runCatching { apk?.takeIf { it.exists() }?.delete() }
+                runCatching { failedApk?.takeIf { it.exists() }?.delete() }
                 onUi { activity.pvMessageDialog("업데이트 실패", t.message ?: "다운로드 오류").show() }
             } finally {
                 downloadInFlight.set(false)
