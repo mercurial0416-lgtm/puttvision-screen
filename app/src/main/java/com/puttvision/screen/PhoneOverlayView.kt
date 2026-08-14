@@ -21,6 +21,7 @@ class PhoneOverlayView(context: Context) : View(context) {
         super.onDraw(c)
         val d = resources.displayMetrics.density
         drawGrid(c, d)
+        drawArGreenRead(c, d)
         drawCameraBadges(c, d)
         drawCalibrationBadge(c, d)
         drawTracking(c, d)
@@ -44,6 +45,65 @@ class PhoneOverlayView(context: Context) : View(context) {
         c.drawLine(width / 2f, 0f, width / 2f, height.toFloat(), p)
         c.drawCircle(width / 2f, height * .66f, 13f * d, p)
         p.style = Paint.Style.FILL
+    }
+
+    private fun drawArGreenRead(c: Canvas, d: Float) {
+        val frame = lastOverlay?.frameInfo ?: return
+        if (calibrationImagePoints.size != 4) return
+        val snap = V33ArGreenReadRuntime.snapshot(
+            V26ProductSettingsRuntime.settings,
+            calibrationImagePoints,
+            frame
+        ) ?: return
+        val points = snap.imagePoints.mapNotNull { mapRawToView(it, frame) }
+        if (points.size < 2) return
+
+        val path = Path().apply {
+            moveTo(points.first().x, points.first().y)
+            for (i in 1 until points.size) lineTo(points[i].x, points[i].y)
+        }
+
+        p.style = Paint.Style.STROKE
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        p.color = Color.argb(150, 0, 0, 0)
+        p.strokeWidth = 7.5f * d
+        c.drawPath(path, p)
+        p.color = Color.rgb(255, 211, 64)
+        p.strokeWidth = 3.2f * d
+        c.drawPath(path, p)
+
+        val start = points.first()
+        val cup = points.last()
+        p.style = Paint.Style.FILL
+        p.color = Color.argb(220, 6, 10, 13)
+        c.drawCircle(start.x, start.y, 7.5f * d, p)
+        p.color = Color.rgb(255, 211, 64)
+        c.drawCircle(start.x, start.y, 4.2f * d, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 2.2f * d
+        p.color = Color.WHITE
+        c.drawCircle(cup.x, cup.y, 8.5f * d, p)
+        p.style = Paint.Style.FILL
+        p.color = Color.rgb(255, 211, 64)
+        c.drawCircle(cup.x, cup.y, 2.8f * d, p)
+
+        val label = "AR LINE  ·  BALL %.2f m/s  ·  CUP %.2f m/s".format(
+            snap.ballSpeedMps,
+            snap.cupSpeedMps
+        )
+        p.textSize = 7.2f * d
+        p.typeface = Typeface.DEFAULT_BOLD
+        val textW = p.measureText(label)
+        val left = ((width - textW) / 2f - 10f * d).coerceAtLeast(132f * d)
+        val right = (left + textW + 20f * d).coerceAtMost(width - 10f * d)
+        if (right > left) {
+            val top = 64f * d
+            p.color = Color.argb(208, 6, 10, 13)
+            c.drawRoundRect(RectF(left, top, right, top + 23f * d), 10f * d, 10f * d, p)
+            p.color = Color.rgb(255, 211, 64)
+            c.drawText(label, left + 10f * d, top + 15.5f * d, p)
+        }
     }
 
     private fun drawCameraBadges(c: Canvas, d: Float) {
