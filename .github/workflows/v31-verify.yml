@@ -1,14 +1,14 @@
-name: Verify V31 online and executable training
+name: Verify V33 final AR online durability
 
 on:
   push:
-    branches: [ agent/v31-final ]
+    branches: [ agent/v33-verify-final ]
 
 permissions:
   contents: read
 
 concurrency:
-  group: v31-${{ github.ref }}
+  group: v33-final-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
