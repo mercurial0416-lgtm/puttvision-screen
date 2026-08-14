@@ -100,24 +100,55 @@ data class V44MatchedFrame(
 )
 
 object V44StereoMatcher {
+    private data class Candidate(
+        val local: HfrFeatureFrame,
+        val remote: HfrFeatureFrame,
+        val deltaMs: Double
+    )
+
     fun match(local: HfrFeatureTrack, remote: HfrFeatureTrack): List<V44MatchedFrame> {
         val maxDeltaMs = min(12.0, max(6.0, 1000.0 / min(local.fps, remote.fps) * 1.35))
-        val available = remote.frames.toMutableList()
-        val result = ArrayList<V44MatchedFrame>()
-        for (lf in local.frames.sortedBy { it.timeFromImpactMs }) {
-            val candidate = available.minByOrNull { abs(it.timeFromImpactMs - lf.timeFromImpactMs) } ?: continue
-            val delta = abs(candidate.timeFromImpactMs - lf.timeFromImpactMs)
-            if (delta > maxDeltaMs) continue
-            available.remove(candidate)
-            result += V44MatchedFrame(
-                local = lf,
-                remote = candidate,
-                deltaMs = delta,
-                ballDeltaCm = distance(lf.ballXcm, lf.ballYcm, candidate.ballXcm, candidate.ballYcm),
-                putterCenterDeltaCm = putterCenterDistance(lf, candidate)
-            )
+
+        // Pick the globally closest time pairs first. A local-first greedy walk lets an
+        // intermediate 240fps frame consume the exact 120fps counterpart that belongs to the
+        // next frame, which inflates jitter even when both tracks are perfectly synchronized.
+        val candidates = buildList {
+            for (lf in local.frames) {
+                for (rf in remote.frames) {
+                    val delta = abs(rf.timeFromImpactMs - lf.timeFromImpactMs)
+                    if (delta <= maxDeltaMs) add(Candidate(lf, rf, delta))
+                }
+            }
+        }.sortedWith(
+            compareBy<Candidate> { it.deltaMs }
+                .thenBy { abs(it.local.timeFromImpactMs) + abs(it.remote.timeFromImpactMs) }
+                .thenBy { it.local.frame }
+                .thenBy { it.remote.frame }
+        )
+
+        val usedLocal = HashSet<Int>()
+        val usedRemote = HashSet<Int>()
+        val selected = ArrayList<Candidate>()
+        for (candidate in candidates) {
+            if (candidate.local.frame in usedLocal || candidate.remote.frame in usedRemote) continue
+            usedLocal += candidate.local.frame
+            usedRemote += candidate.remote.frame
+            selected += candidate
         }
-        return result
+
+        return selected
+            .sortedBy { it.local.timeFromImpactMs }
+            .map { candidate ->
+                val lf = candidate.local
+                val rf = candidate.remote
+                V44MatchedFrame(
+                    local = lf,
+                    remote = rf,
+                    deltaMs = candidate.deltaMs,
+                    ballDeltaCm = distance(lf.ballXcm, lf.ballYcm, rf.ballXcm, rf.ballYcm),
+                    putterCenterDeltaCm = putterCenterDistance(lf, rf)
+                )
+            }
     }
 
     private fun distance(ax: Double?, ay: Double?, bx: Double?, by: Double?): Double? {
