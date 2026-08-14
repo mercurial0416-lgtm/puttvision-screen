@@ -12,7 +12,7 @@ object V49Diagnostics {
     /** Feature 29: one shareable snapshot captures the exact transient state needed for a bug report. */
     fun snapshotText(nowMs: Long = System.currentTimeMillis()): String {
         val health = V47SoloIntegrityRuntime.health(nowMs)
-        val insight = V49SessionInsightsRuntime.snapshot
+        val insight = V49LiveSessionInsights.snapshot()
         val fusion = V37FeatureFusion.diagnostics
         val hfr = V43HfrHealthWindow.summary()
         val failures = V45HfrFailureRuntime.summary()
