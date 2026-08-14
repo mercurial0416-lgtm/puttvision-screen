@@ -173,6 +173,7 @@ class HighSpeedCaptureController(
             .start(callbackExecutor) { event ->
                 when (event) {
                     is VideoRecordEvent.Start -> {
+                        V50HfrCaptureClockRuntime.onRecordingStarted(file, fpsAtStart)
                         status("● ${fpsAtStart}fps RECORDING")
                         onStart(file, fpsAtStart)
                     }
