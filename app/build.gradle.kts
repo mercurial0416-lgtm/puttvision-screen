@@ -7,6 +7,7 @@ plugins {
 val licensePublicKey = (System.getenv("PV_LICENSE_PUBLIC_KEY_B64") ?: "")
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
+val externalReleaseSigning = System.getenv("PV_EXTERNAL_SIGNING") == "true"
 
 android {
     namespace = "com.puttvision.screen"
@@ -14,7 +15,8 @@ android {
 
     defaultConfig {
         applicationId = "com.puttvision.screen"
-        minSdk = 26
+        // API 28+ lets the compromised legacy signer be retired after an APK v3 proof-of-rotation handoff.
+        minSdk = 28
         targetSdk = 36
         versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 105
         versionName = System.getenv("PV_VERSION_NAME") ?: "1.2.0-v16"
@@ -52,7 +54,9 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            if (!externalReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

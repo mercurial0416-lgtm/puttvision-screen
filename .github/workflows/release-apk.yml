@@ -55,42 +55,96 @@ jobs:
             echo "No real-device reference dataset committed yet; release accuracy gate is armed but inactive."
           fi
 
-      - name: Require release signing secrets
+      - name: Restore rotated release signing bundle
         shell: bash
         env:
-          KEYSTORE_B64: ${{ secrets.PUTTVISION_KEYSTORE_B64 }}
-          STORE_PASSWORD: ${{ secrets.PUTTVISION_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.PUTTVISION_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.PUTTVISION_KEY_PASSWORD }}
+          SIGNING_BUNDLE_B64: ${{ secrets.PUTTVISION_SIGNING_BUNDLE_B64 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          for name in KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+          BUNDLE_FILE="$RUNNER_TEMP/puttvision-signing-bundle.tgz"
+
+          if [ -n "$SIGNING_BUNDLE_B64" ]; then
+            printf '%s' "$SIGNING_BUNDLE_B64" | base64 -d > "$BUNDLE_FILE"
+          else
+            ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v1") | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
+            if [ -z "$ASSET_ID" ]; then
+              echo "Missing required release signing secret: PUTTVISION_SIGNING_BUNDLE_B64; private signing escrow is also unavailable" >&2
+              exit 1
+            fi
+            gh api -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE_FILE"
+          fi
+
+          test -s "$BUNDLE_FILE"
+          SIGNING_DIR="$RUNNER_TEMP/puttvision-signing"
+          mkdir -p "$SIGNING_DIR"
+          tar -xzf "$BUNDLE_FILE" -C "$SIGNING_DIR"
+          test -s "$SIGNING_DIR/release.jks"
+          test -s "$SIGNING_DIR/signing-lineage"
+          test -s "$SIGNING_DIR/signing.env"
+          chmod 600 "$SIGNING_DIR/release.jks" "$SIGNING_DIR/signing-lineage" "$SIGNING_DIR/signing.env"
+
+          set -a
+          source "$SIGNING_DIR/signing.env"
+          set +a
+          for name in STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK; do
             if [ -z "${!name:-}" ]; then
-              echo "Missing required release signing secret: $name" >&2
+              echo "Signing bundle is missing $name" >&2
               exit 1
             fi
           done
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/puttvision-release.jks"
-          chmod 600 "$RUNNER_TEMP/puttvision-release.jks"
-          keytool -list \
-            -keystore "$RUNNER_TEMP/puttvision-release.jks" \
-            -storepass "$STORE_PASSWORD" \
-            -alias "$KEY_ALIAS" >/dev/null
+          keytool -list -keystore "$SIGNING_DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/puttvision-store.pass"
+          printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/puttvision-key.pass"
+          chmod 600 "$RUNNER_TEMP/puttvision-store.pass" "$RUNNER_TEMP/puttvision-key.pass"
+          echo "PV_SIGNING_DIR=$SIGNING_DIR" >> "$GITHUB_ENV"
+          echo "PV_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "PV_ROTATION_MIN_SDK=$ROTATION_MIN_SDK" >> "$GITHUB_ENV"
 
-      - name: Build signed consumer and developer APKs
+      - name: Build unsigned consumer and developer APKs
         env:
-          PUTTVISION_STORE_FILE: ${{ runner.temp }}/puttvision-release.jks
-          PUTTVISION_STORE_PASSWORD: ${{ secrets.PUTTVISION_STORE_PASSWORD }}
-          PUTTVISION_KEY_ALIAS: ${{ secrets.PUTTVISION_KEY_ALIAS }}
-          PUTTVISION_KEY_PASSWORD: ${{ secrets.PUTTVISION_KEY_PASSWORD }}
+          PV_EXTERNAL_SIGNING: 'true'
           PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
         run: gradle assembleConsumerRelease assembleDeveloperRelease
 
-      - name: Prepare verified assets
+      - name: Sign with rotated key lineage and verify APKs
         shell: bash
         run: |
-          cp app/build/outputs/apk/developer/release/app-developer-release.apk puttvision.apk
-          cp app/build/outputs/apk/consumer/release/app-consumer-release.apk puttvision-consumer.apk
+          set -euo pipefail
+          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -1 || true)
+          if [ -z "$APKSIGNER" ]; then
+            echo "Android apksigner not available" >&2
+            exit 1
+          fi
+
+          CONSUMER_UNSIGNED=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          DEVELOPER_UNSIGNED=$(find app/build/outputs/apk/developer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          test -s "$CONSUMER_UNSIGNED"
+          test -s "$DEVELOPER_UNSIGNED"
+
+          sign_one() {
+            local input="$1"
+            local output="$2"
+            "$APKSIGNER" sign \
+              --ks "$PV_SIGNING_DIR/release.jks" \
+              --ks-key-alias "$PV_KEY_ALIAS" \
+              --ks-pass "file:$RUNNER_TEMP/puttvision-store.pass" \
+              --key-pass "file:$RUNNER_TEMP/puttvision-key.pass" \
+              --lineage "$PV_SIGNING_DIR/signing-lineage" \
+              --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK" \
+              --v1-signing-enabled false \
+              --v2-signing-enabled false \
+              --v3-signing-enabled true \
+              --v4-signing-enabled false \
+              --out "$output" \
+              "$input"
+            "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 28 "$output"
+          }
+
+          sign_one "$CONSUMER_UNSIGNED" puttvision-consumer.apk
+          sign_one "$DEVELOPER_UNSIGNED" puttvision.apk
           sha256sum puttvision.apk > puttvision.apk.sha256
           sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
 
@@ -99,20 +153,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          set -euo pipefail
           ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
           if gh release view "$PV_TAG" >/dev/null 2>&1; then
             gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber
-            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · consumer/developer verified release" --latest
+            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · rotated-key verified consumer/developer release" --latest
           else
             gh release create "$PV_TAG" "${ASSETS[@]}" \
               --title "PuttVision $PV_VERSION_NAME" \
-              --notes "PuttVision $PV_VERSION_NAME · consumer/developer verified release" \
+              --notes "PuttVision $PV_VERSION_NAME · rotated-key verified consumer/developer release" \
               --latest
           fi
 
       - name: Prepare consumer update bundle
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p public-update
           cp puttvision-consumer.apk public-update/puttvision.apk
           SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)
