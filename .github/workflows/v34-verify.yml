@@ -1,16 +1,16 @@
-name: V34 verify
+name: V34+ service and release verify
 
 on:
   pull_request:
     branches: [ main ]
   push:
-    branches: [ 'agent/v34-*' ]
+    branches: [ 'agent/v34-*', 'agent/v35-*' ]
 
 permissions:
   contents: read
 
 concurrency:
-  group: v34-verify-${{ github.ref }}
+  group: service-release-verify-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -41,6 +41,15 @@ jobs:
             exit 1
           fi
           grep -q 'Missing required release signing secret' .github/workflows/release-apk.yml
+
+      - name: Require release accuracy regression gate wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ci/v20_accuracy_gate.py
+          grep -q 'Real-device measurement regression gate' .github/workflows/release-apk.yml
+          grep -q 'python3 ci/v20_accuracy_gate.py' .github/workflows/release-apk.yml
+          grep -q 'Accuracy fixture set is incomplete' .github/workflows/release-apk.yml
 
       - uses: actions/setup-java@v5
         with:

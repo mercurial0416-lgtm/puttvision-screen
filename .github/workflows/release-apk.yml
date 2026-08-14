@@ -39,6 +39,22 @@ jobs:
       - name: Regression tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
+      - name: Real-device measurement regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF=validation/v20_reference.csv
+          MEASURED=validation/v20_measured.csv
+          if [ -f "$REF" ] && [ -f "$MEASURED" ]; then
+            echo "Running BALL / START / FACE / PATH real-device accuracy gate"
+            python3 ci/v20_accuracy_gate.py "$REF" "$MEASURED"
+          elif [ -f "$REF" ] || [ -f "$MEASURED" ]; then
+            echo "Accuracy fixture set is incomplete; both $REF and $MEASURED are required" >&2
+            exit 1
+          else
+            echo "No real-device reference dataset committed yet; release accuracy gate is armed but inactive."
+          fi
+
       - name: Require release signing secrets
         shell: bash
         env:
