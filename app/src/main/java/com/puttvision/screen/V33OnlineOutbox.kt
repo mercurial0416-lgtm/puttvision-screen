@@ -3,7 +3,6 @@ package com.puttvision.screen
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.security.keystore.KeyProperties
 import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
@@ -30,19 +29,56 @@ object V33OnlineOutbox {
     private const val maxQueue = 96
 
     @Volatile private var appContext: Context? = null
+    @Volatile private var recoveredMatchId: String? = null
+    @Volatile private var recoveredMatchSeed: Long? = null
     private val flushing = AtomicBoolean(false)
+    private val refreshing = AtomicBoolean(false)
     private val retryHandler = Handler(Looper.getMainLooper())
 
     fun install(context: Context) {
         appContext = context.applicationContext
+        restoreCachedSession()
+        refreshSession()
         flush()
     }
 
     fun pendingCount(): Int = load().length()
 
+    fun activeMatchIdOrNull(): String? = V31OnlineRuntime.activeMatchId ?: recoveredMatchId
+
+    /** Shared deterministic seed even before the async resume response arrives. */
+    fun onlineSeedOrNull(): Long? {
+        recoveredMatchSeed?.let { return it }
+        val id = activeMatchIdOrNull() ?: return null
+        return stableSeed(id)
+    }
+
+    fun refreshSession() {
+        val context = appContext ?: return
+        if (!refreshing.compareAndSet(false, true)) return
+        Thread {
+            try {
+                val token = readOnlineToken(context) ?: return@Thread
+                val response = post(token, JSONObject().put("action", "resume")) ?: return@Thread
+                val match = response.optJSONObject("match")
+                if (match != null && match.optString("status") == "active") {
+                    recoveredMatchId = match.optString("id").takeIf { it.isNotBlank() }
+                    recoveredMatchSeed = if (match.has("seed")) match.optLong("seed") else recoveredMatchId?.let(::stableSeed)
+                    cacheSession(recoveredMatchId, recoveredMatchSeed)
+                } else {
+                    recoveredMatchId = null
+                    recoveredMatchSeed = null
+                    cacheSession(null, null)
+                }
+            } finally {
+                refreshing.set(false)
+            }
+        }.apply { name = "puttvision-online-resume"; isDaemon = true }.start()
+    }
+
     fun onRecord(record: ShotRecord) {
         val context = appContext ?: return
-        val matchId = V31OnlineRuntime.activeMatchId ?: return
+        val matchId = activeMatchIdOrNull() ?: return
         val shotNo = nextShotNo(context, matchId)
         val clientShotId = UUID.randomUUID().toString()
         val metrics = JSONObject()
@@ -80,8 +116,8 @@ object V33OnlineOutbox {
                 val token = readOnlineToken(context) ?: return@Thread
                 while (true) {
                     val item = synchronized(this) { load().optJSONObject(0) } ?: break
-                    val ok = send(token, item)
-                    if (!ok) {
+                    val response = send(token, item)
+                    if (response == null || !response.optBoolean("ok", false)) {
                         synchronized(this) {
                             val q = load()
                             q.optJSONObject(0)?.let { head ->
@@ -101,6 +137,11 @@ object V33OnlineOutbox {
                             save(q)
                         }
                     }
+                    if (response.optJSONObject("settlement")?.optString("status") == "finished") {
+                        recoveredMatchId = null
+                        recoveredMatchSeed = null
+                        cacheSession(null, null)
+                    }
                 }
             } finally {
                 flushing.set(false)
@@ -111,16 +152,20 @@ object V33OnlineOutbox {
 
     private fun scheduleRetry() {
         retryHandler.removeCallbacksAndMessages(null)
-        retryHandler.postDelayed({ flush() }, 15_000L)
+        retryHandler.postDelayed({ refreshSession(); flush() }, 15_000L)
     }
 
-    private fun send(token: String, item: JSONObject): Boolean = runCatching {
+    private fun send(token: String, item: JSONObject): JSONObject? {
         val body = JSONObject()
             .put("action", "submit-shot")
             .put("matchId", item.getString("matchId"))
             .put("clientShotId", item.getString("clientShotId"))
             .put("shotNo", item.getInt("shotNo"))
             .put("metrics", item.getJSONObject("metrics"))
+        return post(token, body)
+    }
+
+    private fun post(token: String, body: JSONObject): JSONObject? = runCatching {
         val c = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 7000
@@ -134,9 +179,9 @@ object V33OnlineOutbox {
         val code = c.responseCode
         val text = (if (code in 200..299) c.inputStream else c.errorStream)
             .bufferedReader().use { it.readText() }
-        if (code !in 200..299) return@runCatching false
-        JSONObject(text).optBoolean("ok", false)
-    }.getOrDefault(false)
+        if (code !in 200..299) return@runCatching null
+        JSONObject(text)
+    }.getOrNull()
 
     private fun nextShotNo(context: Context, matchId: String): Int {
         val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
@@ -161,6 +206,28 @@ object V33OnlineOutbox {
         ).joinToString("|")
         return MessageDigest.getInstance("SHA-256").digest(raw.toByteArray())
             .joinToString("") { "%02x".format(it) }
+    }
+
+    private fun stableSeed(id: String): Long {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(id.toByteArray())
+        var value = 0L
+        for (i in 0 until 8) value = (value shl 8) xor (bytes[i].toLong() and 0xffL)
+        return value
+    }
+
+    private fun cacheSession(matchId: String?, seed: Long?) {
+        val context = appContext ?: return
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE).edit().apply {
+            if (matchId == null) remove("active_match_id") else putString("active_match_id", matchId)
+            if (seed == null) remove("active_match_seed") else putLong("active_match_seed", seed)
+        }.apply()
+    }
+
+    private fun restoreCachedSession() {
+        val context = appContext ?: return
+        val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+        recoveredMatchId = prefs.getString("active_match_id", null)
+        recoveredMatchSeed = if (prefs.contains("active_match_seed")) prefs.getLong("active_match_seed", 0L) else null
     }
 
     private fun readOnlineToken(context: Context): String? = runCatching {
