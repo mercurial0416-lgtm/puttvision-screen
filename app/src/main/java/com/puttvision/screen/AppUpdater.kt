@@ -28,7 +28,7 @@ data class UpdateInfo(
 
 class AppUpdater(
     private val activity: Activity,
-    private val fallbackManifestUrl: String = "https://puttvision-update.vercel.app/update.json"
+    private val fallbackManifestUrl: String = "https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/update.json"
 ) {
     private val executor = Executors.newSingleThreadExecutor()
     private val tokenStore = SecureTokenStore(activity)

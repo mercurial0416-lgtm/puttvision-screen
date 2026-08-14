@@ -148,6 +148,77 @@ jobs:
           sha256sum puttvision.apk > puttvision.apk.sha256
           sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
 
+          SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)
+          SIZE=$(stat -c%s puttvision-consumer.apk)
+          echo "PV_RELEASE_SHA=$SHA" >> "$GITHUB_ENV"
+          echo "PV_APK_SIZE=$SIZE" >> "$GITHUB_ENV"
+
+      - name: Request one-time Supabase upload token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -nc \
+            --arg action prepare \
+            --argjson vc "$PV_VERSION_CODE" \
+            --arg vn "$PV_VERSION_NAME" \
+            --arg sha "$PV_RELEASE_SHA" \
+            --argjson size "$PV_APK_SIZE" \
+            '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}')
+          curl --fail-with-body --silent --show-error \
+            -X POST "$PUBLISH_URL" \
+            -H 'content-type: application/json' \
+            -H "x-github-token: $GH_TOKEN" \
+            --data-binary "$PAYLOAD" > prepare.json
+          jq -e '.ok == true and .action == "prepare"' prepare.json >/dev/null
+          TOKEN=$(jq -r '.uploadToken' prepare.json)
+          echo "::add-mask::$TOKEN"
+          echo "PV_UPLOAD_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "PV_OBJECT_PATH=$(jq -r '.objectPath' prepare.json)" >> "$GITHUB_ENV"
+          echo "PV_APK_URL=$(jq -r '.apkUrl' prepare.json)" >> "$GITHUB_ENV"
+          echo "PV_MANIFEST_URL=$(jq -r '.manifestUrl' prepare.json)" >> "$GITHUB_ENV"
+
+      - name: Upload consumer APK to public Supabase Storage
+        env:
+          SUPABASE_URL: https://razejagceyznnajioxgx.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_fjgUBLTNcWG5-f8EDFpLyw_P5wXmmFS
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock @supabase/supabase-js@2.57.4 >/dev/null
+          node <<'NODE'
+          const fs = require('fs');
+          const { createClient } = require('@supabase/supabase-js');
+          (async () => {
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+            });
+            const apk = fs.readFileSync('puttvision-consumer.apk');
+            const { data, error } = await supabase.storage
+              .from('puttvision-update')
+              .uploadToSignedUrl(process.env.PV_OBJECT_PATH, process.env.PV_UPLOAD_TOKEN, apk, {
+                contentType: 'application/vnd.android.package-archive',
+                cacheControl: '31536000',
+              });
+            if (error) throw error;
+            if (!data?.path) throw new Error('signed upload completed without object path');
+            console.log(`Signed upload complete: ${data.path}`);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Verify public consumer APK SHA before release
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --location "$PV_APK_URL" -o uploaded-public.apk
+          test "$(stat -c%s uploaded-public.apk)" -eq "$PV_APK_SIZE"
+          echo "$PV_RELEASE_SHA  uploaded-public.apk" | sha256sum -c -
+
       - name: Publish private GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -165,42 +236,46 @@ jobs:
               --latest
           fi
 
-      - name: Prepare consumer update bundle
+      - name: Publish verified Supabase update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAYLOAD=$(jq -nc \
+            --arg action finalize \
+            --argjson vc "$PV_VERSION_CODE" \
+            --arg vn "$PV_VERSION_NAME" \
+            --arg sha "$PV_RELEASE_SHA" \
+            --argjson size "$PV_APK_SIZE" \
+            '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}')
+          curl --fail-with-body --silent --show-error \
+            -X POST "$PUBLISH_URL" \
+            -H 'content-type: application/json' \
+            -H "x-github-token: $GH_TOKEN" \
+            --data-binary "$PAYLOAD" > finalize.json
+          jq -e '.ok == true and .action == "finalize"' finalize.json >/dev/null
+
+          LIVE=$(curl --fail-with-body --silent --show-error -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
+          echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" \
+            '.versionCode == $vc and .sha256 == $sha' >/dev/null
+          echo "$LIVE" | jq .
+
+      - name: Prepare public update artifact
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p public-update
           cp puttvision-consumer.apk public-update/puttvision.apk
-          SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)
           cat > public-update/update.json <<EOF
           {
             "versionCode": $PV_VERSION_CODE,
             "versionName": "$PV_VERSION_NAME",
-            "apkUrl": "https://puttvision-update.vercel.app/puttvision.apk",
-            "sha256": "$SHA"
+            "apkUrl": "$PV_APK_URL",
+            "sha256": "$PV_RELEASE_SHA"
           }
           EOF
-          cat > public-update/vercel.json <<'EOF'
-          {
-            "headers": [
-              {"source": "/update.json", "headers": [{"key": "Cache-Control", "value": "public, max-age=0, must-revalidate"}]},
-              {"source": "/puttvision.apk", "headers": [{"key": "Cache-Control", "value": "public, max-age=60"}]}
-            ]
-          }
-          EOF
-
-      - name: Publish consumer updater to Vercel when configured
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        shell: bash
-        run: |
-          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-            echo "Consumer updater hosting is not configured; public-update artifact is still available."
-            exit 0
-          fi
-          npx --yes vercel@latest deploy public-update --prod --yes --token "$VERCEL_TOKEN"
 
       - uses: actions/upload-artifact@v4
         with:
