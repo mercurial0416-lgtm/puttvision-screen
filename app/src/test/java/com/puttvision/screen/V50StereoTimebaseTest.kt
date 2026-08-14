@@ -4,6 +4,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Test
@@ -42,7 +43,7 @@ class V50StereoTimebaseTest {
         V50HfrCaptureClockRuntime.onRecordingStarted(File("shot.mp4"), 240, startedAtMs = 10_000L)
         V41HfrFeatureTrackRuntime.publish(track(), nowMs = 14_000L)
 
-        val snap = assertNotNull(V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 14_100L))!!
+        val snap = requireNotNull(V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 14_100L))
         assertEquals(10_500L, snap.publishedAtMs)
         assertEquals(14_000L, snap.storedAtMs)
         assertEquals("CAMERAX_START+FRAME", snap.timeSource)
@@ -53,16 +54,16 @@ class V50StereoTimebaseTest {
         V50HfrCaptureClockRuntime.onRecordingStarted(File("shot.mp4"), 240, startedAtMs = 10_000L)
         V41HfrFeatureTrackRuntime.publish(track(), nowMs = 14_000L)
         assertNotNull(V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 14_900L, maxAgeMs = 1_000L))
-        assertEquals(null, V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 15_100L, maxAgeMs = 1_000L))
+        assertNull(V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 15_100L, maxAgeMs = 1_000L))
     }
 
     @Test fun decoderAcceptsDelayedHfrTrackWhenPhysicalImpactIsStillBounded() {
         val packet = V43FeatureTrackPacket("cam-top", V15CameraView.TOP, 10_500L, 7L, track())
         val wire = V43FeatureTrackWire.encode("ABCDEFGH", packet)
-        assertEquals(null, V43FeatureTrackWire.decode(wire, "ABCDEFGH", nowMs = 14_000L))
+        assertNull(V43FeatureTrackWire.decode(wire, "ABCDEFGH", nowMs = 14_000L))
         val decoded = V50FeatureTrackWire.decode(wire, "ABCDEFGH", nowMs = 14_000L)
         assertNotNull(decoded)
-        assertEquals(10_500L, decoded!!.capturedAtMs)
+        assertEquals(10_500L, requireNotNull(decoded).capturedAtMs)
     }
 
     @Test fun samePhysicalShotPairsEvenWhenAnalysisPublicationIsSeveralSecondsLater() {
@@ -90,7 +91,7 @@ class V50StereoTimebaseTest {
 
     @Test fun missingCaptureEpochFallsBackWithoutClaimingHardwareTiming() {
         V41HfrFeatureTrackRuntime.publish(track(), nowMs = 20_000L)
-        val snap = assertNotNull(V41HfrFeatureTrackRuntime.freshSnapshot(20_100L))!!
+        val snap = requireNotNull(V41HfrFeatureTrackRuntime.freshSnapshot(20_100L))
         assertEquals(20_000L, snap.publishedAtMs)
         assertEquals("PUBLISH_FALLBACK", snap.timeSource)
         assertTrue(snap.timeUncertaintyMs >= 1_000L)
