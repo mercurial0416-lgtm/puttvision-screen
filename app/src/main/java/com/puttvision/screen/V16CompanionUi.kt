@@ -24,11 +24,6 @@ data class V16CompanionUiStatus(
     val label: String
 )
 
-/**
- * User-facing layer for V15 LAN transport.
- * A secondary phone can run the normal PuttVision measurement pipeline and publish its completed
- * measurement to the primary phone. That keeps the capture stack identical on every phone.
- */
 object V16CompanionLinkRuntime {
     @Volatile private var role = V16CompanionRole.OFF
     @Volatile private var view = V15CameraView.FACE_ON
@@ -53,6 +48,7 @@ object V16CompanionLinkRuntime {
         host = null
         V29NsdRuntime.advertise(context, code, created.status().port)
         V15CompanionRuntime.clear()
+        V37FeatureFusionRuntime.clear()
         return true
     }
 
@@ -99,6 +95,7 @@ object V16CompanionLinkRuntime {
         sessionCode = null
         role = V16CompanionRole.OFF
         V15CompanionRuntime.clear()
+        V37FeatureFusionRuntime.clear()
     }
 
     fun status(): V16CompanionUiStatus {
@@ -136,6 +133,7 @@ object V16CompanionLinkRuntime {
 
 fun showV16CompanionDialog(context: Context) {
     val status = V16CompanionLinkRuntime.status()
+    val fusion = V37FeatureFusion.diagnostics
     val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(context.pvDp(18), context.pvDp(8), context.pvDp(18), context.pvDp(8))
@@ -151,7 +149,12 @@ fun showV16CompanionDialog(context: Context) {
 
     root.addView(text("MULTI PHONE CAMERA", 7f, true, true))
     root.addView(text("현재: ${status.label}", 11f, true).apply { setPadding(0, context.pvDp(6), 0, context.pvDp(6)) })
-    root.addView(text("메인폰은 여러 보조폰 측정값을 신뢰도 가중치로 합칩니다. 모든 폰은 같은 샷을 동시에 촬영하세요.", 8f))
+    root.addView(text("BALL/START/FACE/PATH를 카메라 시점·신뢰도·시간오차별로 독립 합성합니다. 약한 시점이나 오래된 값은 자동으로 영향이 줄고 outlier는 해당 항목만 제외됩니다.", 8f))
+    if (status.role == V16CompanionRole.HOST && fusion.companionCount > 0) {
+        root.addView(text("FUSION ${fusion.label} · confidence ${"%.0f".format(fusion.confidenceBefore * 100)}→${"%.0f".format(fusion.confidenceAfter * 100)}%", 7.5f, true, true).apply {
+            setPadding(0, context.pvDp(7), 0, 0)
+        })
+    }
 
     if (status.role == V16CompanionRole.HOST) {
         root.addView(text(V16CompanionLinkRuntime.hostAddressLabel(), 18f, true, true).apply {
@@ -244,7 +247,6 @@ private fun showV16JoinCompanionDialog(context: Context) {
             setPadding(context.pvDp(10), 0, context.pvDp(10), 0)
             setOnClickListener {
                 selected = v
-                // Reopen to keep this deliberately small and dependency-free.
                 Toast.makeText(context, "$label 카메라 선택", Toast.LENGTH_SHORT).show()
             }
         }
