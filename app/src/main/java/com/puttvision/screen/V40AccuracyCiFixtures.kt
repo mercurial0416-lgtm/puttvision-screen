@@ -11,16 +11,18 @@ import java.util.Locale
 /** Exports the exact two CSV files consumed by ci/v20_accuracy_gate.py. */
 object V40AccuracyCiFixtures {
     internal const val MIN_CI_SHOTS = 20
+    internal const val MIN_PROFILE_SHOTS = 8
     private const val ballToleranceMps = .08
     private const val launchToleranceDeg = .35
     private const val faceToleranceDeg = .55
     private const val pathToleranceDeg = .65
 
     internal fun referenceCsv(samples: List<ValidationSample>): String = buildString {
-        appendLine("id,ball_speed_mps,ball_tol_mps,launch_deg,launch_tol_deg,face_deg,face_tol_deg,path_deg,path_tol_deg")
+        appendLine("id,profile_key,ball_speed_mps,ball_tol_mps,launch_deg,launch_tol_deg,face_deg,face_tol_deg,path_deg,path_tol_deg")
         samples.forEach { s ->
             appendLine(listOf(
                 csvCell(s.id),
+                csvCell(s.profileKey.orEmpty()),
                 number(s.refBall), if (s.refBall != null) number(ballToleranceMps) else "",
                 number(s.refLaunch), if (s.refLaunch != null) number(launchToleranceDeg) else "",
                 number(s.refFace), if (s.refFace != null) number(faceToleranceDeg) else "",
@@ -30,10 +32,11 @@ object V40AccuracyCiFixtures {
     }
 
     internal fun measuredCsv(samples: List<ValidationSample>): String = buildString {
-        appendLine("id,ball_speed_mps,launch_deg,face_deg,path_deg")
+        appendLine("id,profile_key,ball_speed_mps,launch_deg,face_deg,path_deg")
         samples.forEach { s ->
             appendLine(listOf(
                 csvCell(s.id),
+                csvCell(s.profileKey.orEmpty()),
                 number(s.measuredBall),
                 number(s.measuredLaunch),
                 number(s.measuredFace),
@@ -49,16 +52,36 @@ object V40AccuracyCiFixtures {
         val uniqueIds = samples.map { it.id.trim() }.filter { it.isNotEmpty() }.toSet()
         if (uniqueIds.size != samples.size) return "샷 ID가 비어 있거나 중복되었습니다"
 
-        fun coverage(label: String, ref: (ValidationSample) -> Double?, measured: (ValidationSample) -> Double?): String? {
-            val count = samples.count { s ->
+        val missingProfile = samples.count { it.profileKey.isNullOrBlank() }
+        if (missingProfile > 0) {
+            return "캡처 프로필 정보가 없는 샷이 ${missingProfile}개입니다 · 새 기준 데이터로 다시 측정하세요"
+        }
+
+        fun coverage(label: String, values: List<ValidationSample>, ref: (ValidationSample) -> Double?, measured: (ValidationSample) -> Double?, minimum: Int): String? {
+            val count = values.count { s ->
                 ref(s)?.isFinite() == true && measured(s)?.isFinite() == true
             }
-            return if (count < MIN_CI_SHOTS) "$label 기준/측정 매칭이 ${MIN_CI_SHOTS}개 필요합니다 · 현재 ${count}개" else null
+            return if (count < minimum) "$label 기준/측정 매칭이 ${minimum}개 필요합니다 · 현재 ${count}개" else null
         }
-        return coverage("BALL", { it.refBall }, { it.measuredBall })
-            ?: coverage("START", { it.refLaunch }, { it.measuredLaunch })
-            ?: coverage("FACE", { it.refFace }, { it.measuredFace })
-            ?: coverage("PATH", { it.refPath }, { it.measuredPath })
+
+        val globalIssue = coverage("BALL", samples, { it.refBall }, { it.measuredBall }, MIN_CI_SHOTS)
+            ?: coverage("START", samples, { it.refLaunch }, { it.measuredLaunch }, MIN_CI_SHOTS)
+            ?: coverage("FACE", samples, { it.refFace }, { it.measuredFace }, MIN_CI_SHOTS)
+            ?: coverage("PATH", samples, { it.refPath }, { it.measuredPath }, MIN_CI_SHOTS)
+        if (globalIssue != null) return globalIssue
+
+        val profiles = samples.groupBy { requireNotNull(it.profileKey).trim() }
+        for ((profile, rows) in profiles) {
+            if (rows.size < MIN_PROFILE_SHOTS) {
+                return "캡처 프로필 ${shortProfile(profile)} 데이터가 ${MIN_PROFILE_SHOTS}샷 미만입니다 · 현재 ${rows.size}샷"
+            }
+            val issue = coverage("${shortProfile(profile)} BALL", rows, { it.refBall }, { it.measuredBall }, MIN_PROFILE_SHOTS)
+                ?: coverage("${shortProfile(profile)} START", rows, { it.refLaunch }, { it.measuredLaunch }, MIN_PROFILE_SHOTS)
+                ?: coverage("${shortProfile(profile)} FACE", rows, { it.refFace }, { it.measuredFace }, MIN_PROFILE_SHOTS)
+                ?: coverage("${shortProfile(profile)} PATH", rows, { it.refPath }, { it.measuredPath }, MIN_PROFILE_SHOTS)
+            if (issue != null) return issue
+        }
+        return null
     }
 
     fun export(activity: Activity, lab: AccuracyValidationLab): Result<Int> = runCatching {
@@ -82,18 +105,20 @@ object V40AccuracyCiFixtures {
         val matched = samples.size
         val total = lab.all().size
         val issue = readinessIssue(samples)
+        val profileCount = samples.mapNotNull { it.profileKey?.trim()?.takeIf(String::isNotEmpty) }.distinct().size
         val readiness = when {
-            issue == null && matched >= 30 -> "충분한 샷 수 · 배포 회귀 기준으로 사용 권장"
-            issue == null -> "CI READY · BALL/START/FACE/PATH 각 ${MIN_CI_SHOTS}개 이상"
+            issue == null && matched >= 30 -> "충분한 샷 수 · ${profileCount}개 캡처 프로필 검증 · 배포 회귀 기준으로 사용 권장"
+            issue == null -> "CI READY · BALL/START/FACE/PATH 각 ${MIN_CI_SHOTS}개 · 프로필당 ${MIN_PROFILE_SHOTS}개 이상"
             matched > 0 -> issue
             else -> "먼저 ACCURACY LAB에서 기준장비 값을 매칭하세요"
         }
         AlertDialog.Builder(activity)
             .setTitle("REAL DEVICE CI FIXTURES")
             .setMessage(
-                "측정 $total 샷 · 기준값 매칭 $matched 샷\n\n" +
+                "측정 $total 샷 · 기준값 매칭 $matched 샷 · 캡처 프로필 $profileCount개\n\n" +
                     "$readiness\n\n" +
-                    "CI용 공식 2파일은 최소 ${MIN_CI_SHOTS}개의 완전한 BALL / START / FACE / PATH 페어가 있어야 생성됩니다. " +
+                    "CI용 공식 2파일은 최소 ${MIN_CI_SHOTS}개의 완전한 BALL / START / FACE / PATH 페어가 필요하고, " +
+                    "240/120/NORMAL·해상도·카메라가 다른 캡처 프로필은 각각 최소 ${MIN_PROFILE_SHOTS}샷을 확보해야 합니다. " +
                     "기본 허용오차: BALL ±0.08 m/s · START ±0.35° · FACE ±0.55° · PATH ±0.65°."
             )
             .setPositiveButton("CI 2파일 내보내기") { _, _ ->
@@ -118,6 +143,9 @@ object V40AccuracyCiFixtures {
         }
         activity.startActivity(Intent.createChooser(intent, "PuttVision CI 정확도 2파일 공유"))
     }
+
+    private fun shortProfile(value: String): String =
+        value.split('|').joinToString("|") { it.trim() }.take(72)
 
     private fun number(value: Double?): String =
         value?.takeIf { it.isFinite() }?.let { "%.6f".format(Locale.US, it) } ?: ""
