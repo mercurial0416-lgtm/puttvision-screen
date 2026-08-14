@@ -3,6 +3,7 @@ package com.puttvision.screen
 import android.graphics.Bitmap
 import android.graphics.PointF
 import android.media.MediaMetadataRetriever
+import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import java.io.File
@@ -20,7 +21,10 @@ data class HfrAnalysisResult(
     val fps: Int,
     val impactFrame: Int,
     val analyzedFrames: Int,
-    val featureTrack: HfrFeatureTrack? = null
+    val featureTrack: HfrFeatureTrack? = null,
+    val calibrationMode: String = "UNKNOWN",
+    val calibrationMs: Long = 0L,
+    val totalAnalysisMs: Long = 0L
 )
 
 class HfrVideoAnalyzer {
@@ -65,12 +69,19 @@ class HfrVideoAnalyzer {
         val stimpM: Double?
     )
 
+    private data class VideoCalibration(
+        val homography: Homography,
+        val mode: String
+    )
+
     fun analyze(
         file: File,
         requestedFps: Int,
         onProgress: (String) -> Unit = {}
     ): HfrAnalysisResult? {
         V41HfrFeatureTrackRuntime.clear()
+        V42HfrAnalysisHealthRuntime.clear()
+        val analysisStartedNs = System.nanoTime()
         if (!file.exists() || file.length() == 0L) return null
         if (android.os.Build.VERSION.SDK_INT < 28) return null
 
@@ -93,7 +104,10 @@ class HfrVideoAnalyzer {
 
             onProgress("${fps}fps / ${frameCount}f · HFR 좌표 보정")
 
-            val homography = findVideoHomography(mmr, frameCount) ?: return null
+            val calibrationStartedNs = System.nanoTime()
+            val calibration = findVideoHomography(mmr, frameCount) ?: return null
+            val calibrationMs = ((System.nanoTime() - calibrationStartedNs) / 1_000_000L).coerceAtLeast(0L)
+            val homography = calibration.homography
 
             // Coarse scan at ~40 samples/sec to find launch.
             val coarseStep = max(1, fps / 40)
@@ -172,13 +186,28 @@ class HfrVideoAnalyzer {
             val calculated = calculate(samples, startBall, fps) ?: return null
             val featureTrack = buildFeatureTrack(samples, calculated.second, fps)
             V41HfrFeatureTrackRuntime.publish(featureTrack)
+            val totalAnalysisMs = ((System.nanoTime() - analysisStartedNs) / 1_000_000L).coerceAtLeast(0L)
+            V42HfrAnalysisHealthRuntime.publish(
+                V42HfrAnalysisHealth(
+                    calibrationMode = calibration.mode,
+                    calibrationMs = calibrationMs,
+                    totalAnalysisMs = totalAnalysisMs,
+                    fps = fps,
+                    analyzedFrames = samples.size,
+                    ballTrackFrames = featureTrack.ballFrames,
+                    putterTrackFrames = featureTrack.putterFrames
+                )
+            )
 
             return HfrAnalysisResult(
                 metrics = calculated.first,
                 fps = fps,
                 impactFrame = calculated.second,
                 analyzedFrames = samples.size,
-                featureTrack = featureTrack
+                featureTrack = featureTrack,
+                calibrationMode = calibration.mode,
+                calibrationMs = calibrationMs,
+                totalAnalysisMs = totalAnalysisMs
             )
         } finally {
             clearFrameCache()
@@ -262,78 +291,74 @@ class HfrVideoAnalyzer {
         return runCatching { mmr.getFrameAtIndex(index) }.getOrNull()
     }
 
+    private fun findVideoHomography(
+        mmr: MediaMetadataRetriever,
+        frameCount: Int
+    ): VideoCalibration? {
+        val indices = listOf(
+            0,
+            min(2, frameCount - 1),
+            min(8, frameCount - 1),
+            min(16, frameCount - 1)
+        ).distinct()
 
-private fun findVideoHomography(
-    mmr: MediaMetadataRetriever,
-    frameCount: Int
-): Homography? {
-    val indices = listOf(
-        0,
-        min(2, frameCount - 1),
-        min(8, frameCount - 1),
-        min(16, frameCount - 1)
-    ).distinct()
+        val scanner = BarcodeScanning.getClient()
+        try {
+            for ((attempt, i) in indices.withIndex()) {
+                val bmp = safeFrame(mmr, i) ?: continue
+                val layout = scanMarkerLayoutBlocking(scanner, bmp)
+                if (layout != null) {
+                    Homography.fromPoints(
+                        layout.fitImagePoints,
+                        layout.fitRealPointsCm,
+                        FrameInfo(bmp.width, bmp.height, 0)
+                    )?.let { return VideoCalibration(it, "QR") }
+                }
 
-    for (i in indices) {
-        val bmp =
-            safeFrame(
-                mmr,
-                i
-            ) ?: continue
-
-        val layout =
-            scanMarkerLayoutBlocking(
-                bmp
-            ) ?: continue
-
-        Homography.fromPoints(
-            layout.fitImagePoints,
-            layout.fitRealPointsCm,
-            FrameInfo(bmp.width, bmp.height, 0)
-        )?.let {
-            return it
+                // Give QR the first frame. If it is absent and the mat silhouette is exceptionally
+                // clean, do not burn several more ML Kit scans before using markerless geometry.
+                if (attempt == 0 && V16MatGeometryRuntime.markerlessEnabled) {
+                    val detected = V15MatDetector.detect(bmp)
+                    if (detected != null && V42HfrCalibrationPolicy.canUseFastMarkerless(detected.confidence)) {
+                        V15MatDetector.homography(
+                            detection = detected,
+                            frameInfo = FrameInfo(bmp.width, bmp.height, 0),
+                            matWidthCm = V16MatGeometryRuntime.widthCm,
+                            matLengthCm = V16MatGeometryRuntime.lengthCm
+                        )?.let { return VideoCalibration(it, "MARKERLESS_FAST") }
+                    }
+                }
+            }
+        } finally {
+            scanner.close()
         }
+
+        // Markerless fallback keeps the existing weaker threshold only after the precision scan path.
+        if (V16MatGeometryRuntime.markerlessEnabled) {
+            for (i in indices) {
+                val bmp = safeFrame(mmr, i) ?: continue
+                val detected = V15MatDetector.detect(bmp) ?: continue
+                if (!V42HfrCalibrationPolicy.canUseFallbackMarkerless(detected.confidence)) continue
+                V15MatDetector.homography(
+                    detection = detected,
+                    frameInfo = FrameInfo(bmp.width, bmp.height, 0),
+                    matWidthCm = V16MatGeometryRuntime.widthCm,
+                    matLengthCm = V16MatGeometryRuntime.lengthCm
+                )?.let { return VideoCalibration(it, "MARKERLESS_FALLBACK") }
+            }
+        }
+
+        return null
     }
 
-    // V16 MARKERLESS HFR FALLBACK
-    // QR remains the precision path. When QR is absent, use a high-confidence mat silhouette
-    // together with the dimensions saved in Product Setup. Weak detections are rejected.
-    if (V16MatGeometryRuntime.markerlessEnabled) {
-        for (i in indices) {
-            val bmp = safeFrame(mmr, i) ?: continue
-            val detected = V15MatDetector.detect(bmp) ?: continue
-            if (detected.confidence < .74) continue
-            V15MatDetector.homography(
-                detection = detected,
-                frameInfo = FrameInfo(bmp.width, bmp.height, 0),
-                matWidthCm = V16MatGeometryRuntime.widthCm,
-                matLengthCm = V16MatGeometryRuntime.lengthCm
-            )?.let { return it }
-        }
-    }
+    private fun scanMarkerLayoutBlocking(
+        scanner: BarcodeScanner,
+        bitmap: Bitmap
+    ): ResolvedMarkerLayout? {
+        val latch = CountDownLatch(1)
+        var resolved: ResolvedMarkerLayout? = null
 
-    return null
-}
-
-private fun scanMarkerLayoutBlocking(
-    bitmap: Bitmap
-): ResolvedMarkerLayout? {
-    val scanner =
-        BarcodeScanning.getClient()
-
-    val latch =
-        CountDownLatch(1)
-
-    var resolved:
-        ResolvedMarkerLayout? = null
-
-    try {
-        scanner.process(
-            InputImage.fromBitmap(
-                bitmap,
-                0
-            )
-        )
+        scanner.process(InputImage.fromBitmap(bitmap, 0))
             .addOnSuccessListener { codes ->
                 val observations = codes.mapNotNull { code ->
                     val box = code.boundingBox ?: return@mapNotNull null
@@ -345,20 +370,11 @@ private fun scanMarkerLayoutBlocking(
                 }
                 resolved = V14MarkerResolver.resolve(observations)
             }
-            .addOnCompleteListener {
-                latch.countDown()
-            }
+            .addOnCompleteListener { latch.countDown() }
 
-        latch.await(
-            1500,
-            TimeUnit.MILLISECONDS
-        )
-    } finally {
-        scanner.close()
+        latch.await(V42HfrCalibrationPolicy.MARKER_SCAN_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        return resolved
     }
-
-    return resolved
-}
 
     private fun detect(
         source: Bitmap,
