@@ -60,10 +60,12 @@ class V50StereoTimebaseTest {
     @Test fun decoderAcceptsDelayedHfrTrackWhenPhysicalImpactIsStillBounded() {
         val packet = V43FeatureTrackPacket("cam-top", V15CameraView.TOP, 10_500L, 7L, track())
         val wire = V43FeatureTrackWire.encode("ABCDEFGH", packet)
-        assertNull(V43FeatureTrackWire.decode(wire, "ABCDEFGH", nowMs = 14_000L))
-        val decoded = V50FeatureTrackWire.decode(wire, "ABCDEFGH", nowMs = 14_000L)
+        val decoded = V43FeatureTrackWire.decode(wire, "ABCDEFGH", nowMs = 14_000L)
         assertNotNull(decoded)
         assertEquals(10_500L, requireNotNull(decoded).capturedAtMs)
+        assertEquals(14_000L, decoded.receivedAtMs)
+        val compatibility = V50FeatureTrackWire.decode(wire, "ABCDEFGH", nowMs = 14_000L)
+        assertNotNull(compatibility)
     }
 
     @Test fun samePhysicalShotPairsEvenWhenAnalysisPublicationIsSeveralSecondsLater() {
@@ -74,7 +76,7 @@ class V50StereoTimebaseTest {
             timeSource = "CAMERAX_START+FRAME",
             timeUncertaintyMs = 12L
         )
-        val remote = V43FeatureTrackPacket("cam-top", V15CameraView.TOP, 10_520L, 1L, track())
+        val remote = V43FeatureTrackPacket("cam-top", V15CameraView.TOP, 10_520L, 1L, track(), receivedAtMs = 14_050L)
         val result = V44StereoReadinessEngine.best(local, listOf(remote), nowMs = 14_100L, maxAgeMs = 10_000L)
         assertTrue(result.ready)
         assertEquals(20L, result.shotSkewMs)
@@ -82,7 +84,7 @@ class V50StereoTimebaseTest {
 
     @Test fun similarPublishTimingCannotHideDifferentPhysicalShots() {
         val local = HfrFeatureTrackSnapshot(track(), 10_500L, 14_000L)
-        val remote = V43FeatureTrackPacket("cam-top", V15CameraView.TOP, 13_900L, 1L, track())
+        val remote = V43FeatureTrackPacket("cam-top", V15CameraView.TOP, 13_900L, 1L, track(), receivedAtMs = 14_050L)
         val result = V44StereoReadinessEngine.best(local, listOf(remote), nowMs = 14_100L, maxAgeMs = 10_000L)
         assertFalse(result.ready)
         assertTrue(result.reason.contains("같은 샷"))
