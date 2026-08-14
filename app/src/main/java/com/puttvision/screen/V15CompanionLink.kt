@@ -34,7 +34,10 @@ data class V15CompanionLinkStatus(
 class V15CompanionServer(
     private val requestedPort: Int = DEFAULT_PORT,
     private val sessionCode: String? = null,
-    private val onMeasurement: (V15CameraMeasurement) -> Unit = V15CompanionRuntime::submit,
+    private val onMeasurement: (V15CameraMeasurement) -> Unit = { measurement ->
+        V15CompanionRuntime.submit(measurement)
+        V37FeatureFusionRuntime.submit(measurement)
+    },
     private val onStatus: ((V15CompanionLinkStatus) -> Unit)? = null
 ) : Closeable {
     private val running = AtomicBoolean(false)
