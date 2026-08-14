@@ -1,5 +1,5 @@
 {
-  "version": "v32-development",
+  "version": "solo-development",
   "features": {
     "autoplay": true,
     "automatic_shot_flow_state_machine": true,
@@ -84,13 +84,7 @@
     "companion_auto_fill_pair_code": true,
     "procedural_grass_micro_material": true,
     "hemisphere_ambient_lighting": true,
-    "distance_atmospheric_fog": true,
-    "dedicated_online_supabase_backend": true,
-    "online_keystore_device_token": true,
-    "online_league_product_setup_entry": true,
-    "online_friend_request_response_ui": true,
-    "online_room_ready_controls": true,
-    "online_database_fk_index_hardening": true
+    "distance_atmospheric_fog": true
   },
   "validation": {
     "kotlin_regression_gate": true,
@@ -111,7 +105,6 @@
     "v28_companion_protocol_test": true,
     "v29_nsd_compile_gate": true,
     "v29_opengl_shader_source_gate": true,
-    "v31_online_training_ci_passed": true,
     "v29_pace_frame_annotation_integration_ci_passed": true
   }
 }
