@@ -115,7 +115,7 @@ object V40AccuracyCiFixtures {
         AlertDialog.Builder(activity)
             .setTitle("REAL DEVICE CI FIXTURES")
             .setMessage(
-                "측정 $total 샷 · 기준값 매칭 $matched 샷 · 캡처 프로필 $profileCount개\n\n" +
+                "측정 $total 샷 · 기준값 매칭 $matched 샷 · 캡처 프로필 ${profileCount}개\n\n" +
                     "$readiness\n\n" +
                     "CI용 공식 2파일은 최소 ${MIN_CI_SHOTS}개의 완전한 BALL / START / FACE / PATH 페어가 필요하고, " +
                     "240/120/NORMAL·해상도·카메라가 다른 캡처 프로필은 각각 최소 ${MIN_PROFILE_SHOTS}샷을 확보해야 합니다. " +
