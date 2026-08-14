@@ -29,6 +29,7 @@ object GreenReadRuntime {
         V31TrainingSessionRuntime.install(context)
         V33OnlineOutbox.install(context)
         V36OnlinePresenceRuntime.install(context)
+        V37OnlineColdStartRecovery.install(context)
     }
 
     fun prefetch(settings: GreenSettings) {
