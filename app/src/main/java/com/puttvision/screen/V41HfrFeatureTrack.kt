@@ -23,18 +23,34 @@ data class HfrFeatureTrack(
     }
 }
 
-/** Latest compact HFR geometry for diagnostics and future stereo correspondence. No bitmaps are retained. */
+data class HfrFeatureTrackSnapshot(
+    val track: HfrFeatureTrack,
+    val publishedAtMs: Long
+)
+
+/** Latest compact HFR geometry for diagnostics/companion transport. No bitmaps are retained. */
 object V41HfrFeatureTrackRuntime {
     private const val MAX_FRAMES = 32
 
     @Volatile var latest: HfrFeatureTrack? = null
         private set
+    @Volatile var latestPublishedAtMs: Long = 0L
+        private set
 
-    fun publish(track: HfrFeatureTrack) {
+    fun publish(track: HfrFeatureTrack, nowMs: Long = System.currentTimeMillis()) {
         latest = track.copy(frames = track.frames.take(MAX_FRAMES).toList())
+        latestPublishedAtMs = nowMs
+    }
+
+    fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 1_500L): HfrFeatureTrackSnapshot? {
+        val track = latest ?: return null
+        val published = latestPublishedAtMs
+        if (published <= 0L || nowMs - published !in 0L..maxAgeMs) return null
+        return HfrFeatureTrackSnapshot(track, published)
     }
 
     fun clear() {
         latest = null
+        latestPublishedAtMs = 0L
     }
 }

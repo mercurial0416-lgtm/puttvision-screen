@@ -19,6 +19,7 @@ data class V16CompanionUiStatus(
     val peers: Int,
     val received: Long,
     val rejected: Long,
+    val featureTracks: Long,
     val sessionCode: String?,
     val syncLabel: String?,
     val label: String
@@ -29,6 +30,7 @@ object V16CompanionLinkRuntime {
     @Volatile private var view = V15CameraView.FACE_ON
     @Volatile private var host: String? = null
     @Volatile private var sessionCode: String? = null
+    @Volatile private var lastFeatureTrackSentAtMs: Long = 0L
     private var server: V15CompanionServer? = null
     private var client: V15CompanionClient? = null
 
@@ -46,9 +48,11 @@ object V16CompanionLinkRuntime {
         sessionCode = code
         role = V16CompanionRole.HOST
         host = null
+        lastFeatureTrackSentAtMs = 0L
         V29NsdRuntime.advertise(context, code, created.status().port)
         V15CompanionRuntime.clear()
         V37FeatureFusionRuntime.clear()
+        V43RemoteFeatureTrackRuntime.clear()
         return true
     }
 
@@ -68,20 +72,32 @@ object V16CompanionLinkRuntime {
         view = cameraView
         host = clean
         sessionCode = code
+        lastFeatureTrackSentAtMs = 0L
         return true
     }
 
     fun publishIfCompanion(metrics: ShotMetrics): Boolean {
         if (role != V16CompanionRole.COMPANION) return false
         val c = synchronized(this) { client } ?: return false
+        val now = System.currentTimeMillis()
+        val cameraId = android.os.Build.MODEL + "-" + view.name
         val measurement = V15CameraMeasurement(
-            cameraId = android.os.Build.MODEL + "-" + view.name,
+            cameraId = cameraId,
             view = view,
             metrics = metrics,
             confidence = metrics.confidence ?: .55,
-            receivedAtMs = System.currentTimeMillis()
+            receivedAtMs = now
         )
-        return c.send(measurement)
+        val sent = c.send(measurement)
+        if (sent) {
+            val snapshot = V41HfrFeatureTrackRuntime.freshSnapshot(now)
+            if (snapshot != null && snapshot.publishedAtMs > lastFeatureTrackSentAtMs) {
+                if (c.sendFeatureTrack(cameraId, view, snapshot.track, measurement.receivedAtMs)) {
+                    lastFeatureTrackSentAtMs = snapshot.publishedAtMs
+                }
+            }
+        }
+        return sent
     }
 
     @Synchronized
@@ -93,24 +109,29 @@ object V16CompanionLinkRuntime {
         client = null
         host = null
         sessionCode = null
+        lastFeatureTrackSentAtMs = 0L
         role = V16CompanionRole.OFF
         V15CompanionRuntime.clear()
         V37FeatureFusionRuntime.clear()
+        V43RemoteFeatureTrackRuntime.clear()
     }
 
     fun status(): V16CompanionUiStatus {
         val s = synchronized(this) { server?.status() }
-        val sync = synchronized(this) { client?.syncStatus() }
+        val sync = synchronized(this) { client?.syncHealth() }
         val label = when (role) {
             V16CompanionRole.OFF -> "꺼짐"
-            V16CompanionRole.HOST -> "메인폰 · ${s?.peers ?: 0}대 · 거부 ${s?.rejectedMeasurements ?: 0}"
+            V16CompanionRole.HOST -> "메인폰 · ${s?.peers ?: 0}대 · 거부 ${s?.rejectedMeasurements ?: 0} · TRACK ${s?.receivedFeatureTracks ?: 0}"
             V16CompanionRole.COMPANION -> "보조폰 ${viewLabel(view)} · ${sync?.label ?: "SYNC 중"}"
         }
         return V16CompanionUiStatus(
-            role = role, host = host, view = view,
+            role = role,
+            host = host,
+            view = view,
             peers = s?.peers ?: 0,
             received = s?.receivedMeasurements ?: 0L,
             rejected = s?.rejectedMeasurements ?: 0L,
+            featureTracks = s?.receivedFeatureTracks ?: 0L,
             sessionCode = sessionCode,
             syncLabel = sync?.label,
             label = label
@@ -134,6 +155,8 @@ object V16CompanionLinkRuntime {
 fun showV16CompanionDialog(context: Context) {
     val status = V16CompanionLinkRuntime.status()
     val fusion = V37FeatureFusion.diagnostics
+    val hfrHealth = V43HfrHealthWindow.summary()
+    val remoteTracks = V43RemoteFeatureTrackRuntime.fresh().size
     val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(context.pvDp(18), context.pvDp(8), context.pvDp(18), context.pvDp(8))
@@ -149,7 +172,12 @@ fun showV16CompanionDialog(context: Context) {
 
     root.addView(text("MULTI PHONE CAMERA", 7f, true, true))
     root.addView(text("현재: ${status.label}", 11f, true).apply { setPadding(0, context.pvDp(6), 0, context.pvDp(6)) })
-    root.addView(text("BALL/START/FACE/PATH를 카메라 시점·신뢰도·시간오차별로 독립 합성합니다. 약한 시점이나 오래된 값은 자동으로 영향이 줄고 outlier는 해당 항목만 제외됩니다.", 8f))
+    root.addView(text("BALL/START/FACE/PATH를 카메라 시점·신뢰도·시간오차별로 독립 합성합니다. 새 연결은 sequence로 중복/역순 패킷을 차단하고, Wi‑Fi 순간끊김은 1회 자동 재연결합니다.", 8f))
+    if (hfrHealth.samples > 0) {
+        root.addView(text(hfrHealth.label, 7.2f, hfrHealth.degraded, hfrHealth.degraded).apply {
+            setPadding(0, context.pvDp(7), 0, 0)
+        })
+    }
     if (status.role == V16CompanionRole.HOST && fusion.companionCount > 0) {
         root.addView(text("FUSION ${fusion.label} · confidence ${"%.0f".format(fusion.confidenceBefore * 100)}→${"%.0f".format(fusion.confidenceAfter * 100)}%", 7.5f, true, true).apply {
             setPadding(0, context.pvDp(7), 0, 0)
@@ -162,7 +190,7 @@ fun showV16CompanionDialog(context: Context) {
             setPadding(0, context.pvDp(14), 0, context.pvDp(8))
         })
         root.addView(text("PAIR ${status.sessionCode ?: "--------"}", 18f, true, true).apply { gravity = Gravity.CENTER })
-        root.addView(text("보조폰에서 주소+PAIR 코드를 입력하세요. 연결 ${status.peers}대 · 수신 ${status.received}회 · 거부 ${status.rejected}회", 8f))
+        root.addView(text("보조폰에서 주소+PAIR 코드를 입력하세요. 연결 ${status.peers}대 · 측정 ${status.received}회 · HFR TRACK ${status.featureTracks}회(현재 ${remoteTracks}대) · 거부 ${status.rejected}회", 8f))
     }
 
     AlertDialog.Builder(context)

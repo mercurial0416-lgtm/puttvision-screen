@@ -23,13 +23,14 @@ data class V15CompanionLinkStatus(
     val peers: Int,
     val receivedMeasurements: Long,
     val rejectedMeasurements: Long = 0L,
+    val receivedFeatureTracks: Long = 0L,
     val lastError: String? = null
 )
 
 /**
  * Tiny newline-delimited JSON transport for old phones used as extra putting cameras.
  * No cloud account or server is involved. The primary phone listens on the LAN and secondary
- * phones push V15CompanionWire payloads. The actual shot remains owned by the primary phone.
+ * phones push compact metrics/feature tracks. The actual shot remains owned by the primary phone.
  */
 class V15CompanionServer(
     private val requestedPort: Int = DEFAULT_PORT,
@@ -43,8 +44,11 @@ class V15CompanionServer(
     private val running = AtomicBoolean(false)
     private val io = Executors.newCachedThreadPool()
     private val clients = CopyOnWriteArrayList<Socket>()
+    private val measurementGate = V43CompanionSequenceGate()
+    private val trackGate = V43CompanionSequenceGate()
     @Volatile private var server: ServerSocket? = null
     @Volatile private var received = 0L
+    @Volatile private var receivedTracks = 0L
     @Volatile private var rejected = 0L
     @Volatile private var lastError: String? = null
 
@@ -88,10 +92,11 @@ class V15CompanionServer(
                 BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8)).use { out ->
                     while (running.get() && !socket.isClosed) {
                         val line = try { reader.readLine() } catch (_: SocketTimeoutException) { continue } ?: break
-                        if (line.length > MAX_MESSAGE_CHARS) { rejected++; continue }
+                        if (line.length > MAX_MESSAGE_CHARS) { rejected++; publish(); continue }
                         val code = sessionCode
                         if (code == null) {
                             V15CompanionWire.decode(line)?.let { received++; onMeasurement(it); publish() }
+                                ?: run { rejected++; publish() }
                             continue
                         }
                         if (V28CompanionProtocol.isSync(line)) {
@@ -99,9 +104,23 @@ class V15CompanionServer(
                             if (ack == null) { rejected++; publish(); continue }
                             out.write(ack); out.newLine(); out.flush(); continue
                         }
-                        val measurement = V28CompanionProtocol.decodeMeasurement(line, code)
-                        if (measurement == null) { rejected++; publish(); continue }
-                        received++; onMeasurement(measurement); publish()
+                        if (V43FeatureTrackWire.isFeatureTrack(line)) {
+                            val packet = V43FeatureTrackWire.decode(line, code)
+                            if (packet == null || !trackGate.accept(packet.cameraId, packet.sequence)) {
+                                rejected++; publish(); continue
+                            }
+                            V43RemoteFeatureTrackRuntime.publish(packet)
+                            receivedTracks++
+                            publish()
+                            continue
+                        }
+                        val packet = V43CompanionWire.decodeMeasurement(line, code)
+                        if (packet == null || !measurementGate.accept(packet.measurement.cameraId, packet.sequence)) {
+                            rejected++; publish(); continue
+                        }
+                        received++
+                        onMeasurement(packet.measurement)
+                        publish()
                     }
                 }
             }
@@ -121,6 +140,7 @@ class V15CompanionServer(
         peers = clients.count { !it.isClosed },
         receivedMeasurements = received,
         rejectedMeasurements = rejected,
+        receivedFeatureTracks = receivedTracks,
         lastError = lastError
     )
 
@@ -129,6 +149,7 @@ class V15CompanionServer(
     override fun close() {
         if (!running.compareAndSet(true, false)) {
             V37FeatureFusionRuntime.clear()
+            V43RemoteFeatureTrackRuntime.clear()
             return
         }
         clients.forEach { runCatching { it.close() } }
@@ -136,7 +157,10 @@ class V15CompanionServer(
         runCatching { server?.close() }
         server = null
         io.shutdownNow()
+        measurementGate.clear()
+        trackGate.clear()
         V37FeatureFusionRuntime.clear()
+        V43RemoteFeatureTrackRuntime.clear()
         publish()
     }
 
@@ -167,6 +191,8 @@ class V15CompanionClient(
     @Volatile private var reader: BufferedReader? = null
     @Volatile private var clockSync: V28ClockSync? = null
     @Volatile private var lastClockSyncAtMs: Long = 0L
+    private var measurementSequence = 0L
+    private var featureSequence = 0L
 
     fun connect(timeoutMs: Int = 1800): Boolean = synchronized(lock) {
         if (socket?.isConnected == true && socket?.isClosed == false) return@synchronized true
@@ -189,8 +215,55 @@ class V15CompanionClient(
         }
     }
 
+    /** One transparent reconnect/retry; sequence replay protection makes an uncertain first flush safe. */
     fun send(measurement: V15CameraMeasurement): Boolean = synchronized(lock) {
-        if (!connect()) return@synchronized false
+        val sequence = ++measurementSequence
+        repeat(2) {
+            if (prepareConnectionLocked()) {
+                val code = sessionCode
+                val encoded = code?.let {
+                    V43CompanionWire.encodeMeasurement(it, measurement, clockSync?.offsetMs ?: 0L, sequence)
+                } ?: V15CompanionWire.encode(measurement)
+                if (writeLineLocked(encoded)) return@synchronized true
+            }
+            closeLocked()
+        }
+        false
+    }
+
+    fun sendFeatureTrack(
+        cameraId: String,
+        view: V15CameraView,
+        track: HfrFeatureTrack,
+        capturedAtMs: Long
+    ): Boolean = synchronized(lock) {
+        val code = sessionCode ?: return@synchronized false
+        val sequence = ++featureSequence
+        repeat(2) {
+            if (prepareConnectionLocked()) {
+                val packet = V43FeatureTrackPacket(
+                    cameraId = cameraId,
+                    view = view,
+                    capturedAtMs = capturedAtMs + (clockSync?.offsetMs ?: 0L),
+                    sequence = sequence,
+                    track = track
+                )
+                if (writeLineLocked(V43FeatureTrackWire.encode(code, packet))) return@synchronized true
+            }
+            closeLocked()
+        }
+        false
+    }
+
+    fun syncStatus(): V28ClockSync? = clockSync
+
+    fun syncHealth(nowMs: Long = System.currentTimeMillis()): V43CompanionSyncHealth =
+        V43CompanionSyncHealthPolicy.evaluate(clockSync, lastClockSyncAtMs, nowMs)
+
+    override fun close() = synchronized(lock) { closeLocked() }
+
+    private fun prepareConnectionLocked(): Boolean {
+        if (!connect()) return false
         val code = sessionCode
         if (code != null && V42CompanionSyncPolicy.shouldRefresh(
                 lastSyncAtMs = lastClockSyncAtMs,
@@ -198,28 +271,22 @@ class V15CompanionClient(
                 current = clockSync
             )
         ) {
-            if (!syncLocked(code)) {
-                closeLocked()
-                return@synchronized false
-            }
+            if (!syncLocked(code)) return false
         }
-        val out = writer ?: return@synchronized false
-        try {
-            val encoded = code?.let { V28CompanionProtocol.encodeMeasurement(it, measurement, clockSync?.offsetMs ?: 0L) }
-                ?: V15CompanionWire.encode(measurement)
-            out.write(encoded)
+        return true
+    }
+
+    private fun writeLineLocked(value: String): Boolean {
+        val out = writer ?: return false
+        return try {
+            out.write(value)
             out.newLine()
             out.flush()
             true
         } catch (_: Throwable) {
-            closeLocked()
             false
         }
     }
-
-    fun syncStatus(): V28ClockSync? = clockSync
-
-    override fun close() = synchronized(lock) { closeLocked() }
 
     private fun syncLocked(code: String): Boolean {
         val out = writer ?: return false
