@@ -125,19 +125,57 @@ class V38CornerStabilizer {
     private fun distance(a: V38Point, b: V38Point): Double = hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble())
 }
 
-/** Smooths only the same solver/read configuration; new greens and camera reacquisition snap immediately. */
+/**
+ * Smooths only the same solver/read configuration. A single wild solver frame is held instead of
+ * being blended into the visible line; a genuinely changed path must repeat consistently before it
+ * is adopted. This avoids a one-frame AR line jump without freezing real solver changes.
+ */
 class V38PathStabilizer {
     private var key: String? = null
     private var previous: List<V38Point>? = null
+    private var largeCandidate: List<V38Point>? = null
+    private var largeCandidateFrames = 0
 
     fun update(next: List<V38Point>, nextKey: String, hardReset: Boolean = false): List<V38Point> {
-        if (next.isEmpty()) return emptyList()
+        if (next.isEmpty() || next.any { !it.x.isFinite() || !it.y.isFinite() }) return previous.orEmpty()
         val old = previous
         if (hardReset || key != nextKey || old == null || old.size != next.size) {
             key = nextKey
             previous = next.map { it.copy() }
+            largeCandidate = null
+            largeCandidateFrames = 0
             return previous!!
         }
+
+        val pathSpan = pathSpan(old).coerceAtLeast(20.0)
+        val outlierThreshold = max(24.0, pathSpan * .18)
+        val medianMove = medianDistance(old, next)
+        if (medianMove > outlierThreshold) {
+            val prior = largeCandidate
+            val consistent = prior != null && prior.size == next.size &&
+                medianDistance(prior, next) <= max(10.0, outlierThreshold * .35)
+            if (consistent) {
+                largeCandidate = prior!!.indices.map { i ->
+                    V38Point(
+                        prior[i].x + (next[i].x - prior[i].x) * .45f,
+                        prior[i].y + (next[i].y - prior[i].y) * .45f
+                    )
+                }
+                largeCandidateFrames++
+            } else {
+                largeCandidate = next.map { it.copy() }
+                largeCandidateFrames = 1
+            }
+            if (largeCandidateFrames < 2) return old
+
+            previous = largeCandidate!!.map { it.copy() }
+            largeCandidate = null
+            largeCandidateFrames = 0
+            return previous!!
+        }
+
+        largeCandidate = null
+        largeCandidateFrames = 0
         val alpha = .34f
         val smoothed = next.indices.map { i ->
             V38Point(
@@ -152,5 +190,25 @@ class V38PathStabilizer {
     fun reset() {
         key = null
         previous = null
+        largeCandidate = null
+        largeCandidateFrames = 0
+    }
+
+    private fun pathSpan(points: List<V38Point>): Double {
+        if (points.size < 2) return .0
+        val minX = points.minOf { it.x }.toDouble()
+        val maxX = points.maxOf { it.x }.toDouble()
+        val minY = points.minOf { it.y }.toDouble()
+        val maxY = points.maxOf { it.y }.toDouble()
+        return hypot(maxX - minX, maxY - minY)
+    }
+
+    private fun medianDistance(a: List<V38Point>, b: List<V38Point>): Double {
+        if (a.size != b.size || a.isEmpty()) return Double.POSITIVE_INFINITY
+        val values = a.indices.map { i ->
+            hypot((a[i].x - b[i].x).toDouble(), (a[i].y - b[i].y).toDouble())
+        }.sorted()
+        val mid = values.size / 2
+        return if (values.size % 2 == 1) values[mid] else (values[mid - 1] + values[mid]) / 2.0
     }
 }
