@@ -48,7 +48,7 @@ class V31TrainingTvOverlay(context: Context) : View(context) {
         p.color = Color.rgb(92, 255, 190)
         val header = when {
             s.finished -> "15 MIN TRAINING · COMPLETE"
-            s.paused -> "15 MIN TRAINING · PAUSED" // Feature 25: visible pause state on TV.
+            s.paused -> "15 MIN TRAINING · PAUSED"
             else -> "15 MIN TRAINING"
         }
         canvas.drawText(header, x, top + 25f * scale, p)
@@ -72,7 +72,6 @@ class V31TrainingTvOverlay(context: Context) : View(context) {
         }
         canvas.drawText("$blockNo   $shotNo   STREAK ${s.streak}", x, top + 70f * scale, p)
 
-        // Feature 26: actionable progress (completion, block hit rate and ETA) instead of raw counters only.
         p.textSize = 10f * scale
         p.color = Color.rgb(255, 200, 80)
         val etaText = if (s.estimatedRemainingMinutes > 0) "ETA ${s.estimatedRemainingMinutes}m" else if (s.finished) "DONE" else "ETA --"
@@ -88,12 +87,11 @@ class V31TrainingTvOverlay(context: Context) : View(context) {
         p.color = Color.rgb(92, 255, 190)
         canvas.drawRoundRect(barLeft, barTop, barLeft + barWidth * fraction, barTop + barHeight, 4f * scale, 4f * scale, p)
 
-        val insight = V49SessionInsightsRuntime.snapshot
+        val insight = V49LiveSessionInsights.snapshot()
         val confidenceWarn = insight.confidenceDeltaPct?.let { it <= -8.0 } == true
         val hfr = V43HfrHealthWindow.summary()
         var warningY = top + 126f * scale
 
-        // Feature 27: TV warns when measurement confidence deteriorates during the session.
         if (confidenceWarn) {
             p.textSize = 10f * scale
             p.color = Color.rgb(255, 145, 90)
@@ -101,7 +99,6 @@ class V31TrainingTvOverlay(context: Context) : View(context) {
             warningY += 17f * scale
         }
 
-        // Feature 28: TV surfaces HFR long-session slowdown before the user trusts degraded readings.
         if (hfr.degraded) {
             p.textSize = 10f * scale
             p.color = Color.rgb(255, 120, 100)
