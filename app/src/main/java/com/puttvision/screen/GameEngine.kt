@@ -57,27 +57,45 @@ class GameEngine {
     }
 
     fun seedHistory(records: List<ShotRecord>) {
-        recentRecords = records.takeLast(120)
-        V15GhostRuntime.seed(records.takeLast(240))
-        V15PutterFitRuntime.update(records)
-        V16PutterFit2Runtime.update(records)
+        val prepared = V47HistoryGuard.prepare(records, ProductSessionRuntime.userProfileId)
+        V47SoloIntegrityRuntime.recordHistory(prepared)
+        val clean = prepared.records
+        recentRecords = clean.takeLast(120)
+        V15GhostRuntime.seed(clean.takeLast(240))
+        V15PutterFitRuntime.update(recentRecords)
+        V16PutterFit2Runtime.update(recentRecords)
         putterFitRecommendation = V15PutterFitRuntime.latest
-        V16Runtime.update(records)
+        V16Runtime.update(recentRecords)
         personalCoachSnapshot = V16Runtime.personalCoach
-        V46AdaptiveCoachRuntime.update(records)
+        V46AdaptiveCoachRuntime.update(recentRecords)
         adaptiveCoachSnapshot = V46AdaptiveCoachRuntime.snapshot
         dailyTrainingPlan = V46AdaptiveTrainingPlan.adapt(V16Runtime.trainingPlan, adaptiveCoachSnapshot)
-        V20PerformanceRuntime.update(records)
+        V20PerformanceRuntime.update(recentRecords)
         performanceCompare = V20PerformanceRuntime.report
     }
 
     @Synchronized
     fun launch(metrics: ShotMetrics) {
         val deviceAdjusted = V16DeviceAutoCalibrationRuntime.applyFallback(metrics)
-        V16CompanionLinkRuntime.publishIfCompanion(deviceAdjusted)
-        val effectiveMetrics = V21CaptureConsistencyRuntime.adjust(
-            V37FeatureFusionRuntime.fusePrimary(deviceAdjusted)
+        val primaryGuard = V47ShotGuard.normalize(deviceAdjusted)
+        if (!primaryGuard.accepted || primaryGuard.metrics == null) {
+            rejectShot(primaryGuard)
+            return
+        }
+
+        val cleanPrimary = primaryGuard.metrics
+        V16CompanionLinkRuntime.publishIfCompanion(cleanPrimary)
+        val fused = V21CaptureConsistencyRuntime.adjust(
+            V37FeatureFusionRuntime.fusePrimary(cleanPrimary)
         )
+        val finalGuard = V47ShotGuard.normalize(fused)
+        V47SoloIntegrityRuntime.recordShot(finalGuard)
+        val effectiveMetrics = finalGuard.metrics
+        if (!finalGuard.accepted || effectiveMetrics == null) {
+            rejectShot(finalGuard)
+            return
+        }
+
         currentShot = effectiveMetrics
         metricConfidence = V16MetricConfidenceEstimator.estimate(effectiveMetrics)
         lastResult = null
@@ -132,7 +150,7 @@ class GameEngine {
                 V20GreenReadTrainingRuntime.reveal(settings)
                 readFeedback = V20GreenReadTrainingRuntime.feedback
 
-                val record = ShotRecord(
+                val rawRecord = ShotRecord(
                     metrics = metrics,
                     result = r,
                     strokeScore = finalScore,
@@ -147,12 +165,15 @@ class GameEngine {
                     physicalMatStimpM = ProductRuntime.physicalMatStimpM,
                     userProfileId = ProductSessionRuntime.userProfileId
                 )
+                val record = V47RecordGuard.normalize(rawRecord, ProductSessionRuntime.userProfileId).record
 
                 latestRecord = record
                 val originShot = kotlin.math.abs(virtualStartAtShot.first) < .005 && kotlin.math.abs(virtualStartAtShot.second) < .005
                 ghostComparison = if (originShot) V15GhostRuntime.compare(record, s.trail) else null
                 if (originShot) V15GhostRuntime.consider(record)
-                recentRecords = (recentRecords + record).takeLast(120)
+                val history = V47HistoryGuard.prepare(recentRecords + record, ProductSessionRuntime.userProfileId)
+                V47SoloIntegrityRuntime.recordHistory(history)
+                recentRecords = history.records
                 V15PutterFitRuntime.update(recentRecords)
                 V16PutterFit2Runtime.update(recentRecords)
                 putterFitRecommendation = V15PutterFitRuntime.latest
@@ -165,7 +186,7 @@ class GameEngine {
                 performanceCompare = V20PerformanceRuntime.report
                 V31TrainingSessionRuntime.onRecord(record)
                 onRecordFinalized?.invoke(record)
-                gameModes.onResult(r)
+                gameModes.onResult(record.result ?: r)
                 V15AutoFlowRuntime.result()
             }
         }
@@ -188,6 +209,20 @@ class GameEngine {
         strokeStudio = null
         V20GreenReadTrainingRuntime.prepare(gameModes.status.mode, settings)
         readFeedback = V20GreenReadTrainingRuntime.feedback
+        V15AutoFlowRuntime.rearm()
+    }
+
+    private fun rejectShot(report: V47ShotGuardReport) {
+        V47SoloIntegrityRuntime.recordShot(report)
+        state = null
+        currentShot = null
+        lastResult = null
+        strokeScore = null
+        coachFeedback = null
+        performanceSnapshot = null
+        metricConfidence = null
+        ghostComparison = null
+        latestRecord = null
         V15AutoFlowRuntime.rearm()
     }
 }
