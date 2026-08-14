@@ -12,6 +12,34 @@ object V31TrainingRules {
     fun pressureOk(holed:Boolean)=holed
 }
 
+data class V44TrainingResumeCounters(
+    val blockIndex:Int,
+    val shotInBlock:Int,
+    val successesInBlock:Int,
+    val totalShots:Int,
+    val totalSuccesses:Int,
+    val streak:Int
+)
+
+object V44TrainingResumePolicy {
+    const val MAX_RESUME_AGE_MS = 21_600_000L
+    fun sanitize(
+        blocks:List<V16TrainingBlock>, blockIndex:Int, shotInBlock:Int, successesInBlock:Int,
+        totalShots:Int, totalSuccesses:Int, streak:Int
+    ):V44TrainingResumeCounters? {
+        if(blocks.isEmpty()) return null
+        val bi=blockIndex.coerceIn(0,blocks.lastIndex)
+        val maxShots=blocks[bi].shots.coerceAtLeast(1)
+        val si=shotInBlock.coerceIn(0,maxShots-1)
+        val sb=successesInBlock.coerceIn(0,si)
+        val ts=totalShots.coerceAtLeast(si)
+        val tss=totalSuccesses.coerceIn(0,ts)
+        val st=streak.coerceIn(0,si)
+        return V44TrainingResumeCounters(bi,si,sb,ts,tss,st)
+    }
+    fun fresh(savedAtMs:Long,nowMs:Long):Boolean=(nowMs-savedAtMs) in 0..MAX_RESUME_AGE_MS
+}
+
 data class V31TrainingProgress(val running:Boolean,val finished:Boolean,val blockIndex:Int,val blockCount:Int,val shotInBlock:Int,val shotsInBlock:Int,val successesInBlock:Int,val totalShots:Int,val totalSuccesses:Int,val streak:Int,val blockTitle:String,val targetDistanceM:Double,val summary:String)
 
 object V31TrainingSessionRuntime {
@@ -43,5 +71,37 @@ object V31TrainingSessionRuntime {
     private fun prefs()=context?.getSharedPreferences("v31_training_session",Context.MODE_PRIVATE)
     private fun save(){val p=plan?:return;val s=original?:return;val blocks=JSONArray();p.blocks.forEach{b->blocks.put(JSONObject().put("t",b.title).put("n",b.shots).put("d",b.distanceM).put("s",b.sideSlopePct).put("l",b.longSlopePct).put("r",b.successRule))};val j=JSONObject().put("ts",System.currentTimeMillis()).put("bi",blockIndex).put("si",shotInBlock).put("sb",successesInBlock).put("tsn",totalShots).put("tss",totalSuccesses).put("st",streak).put("p",JSONObject().put("t",p.title).put("m",p.estimatedMinutes).put("r",p.reason).put("b",blocks)).put("o",JSONObject().put("d",s.distance).put("s",s.side).put("l",s.long).put("t",s.terrain));prefs()?.edit()?.putString("state",j.toString())?.apply()}
     private fun clear(){prefs()?.edit()?.remove("state")?.apply()}
-    private fun restore(){if(restored||engine==null||context==null)return;restored=true;val raw=prefs()?.getString("state",null)?:return;val ok=runCatching{val j=JSONObject(raw);require(System.currentTimeMillis()-j.getLong("ts") in 0..21600000L);val pj=j.getJSONObject("p");val a=pj.getJSONArray("b");val blocks=(0 until a.length()).map{i->a.getJSONObject(i).let{b->V16TrainingBlock(b.getString("t"),b.getInt("n"),b.getDouble("d"),b.getDouble("s"),b.getDouble("l"),b.getString("r"))}};require(blocks.isNotEmpty());plan=V16DailyTrainingPlan(pj.getString("t"),pj.getInt("m"),blocks,pj.getString("r"));val o=j.getJSONObject("o");original=OriginalSettings(o.getDouble("d"),o.getDouble("s"),o.getDouble("l"),o.getInt("t"));blockIndex=j.getInt("bi").coerceIn(0,blocks.lastIndex);shotInBlock=j.getInt("si").coerceAtLeast(0);successesInBlock=j.getInt("sb").coerceAtLeast(0);totalShots=j.getInt("tsn").coerceAtLeast(0);totalSuccesses=j.getInt("tss").coerceAtLeast(0);streak=j.getInt("st").coerceAtLeast(0);running=true;finished=false;applyCurrentTarget()}.isSuccess;if(!ok)clear()}
+    private fun restore(){
+        if(restored||engine==null||context==null)return
+        restored=true
+        val raw=prefs()?.getString("state",null)?:return
+        val parsed=runCatching{
+            val j=JSONObject(raw)
+            require(V44TrainingResumePolicy.fresh(j.getLong("ts"),System.currentTimeMillis()))
+            val pj=j.getJSONObject("p")
+            val a=pj.getJSONArray("b")
+            val blocks=(0 until a.length()).map{i->a.getJSONObject(i).let{b->V16TrainingBlock(b.getString("t"),b.getInt("n"),b.getDouble("d"),b.getDouble("s"),b.getDouble("l"),b.getString("r"))}}
+            require(blocks.isNotEmpty()&&blocks.all{it.shots>0&&it.distanceM.isFinite()&&it.sideSlopePct.isFinite()&&it.longSlopePct.isFinite()})
+            val counters=requireNotNull(V44TrainingResumePolicy.sanitize(blocks,j.getInt("bi"),j.getInt("si"),j.getInt("sb"),j.getInt("tsn"),j.getInt("tss"),j.getInt("st")))
+            val restoredPlan=V16DailyTrainingPlan(pj.getString("t"),pj.getInt("m").coerceAtLeast(1),blocks,pj.getString("r"))
+            val o=j.getJSONObject("o")
+            val restoredOriginal=OriginalSettings(o.getDouble("d"),o.getDouble("s"),o.getDouble("l"),o.getInt("t"))
+            require(restoredOriginal.distance.isFinite()&&restoredOriginal.side.isFinite()&&restoredOriginal.long.isFinite())
+            Triple(restoredPlan,restoredOriginal,counters)
+        }.getOrNull()
+        if(parsed==null){clear();return}
+        val (restoredPlan,restoredOriginal,counters)=parsed
+        plan=restoredPlan
+        original=restoredOriginal
+        blockIndex=counters.blockIndex
+        shotInBlock=counters.shotInBlock
+        successesInBlock=counters.successesInBlock
+        totalShots=counters.totalShots
+        totalSuccesses=counters.totalSuccesses
+        streak=counters.streak
+        running=true
+        finished=false
+        applyCurrentTarget()
+        save()
+    }
 }
