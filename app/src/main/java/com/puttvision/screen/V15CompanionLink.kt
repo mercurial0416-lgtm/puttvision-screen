@@ -105,7 +105,9 @@ class V15CompanionServer(
                             out.write(ack); out.newLine(); out.flush(); continue
                         }
                         if (V43FeatureTrackWire.isFeatureTrack(line)) {
-                            val packet = V43FeatureTrackWire.decode(line, code)
+                            // V50 intentionally allows feature tracks to arrive several seconds
+                            // after their physical impact because HFR analysis happens before send.
+                            val packet = V50FeatureTrackWire.decode(line, code)
                             if (packet == null || !trackGate.accept(packet.cameraId, packet.sequence)) {
                                 rejected++; publish(); continue
                             }
@@ -241,10 +243,13 @@ class V15CompanionClient(
         val sequence = ++featureSequence
         repeat(2) {
             if (prepareConnectionLocked()) {
+                val storedAt = V41HfrFeatureTrackRuntime.latestStoredAtMs
+                val impactAt = V41HfrFeatureTrackRuntime.latestPublishedAtMs
+                val eventAt = if (V50StereoTimePolicy.usableImpactTimestamp(impactAt, storedAt)) impactAt else capturedAtMs
                 val packet = V43FeatureTrackPacket(
                     cameraId = cameraId,
                     view = view,
-                    capturedAtMs = capturedAtMs + (clockSync?.offsetMs ?: 0L),
+                    capturedAtMs = eventAt + (clockSync?.offsetMs ?: 0L),
                     sequence = sequence,
                     track = track
                 )
