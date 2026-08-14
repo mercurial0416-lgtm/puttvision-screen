@@ -142,9 +142,12 @@ class GameModeEngine(
 
             PracticeMode.NINE_HOLE,
             PracticeMode.EIGHTEEN_HOLE -> {
-                settings.holeDistanceM = random.nextDouble(1.2, 10.0)
-                settings.sideSlopePct = random.nextDouble(-2.6, 2.6)
-                settings.longSlopePct = random.nextDouble(-2.0, 2.0)
+                val online = onlineHoleRandom()
+                val r = online ?: random
+                settings.holeDistanceM = r.nextDouble(1.2, 10.0)
+                settings.sideSlopePct = r.nextDouble(-2.6, 2.6)
+                settings.longSlopePct = r.nextDouble(-2.0, 2.0)
+                if (online != null) settings.terrainProfileId = r.nextInt(0, 24)
             }
 
             PracticeMode.STREAK -> {
@@ -326,6 +329,12 @@ class GameModeEngine(
         status.playerCount = count
         status.activePlayer = snapshot.activePlayer.coerceIn(1, count)
         status.playerScores = scores.toList()
+    }
+
+    private fun onlineHoleRandom(): Random? {
+        val seed = V33OnlineOutbox.onlineSeedOrNull() ?: return null
+        val mixed = seed xor (status.hole.toLong() * -7046029254386353131L)
+        return Random((mixed xor (mixed ushr 32)).toInt())
     }
 
     private fun syncActivePlayerState() {
