@@ -14,6 +14,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 private const val V36_ENDPOINT = "https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-online"
+private const val V39_STATE_ENDPOINT = "https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-match-state"
 private const val V36_API_KEY = "sb_publishable_fjgUBLTNcWG5-f8EDFpLyw_P5wXmmFS"
 
 data class V36OnlinePlayerState(
@@ -107,7 +108,6 @@ object V36OnlinePresenceRuntime {
         return value
     }
 
-    /** Explicit UI refresh is read-only; liveness writes remain on the 12s heartbeat cadence. */
     fun forceRefresh(context: Context, done: (Result<V36OnlineSnapshot>) -> Unit = {}) {
         val id = V31OnlineRuntime.activeMatchId
             ?: latest?.matchId
@@ -200,10 +200,11 @@ object V36OnlinePresenceRuntime {
             val result = runCatching {
                 val token = readToken(context) ?: error("온라인 프로필 없음")
                 val payload = JSONObject(body.toString()).put("action", action)
-                val connection = (URL(V36_ENDPOINT).openConnection() as HttpURLConnection).apply {
+                val endpoint = if (action == "match-state") V39_STATE_ENDPOINT else V36_ENDPOINT
+                val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 7_000
-                    readTimeout = 10_000
+                    connectTimeout = if (action == "match-state") 3_500 else 7_000
+                    readTimeout = if (action == "match-state") 5_000 else 10_000
                     doOutput = true
                     setRequestProperty("content-type", "application/json")
                     setRequestProperty("apikey", V36_API_KEY)
