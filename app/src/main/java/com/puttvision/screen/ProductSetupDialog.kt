@@ -1,5 +1,6 @@
 package com.puttvision.screen
 
+import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Typeface
@@ -128,6 +129,15 @@ fun showProductSetupDialog(
 
     addAction(action("PERFORMANCE COMPARE", V20PerformanceRuntime.report.headline) {
         showV20PerformanceCompareDialog(context)
+    })
+
+    val validationLab = AccuracyValidationLab(context)
+    addAction(action(
+        "REAL DEVICE CI",
+        "기준값 ${validationLab.matched().size}샷 · CI reference/measured 원클릭"
+    ) {
+        (context as? Activity)?.let(V40AccuracyCiFixtures::show)
+            ?: android.widget.Toast.makeText(context, "현재 화면에서는 파일 내보내기를 열 수 없습니다", android.widget.Toast.LENGTH_SHORT).show()
     })
 
     addAction(action("REPORT BUILDER", V26ReportPreferences.summary()) {
