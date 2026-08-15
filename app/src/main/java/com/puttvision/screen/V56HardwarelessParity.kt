@@ -69,6 +69,7 @@ object V56GreenReadPresentationBuilder {
 /**
  * Short-lived bridge for the no-hardware replay UI. V72 owns the detailed regression suites and
  * exposes one compact status so small phone/TV preview panels do not clip a chain of diagnostics.
+ * V75 separately latches recent failures so a one-shot regression cannot disappear on the next pass.
  */
 object V56HardwarelessParityRuntime {
     @Volatile private var latest: V56GreenReadPresentation? = null
@@ -84,8 +85,18 @@ object V56HardwarelessParityRuntime {
             read.recommendedBallSpeedMps,
             read.recommendedLaunchAngleDeg
         )
+        V75HardwarelessSelfTestHistoryRuntime.record(selfTest)
+        val warning = V75HardwarelessSelfTestHistoryRuntime.summary().warningLabel()
         latest = base.copy(
-            paceText = "${base.paceText} · ${selfTest.shortLabel()}"
+            paceText = buildString {
+                append(base.paceText)
+                append(" · ")
+                append(selfTest.shortLabel())
+                if (warning != null) {
+                    append(" · ")
+                    append(warning)
+                }
+            }
         )
     }
 
@@ -94,5 +105,7 @@ object V56HardwarelessParityRuntime {
     fun clear() {
         latest = null
         V72HardwarelessSelfTestRuntime.clear()
+        // Keep V75 history across test-screen closes. It is bounded and intentionally acts as a
+        // transient failure latch until enough subsequent runs age the failure out or reset() is used.
     }
 }
