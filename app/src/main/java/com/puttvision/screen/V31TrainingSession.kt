@@ -369,8 +369,9 @@ object V31TrainingSessionRuntime {
         restored = true
         val raw = prefs()?.getString("state", null) ?: return
         val parsed = runCatching {
+            val now = System.currentTimeMillis()
             val j = JSONObject(raw)
-            require(System.currentTimeMillis() - j.getLong("ts") in 0..21_600_000L)
+            val savedAt = j.getLong("ts")
             val pj = j.getJSONObject("p")
             val a = pj.getJSONArray("b")
             val blocks = (0 until a.length()).map { i ->
@@ -378,20 +379,66 @@ object V31TrainingSessionRuntime {
                     V16TrainingBlock(b.getString("t"), b.getInt("n"), b.getDouble("d"), b.getDouble("s"), b.getDouble("l"), b.getString("r"))
                 }
             }
-            require(blocks.isNotEmpty() && blocks.all { it.shots in 1..100 && it.distanceM.isFinite() && it.distanceM in 1.0..20.0 })
+            require(blocks.isNotEmpty() && blocks.all {
+                it.shots in 1..100 && it.distanceM.isFinite() && it.distanceM in 1.0..20.0 &&
+                    it.sideSlopePct.isFinite() && it.longSlopePct.isFinite()
+            })
             val restoredPlan = V16DailyTrainingPlan(pj.getString("t"), pj.getInt("m"), blocks, pj.getString("r"))
             val o = j.getJSONObject("o")
             val restoredOriginal = OriginalSettings(o.getDouble("d"), o.getDouble("s"), o.getDouble("l"), o.getInt("t"))
             require(restoredOriginal.distance.isFinite() && restoredOriginal.side.isFinite() && restoredOriginal.long.isFinite())
-            val bi = j.getInt("bi").coerceIn(0, blocks.lastIndex)
-            val si = j.getInt("si").coerceIn(0, blocks[bi].shots)
-            val sb = j.getInt("sb").coerceIn(0, si)
-            val tsn = j.getInt("tsn").coerceAtLeast(0)
-            val tss = j.getInt("tss").coerceIn(0, tsn)
-            val st = j.getInt("st").coerceIn(0, tsn)
-            arrayOf(restoredPlan, restoredOriginal, bi, si, sb, tsn, tss, st, j.optBoolean("paused", false), j.optLong("started", System.currentTimeMillis()), j.optLong("pat", 0L), j.optLong("pam", 0L))
+            val bi = j.getInt("bi")
+            require(bi in blocks.indices)
+            val si = j.getInt("si")
+            val sb = j.getInt("sb")
+            val tsn = j.getInt("tsn")
+            val tss = j.getInt("tss")
+            val st = j.getInt("st")
+            val isPaused = j.optBoolean("paused", false)
+            val started = j.optLong("started", now)
+            val pat = j.optLong("pat", 0L)
+            val pam = j.optLong("pam", 0L)
+
+            val restoredResults = ArrayList<BlockResult>()
+            val persistedResults = j.optJSONArray("br") ?: JSONArray()
+            for (i in 0 until persistedResults.length()) {
+                val r = persistedResults.getJSONObject(i)
+                val resultIndex = r.getInt("i")
+                require(resultIndex in blocks.indices)
+                restoredResults += BlockResult(
+                    block = blocks[resultIndex],
+                    attempts = r.getInt("a"),
+                    successes = r.getInt("s")
+                )
+            }
+            val integrity = V73TrainingResumeIntegrity.evaluate(
+                V73TrainingResumeState(
+                    blockShots = blocks.map { it.shots },
+                    blockIndex = bi,
+                    shotInBlock = si,
+                    successesInBlock = sb,
+                    totalShots = tsn,
+                    totalSuccesses = tss,
+                    streak = st,
+                    paused = isPaused,
+                    savedAtMs = savedAt,
+                    startedAtMs = started,
+                    pausedAtMs = pat,
+                    pausedAccumulatedMs = pam,
+                    completedBlocks = restoredResults.mapIndexed { index, result ->
+                        V73TrainingBlockResultState(index, result.attempts, result.successes)
+                    }
+                ),
+                nowMs = now
+            )
+            require(integrity.valid) { integrity.reason }
+            arrayOf(
+                restoredPlan, restoredOriginal, bi, si, sb, tsn, tss, st,
+                isPaused, started, pat, pam, restoredResults
+            )
         }.getOrNull()
         if (parsed == null) {
+            blockResults.clear()
             clearCurrent()
             return
         }
@@ -408,6 +455,8 @@ object V31TrainingSessionRuntime {
         startedAtMs = parsed[9] as Long
         pausedAtMs = parsed[10] as Long
         pausedAccumulatedMs = parsed[11] as Long
+        blockResults.clear()
+        blockResults.addAll(parsed[12] as List<BlockResult>)
         running = true
         finished = false
         applyCurrentTarget()
