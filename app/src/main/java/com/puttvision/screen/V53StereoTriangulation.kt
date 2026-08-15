@@ -105,6 +105,8 @@ data class V53TriangulationResult(
 )
 
 object V53StereoTriangulator {
+    private const val NUMERIC_PARALLEL_EPSILON = 1e-12
+
     fun ray(calibration: V53CameraCalibration, pixel: V53Pixel): V53Ray? {
         if (!calibration.valid() || !pixel.valid()) return null
         val k = calibration.intrinsics
@@ -142,7 +144,12 @@ object V53StereoTriangulator {
         val d = d1.dot(w0)
         val e = d2.dot(w0)
         val denominator = a * c - b * b
-        if (!denominator.isFinite() || abs(denominator) < 1e-8) return failure("camera rays nearly parallel")
+        // Only reject geometry that is numerically singular. Weak but still solvable
+        // baselines are allowed through so the explicit parallax policy below can
+        // classify them as diagnostic-only instead of pretending they are usable 3D.
+        if (!denominator.isFinite() || abs(denominator) < NUMERIC_PARALLEL_EPSILON) {
+            return failure("camera rays nearly parallel")
+        }
 
         val s = (b * e - c * d) / denominator
         val t = (a * e - b * d) / denominator
