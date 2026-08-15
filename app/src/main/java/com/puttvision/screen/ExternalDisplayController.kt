@@ -18,11 +18,7 @@ class GamePresentation(
         super.onCreate(savedInstanceState)
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val root = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
-        root.addView(V18SimulatorFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
-        root.addView(V51TvPolishOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
-        root.addView(V27PaceLineOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
-        root.addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
-        root.addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
+        root.addView(V57ProductTvSurface.create(context, engine), FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
     }
 }
