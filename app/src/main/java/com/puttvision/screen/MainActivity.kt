@@ -2523,9 +2523,7 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        val tv = V18SimulatorFactory.create(this, engine)
-        root.addView(tv, FrameLayout.LayoutParams(-1, -1))
-        root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
+        root.addView(V57ProductTvSurface.create(this, engine), FrameLayout.LayoutParams(-1, -1))
 
         val close = pvButton("닫기", PvButtonStyle.GHOST) { dialog.dismiss() }
         root.addView(close, FrameLayout.LayoutParams(pvDp(84), pvDp(42), Gravity.TOP or Gravity.END).apply {
@@ -2595,8 +2593,7 @@ class MainActivity : AppCompatActivity() {
 
         val dialog = android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        root.addView(V18SimulatorFactory.create(this, engine), FrameLayout.LayoutParams(-1, -1))
-        root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))
+        root.addView(V57ProductTvSurface.create(this, engine), FrameLayout.LayoutParams(-1, -1))
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2612,7 +2609,7 @@ class MainActivity : AppCompatActivity() {
             includeFontPadding = false
         })
         controls.addView(TextView(this).apply {
-            text = "CAMERA MOCK ●  ·  TV V17 LOCAL ●\n실제 측정 파이프라인에 합성 샷을 주입합니다."
+            text = "SIM CAMERA ●  ·  PRODUCT TV PARITY ●\n실제 TV와 동일한 화면 레이어에 합성 샷을 주입합니다."
             setTextColor(Pv.textMid)
             textSize = pvSp(7f)
             setPadding(0, pvDp(3), 0, pvDp(8))
