@@ -104,11 +104,13 @@ class V15CompanionServer(
                             if (ack == null) { rejected++; publish(); continue }
                             out.write(ack); out.newLine(); out.flush(); continue
                         }
-                        if (V43FeatureTrackWire.isFeatureTrack(line)) {
-                            // V50 intentionally allows feature tracks to arrive several seconds
-                            // after their physical impact because HFR analysis happens before send.
-                            val packet = V50FeatureTrackWire.decode(line, code)
-                            if (packet == null || !trackGate.accept(packet.cameraId, packet.sequence)) {
+                        val decodedTrack = V64PixelTrackTransport.decodeLine(line, code, System.currentTimeMillis())
+                        if (decodedTrack != null) {
+                            // V64 accepts both the legacy planar packet and the newer raw-pixel
+                            // packet. Sequence gating lets a newer pixel packet supersede the
+                            // compatibility packet without weakening replay protection.
+                            val packet = decodedTrack.packet
+                            if (!trackGate.accept(packet.cameraId, packet.sequence)) {
                                 rejected++; publish(); continue
                             }
                             V43RemoteFeatureTrackRuntime.publish(packet)
@@ -240,20 +242,30 @@ class V15CompanionClient(
         capturedAtMs: Long
     ): Boolean = synchronized(lock) {
         val code = sessionCode ?: return@synchronized false
-        val sequence = ++featureSequence
+        val legacySequence = ++featureSequence
+        val pixelSequence = if (V64PixelTrackTransport.canSendPixels(track, view)) ++featureSequence else null
         repeat(2) {
             if (prepareConnectionLocked()) {
                 val storedAt = V41HfrFeatureTrackRuntime.latestStoredAtMs
                 val impactAt = V41HfrFeatureTrackRuntime.latestPublishedAtMs
                 val eventAt = if (V50StereoTimePolicy.usableImpactTimestamp(impactAt, storedAt)) impactAt else capturedAtMs
-                val packet = V43FeatureTrackPacket(
+                val lines = V64PixelTrackTransport.encodeLines(
+                    code = code,
                     cameraId = cameraId,
                     view = view,
+                    track = track,
                     capturedAtMs = eventAt + (clockSync?.offsetMs ?: 0L),
-                    sequence = sequence,
-                    track = track
+                    legacySequence = legacySequence,
+                    pixelSequence = pixelSequence
                 )
-                if (writeLineLocked(V43FeatureTrackWire.encode(code, packet))) return@synchronized true
+                var allWritten = true
+                for (encoded in lines) {
+                    if (!writeLineLocked(encoded.raw)) {
+                        allWritten = false
+                        break
+                    }
+                }
+                if (allWritten) return@synchronized true
             }
             closeLocked()
         }
