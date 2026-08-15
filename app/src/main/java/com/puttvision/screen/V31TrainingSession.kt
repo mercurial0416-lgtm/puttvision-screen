@@ -103,7 +103,6 @@ object V31TrainingSessionRuntime {
         return true
     }
 
-    /** Feature 11: pause/resume without losing the active block or changing green settings. */
     @Synchronized
     fun pause(): Boolean {
         if (!running || paused) return false
@@ -124,7 +123,6 @@ object V31TrainingSessionRuntime {
         return true
     }
 
-    /** Feature 12: skip a drill block when the physical setup is unsuitable. */
     @Synchronized
     fun skipCurrentBlock(): Boolean {
         if (!running) return false
@@ -134,7 +132,6 @@ object V31TrainingSessionRuntime {
         return advanceBlock(p)
     }
 
-    /** Feature 13: restart only the current block while preserving whole-session totals. */
     @Synchronized
     fun restartCurrentBlock(): Boolean {
         if (!running) return false
@@ -148,7 +145,6 @@ object V31TrainingSessionRuntime {
         return true
     }
 
-    /** Feature 14: after completion, run the weakest block again as a focused mini-session. */
     @Synchronized
     fun retryWeakestBlock(): Boolean {
         val block = lastWeakestBlock ?: return false
@@ -183,7 +179,6 @@ object V31TrainingSessionRuntime {
             totalSuccesses++
             streak++
         } else streak = 0
-
         val earlyPressurePass = blockIndex == p.blocks.lastIndex && streak >= 3
         if (shotInBlock >= block.shots || earlyPressurePass) {
             blockResults += BlockResult(block, shotInBlock, successesInBlock)
@@ -193,7 +188,6 @@ object V31TrainingSessionRuntime {
         save()
     }
 
-    /** Feature 15: completion %, block hit rate and ETA are computed from actual session pace. */
     fun progress(): V31TrainingProgress {
         val p = plan
         val maxIndex = max(0, (p?.blocks?.size ?: 1) - 1)
@@ -205,9 +199,7 @@ object V31TrainingSessionRuntime {
         val completion = if (scheduled <= 0) 0 else (completedEquivalent * 100.0 / scheduled).toInt().coerceIn(0, 100)
         val blockRate = if (shotInBlock <= 0) 0 else (successesInBlock * 100.0 / shotInBlock).toInt().coerceIn(0, 100)
         val effectiveElapsed = effectiveElapsedMs()
-        val perShotMs = if (totalShots >= 2 && effectiveElapsed > 0L) {
-            (effectiveElapsed.toDouble() / totalShots).coerceIn(8_000.0, 90_000.0)
-        } else 24_000.0
+        val perShotMs = if (totalShots >= 2 && effectiveElapsed > 0L) (effectiveElapsed.toDouble() / totalShots).coerceIn(8_000.0, 90_000.0) else 24_000.0
         val remainingShots = (scheduled - completedEquivalent).coerceAtLeast(0)
         val eta = if (!running || paused || remainingShots == 0) 0 else ceil(remainingShots * perShotMs / 60_000.0).toInt().coerceAtLeast(1)
         val summary = when {
@@ -216,29 +208,9 @@ object V31TrainingSessionRuntime {
             running && block != null -> "${blockIndex + 1}/${p!!.blocks.size} · ${shotInBlock}/${block.shots}구"
             else -> lastCompletion?.label ?: "대기"
         }
-        return V31TrainingProgress(
-            running = running,
-            finished = finished,
-            blockIndex = blockIndex,
-            blockCount = p?.blocks?.size ?: 0,
-            shotInBlock = shotInBlock,
-            shotsInBlock = block?.shots ?: 0,
-            successesInBlock = successesInBlock,
-            totalShots = totalShots,
-            totalSuccesses = totalSuccesses,
-            streak = streak,
-            blockTitle = block?.title ?: "--",
-            targetDistanceM = target,
-            summary = summary,
-            paused = paused,
-            completionPct = if (finished) 100 else completion,
-            blockSuccessPct = blockRate,
-            estimatedRemainingMinutes = eta,
-            lastCompletedSummary = lastCompletion?.label
-        )
+        return V31TrainingProgress(running, finished, blockIndex, p?.blocks?.size ?: 0, shotInBlock, block?.shots ?: 0, successesInBlock, totalShots, totalSuccesses, streak, block?.title ?: "--", target, summary, paused, if (finished) 100 else completion, blockRate, eta, lastCompletion?.label)
     }
 
-    /** Feature 16: last completed result survives process death and remains visible until next completion. */
     fun lastCompleted(): V49TrainingCompletion? = lastCompletion
 
     private fun evaluate(index: Int, record: ShotRecord): Boolean = when (index) {
@@ -266,19 +238,10 @@ object V31TrainingSessionRuntime {
         running = false
         paused = false
         finished = true
-        val weakest = blockResults
-            .filter { it.attempts > 0 }
-            .minWithOrNull(compareBy<BlockResult> { it.successes.toDouble() / it.attempts }.thenByDescending { it.attempts })
+        val weakest = blockResults.filter { it.attempts > 0 }.minWithOrNull(compareBy<BlockResult> { it.successes.toDouble() / it.attempts }.thenByDescending { it.attempts })
         lastWeakestBlock = weakest?.block
         val pct = if (totalShots <= 0) 0 else (totalSuccesses * 100.0 / totalShots).toInt().coerceIn(0, 100)
-        lastCompletion = V49TrainingCompletion(
-            title = p.title,
-            totalShots = totalShots,
-            totalSuccesses = totalSuccesses,
-            successPct = pct,
-            weakestBlockTitle = weakest?.block?.title,
-            completedAtMs = System.currentTimeMillis()
-        )
+        lastCompletion = V49TrainingCompletion(p.title, totalShots, totalSuccesses, pct, weakest?.block?.title, System.currentTimeMillis())
         saveLastCompletion(weakest?.block)
         restoreSettings()
         clearCurrent()
@@ -323,19 +286,10 @@ object V31TrainingSessionRuntime {
         val p = plan ?: return
         val s = original ?: return
         val blocks = JSONArray()
-        p.blocks.forEach { b ->
-            blocks.put(JSONObject().put("t", b.title).put("n", b.shots).put("d", b.distanceM).put("s", b.sideSlopePct).put("l", b.longSlopePct).put("r", b.successRule))
-        }
+        p.blocks.forEach { b -> blocks.put(JSONObject().put("t", b.title).put("n", b.shots).put("d", b.distanceM).put("s", b.sideSlopePct).put("l", b.longSlopePct).put("r", b.successRule)) }
         val results = JSONArray()
         blockResults.forEachIndexed { index, r -> results.put(JSONObject().put("i", index).put("a", r.attempts).put("s", r.successes)) }
-        val j = JSONObject()
-            .put("ts", System.currentTimeMillis())
-            .put("bi", blockIndex).put("si", shotInBlock).put("sb", successesInBlock)
-            .put("tsn", totalShots).put("tss", totalSuccesses).put("st", streak)
-            .put("paused", paused).put("started", startedAtMs).put("pat", pausedAtMs).put("pam", pausedAccumulatedMs)
-            .put("p", JSONObject().put("t", p.title).put("m", p.estimatedMinutes).put("r", p.reason).put("b", blocks))
-            .put("o", JSONObject().put("d", s.distance).put("s", s.side).put("l", s.long).put("t", s.terrain))
-            .put("br", results)
+        val j = JSONObject().put("ts", System.currentTimeMillis()).put("bi", blockIndex).put("si", shotInBlock).put("sb", successesInBlock).put("tsn", totalShots).put("tss", totalSuccesses).put("st", streak).put("paused", paused).put("started", startedAtMs).put("pat", pausedAtMs).put("pam", pausedAccumulatedMs).put("p", JSONObject().put("t", p.title).put("m", p.estimatedMinutes).put("r", p.reason).put("b", blocks)).put("o", JSONObject().put("d", s.distance).put("s", s.side).put("l", s.long).put("t", s.terrain)).put("br", results)
         prefs()?.edit()?.putString("state", j.toString())?.apply()
     }
 
@@ -343,12 +297,8 @@ object V31TrainingSessionRuntime {
 
     private fun saveLastCompletion(weakest: V16TrainingBlock?) {
         val c = lastCompletion ?: return
-        val j = JSONObject()
-            .put("title", c.title).put("shots", c.totalShots).put("success", c.totalSuccesses)
-            .put("pct", c.successPct).put("weak", c.weakestBlockTitle ?: "").put("at", c.completedAtMs)
-        weakest?.let { b ->
-            j.put("wb", JSONObject().put("t", b.title).put("n", b.shots).put("d", b.distanceM).put("s", b.sideSlopePct).put("l", b.longSlopePct).put("r", b.successRule))
-        }
+        val j = JSONObject().put("title", c.title).put("shots", c.totalShots).put("success", c.totalSuccesses).put("pct", c.successPct).put("weak", c.weakestBlockTitle ?: "").put("at", c.completedAtMs)
+        weakest?.let { b -> j.put("wb", JSONObject().put("t", b.title).put("n", b.shots).put("d", b.distanceM).put("s", b.sideSlopePct).put("l", b.longSlopePct).put("r", b.successRule)) }
         prefs()?.edit()?.putString("last_complete", j.toString())?.apply()
     }
 
@@ -374,15 +324,8 @@ object V31TrainingSessionRuntime {
             val savedAt = j.getLong("ts")
             val pj = j.getJSONObject("p")
             val a = pj.getJSONArray("b")
-            val blocks = (0 until a.length()).map { i ->
-                a.getJSONObject(i).let { b ->
-                    V16TrainingBlock(b.getString("t"), b.getInt("n"), b.getDouble("d"), b.getDouble("s"), b.getDouble("l"), b.getString("r"))
-                }
-            }
-            require(blocks.isNotEmpty() && blocks.all {
-                it.shots in 1..100 && it.distanceM.isFinite() && it.distanceM in 1.0..20.0 &&
-                    it.sideSlopePct.isFinite() && it.longSlopePct.isFinite()
-            })
+            val blocks = (0 until a.length()).map { i -> a.getJSONObject(i).let { b -> V16TrainingBlock(b.getString("t"), b.getInt("n"), b.getDouble("d"), b.getDouble("s"), b.getDouble("l"), b.getString("r")) } }
+            require(blocks.isNotEmpty() && blocks.all { it.shots in 1..100 && it.distanceM.isFinite() && it.distanceM in 1.0..20.0 && it.sideSlopePct.isFinite() && it.longSlopePct.isFinite() })
             val restoredPlan = V16DailyTrainingPlan(pj.getString("t"), pj.getInt("m"), blocks, pj.getString("r"))
             val o = j.getJSONObject("o")
             val restoredOriginal = OriginalSettings(o.getDouble("d"), o.getDouble("s"), o.getDouble("l"), o.getInt("t"))
@@ -398,44 +341,18 @@ object V31TrainingSessionRuntime {
             val started = j.optLong("started", now)
             val pat = j.optLong("pat", 0L)
             val pam = j.optLong("pam", 0L)
-
             val restoredResults = ArrayList<BlockResult>()
             val persistedResults = j.optJSONArray("br") ?: JSONArray()
             for (i in 0 until persistedResults.length()) {
                 val r = persistedResults.getJSONObject(i)
                 val resultIndex = r.getInt("i")
                 require(resultIndex in blocks.indices)
-                restoredResults += BlockResult(
-                    block = blocks[resultIndex],
-                    attempts = r.getInt("a"),
-                    successes = r.getInt("s")
-                )
+                require(resultIndex == i)
+                restoredResults += BlockResult(blocks[resultIndex], r.getInt("a"), r.getInt("s"))
             }
-            val integrity = V73TrainingResumeIntegrity.evaluate(
-                V73TrainingResumeState(
-                    blockShots = blocks.map { it.shots },
-                    blockIndex = bi,
-                    shotInBlock = si,
-                    successesInBlock = sb,
-                    totalShots = tsn,
-                    totalSuccesses = tss,
-                    streak = st,
-                    paused = isPaused,
-                    savedAtMs = savedAt,
-                    startedAtMs = started,
-                    pausedAtMs = pat,
-                    pausedAccumulatedMs = pam,
-                    completedBlocks = restoredResults.mapIndexed { index, result ->
-                        V73TrainingBlockResultState(index, result.attempts, result.successes)
-                    }
-                ),
-                nowMs = now
-            )
+            val integrity = V73TrainingResumeIntegrity.evaluate(V73TrainingResumeState(blocks.map { it.shots }, bi, si, sb, tsn, tss, st, isPaused, savedAt, started, pat, pam, restoredResults.mapIndexed { index, result -> V73TrainingBlockResultState(index, result.attempts, result.successes) }), now)
             require(integrity.valid) { integrity.reason }
-            arrayOf(
-                restoredPlan, restoredOriginal, bi, si, sb, tsn, tss, st,
-                isPaused, started, pat, pam, restoredResults
-            )
+            arrayOf(restoredPlan, restoredOriginal, bi, si, sb, tsn, tss, st, isPaused, started, pat, pam, restoredResults)
         }.getOrNull()
         if (parsed == null) {
             blockResults.clear()
