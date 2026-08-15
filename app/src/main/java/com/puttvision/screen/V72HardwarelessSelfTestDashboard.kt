@@ -68,6 +68,12 @@ object V72HardwarelessSelfTestDashboard {
         if (!provenance.passed && firstFailure == null) firstFailure = "PACKET BIND"
         details += "PACKET BIND · ${provenance.checksPassed}/${provenance.checksTotal} · ${provenance.reason}"
 
+        val trainingResume = V74HardwarelessTrainingResumeRuntime.run()
+        total += trainingResume.checksTotal
+        passed += trainingResume.checksPassed
+        if (!trainingResume.passed && firstFailure == null) firstFailure = "TRAIN RESUME"
+        details += "TRAIN RESUME · ${trainingResume.checksPassed}/${trainingResume.checksTotal} · ${trainingResume.reason}"
+
         return V72HardwarelessSelfTestReport(
             passed = passed == total,
             checksPassed = passed,
@@ -92,5 +98,6 @@ object V72HardwarelessSelfTestRuntime {
         V69HardwarelessStereoGuardRuntime.clear()
         V70HardwarelessTransportTimebaseRuntime.clear()
         V71HardwarelessProvenanceRuntime.clear()
+        V74HardwarelessTrainingResumeRuntime.clear()
     }
 }
