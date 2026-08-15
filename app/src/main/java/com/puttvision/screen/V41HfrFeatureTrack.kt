@@ -9,18 +9,34 @@ data class HfrFeatureFrame(
     val heelYcm: Double?,
     val toeXcm: Double?,
     val toeYcm: Double?,
-    val markerAngleDeg: Double?
+    val markerAngleDeg: Double?,
+    /** Raw detector coordinates in the source video frame. Optional for legacy tracks. */
+    val ballXpx: Double? = null,
+    val ballYpx: Double? = null,
+    val heelXpx: Double? = null,
+    val heelYpx: Double? = null,
+    val toeXpx: Double? = null,
+    val toeYpx: Double? = null
 )
 
 data class HfrFeatureTrack(
     val fps: Int,
     val impactFrame: Int,
-    val frames: List<HfrFeatureFrame>
+    val frames: List<HfrFeatureFrame>,
+    /** Source-image dimensions for interpreting raw pixel correspondences. */
+    val imageWidthPx: Int? = null,
+    val imageHeightPx: Int? = null
 ) {
     val ballFrames: Int get() = frames.count { it.ballXcm != null && it.ballYcm != null }
     val putterFrames: Int get() = frames.count {
         it.heelXcm != null && it.heelYcm != null && it.toeXcm != null && it.toeYcm != null
     }
+    val pixelBallFrames: Int get() = frames.count { it.ballXpx != null && it.ballYpx != null }
+    val pixelPutterFrames: Int get() = frames.count {
+        it.heelXpx != null && it.heelYpx != null && it.toeXpx != null && it.toeYpx != null
+    }
+    val hasPixelFrameShape: Boolean get() =
+        imageWidthPx?.let { it > 0 } == true && imageHeightPx?.let { it > 0 } == true
 }
 
 data class HfrFeatureTrackSnapshot(
