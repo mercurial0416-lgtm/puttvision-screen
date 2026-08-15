@@ -15,11 +15,6 @@ data class V72HardwarelessSelfTestReport(
     }
 }
 
-/**
- * Runs the current synthetic shot plus a small kinematic matrix through V68, then executes every
- * hardwareless fail-closed suite added around it. The compact report keeps the TV/phone HUD readable
- * while details remain available for diagnostics. Synthetic success is not real-device accuracy.
- */
 object V72HardwarelessSelfTestDashboard {
     private val matrixSpeeds = doubleArrayOf(0.45, 1.20, 2.80)
     private val matrixDirections = doubleArrayOf(-5.0, 0.0, 5.0)
@@ -38,72 +33,55 @@ object V72HardwarelessSelfTestDashboard {
 
         val current = V68HardwarelessStereoRuntime.run(currentSpeedMps, currentDirectionDeg)
         record("STEREO CURRENT", current.passed, current.reason)
-
-        for (speed in matrixSpeeds) {
-            for (direction in matrixDirections) {
-                val result = V68HardwarelessStereoSelfCheck.verify(speed, direction)
-                record(
-                    "STEREO MATRIX ${"%.2f".format(speed)} ${"%+.1f".format(direction)}",
-                    result.passed,
-                    result.reason
-                )
-            }
+        for (speed in matrixSpeeds) for (direction in matrixDirections) {
+            val result = V68HardwarelessStereoSelfCheck.verify(speed, direction)
+            record("STEREO MATRIX ${"%.2f".format(speed)} ${"%+.1f".format(direction)}", result.passed, result.reason)
         }
 
         val guards = V69HardwarelessStereoGuardRuntime.run()
-        total += guards.checksTotal
-        passed += guards.checksPassed
+        total += guards.checksTotal; passed += guards.checksPassed
         if (!guards.passed && firstFailure == null) firstFailure = "STEREO GUARDS"
         details += "STEREO GUARDS · ${guards.checksPassed}/${guards.checksTotal} · ${guards.reason}"
 
         val transport = V70HardwarelessTransportTimebaseRuntime.run()
-        total += transport.checksTotal
-        passed += transport.checksPassed
+        total += transport.checksTotal; passed += transport.checksPassed
         if (!transport.passed && firstFailure == null) firstFailure = "LAN/TIME"
         details += "LAN/TIME · ${transport.checksPassed}/${transport.checksTotal} · ${transport.reason}"
 
         val provenance = V71HardwarelessProvenanceRuntime.run()
-        total += provenance.checksTotal
-        passed += provenance.checksPassed
+        total += provenance.checksTotal; passed += provenance.checksPassed
         if (!provenance.passed && firstFailure == null) firstFailure = "PACKET BIND"
         details += "PACKET BIND · ${provenance.checksPassed}/${provenance.checksTotal} · ${provenance.reason}"
 
         val trainingResume = V74HardwarelessTrainingResumeRuntime.run()
-        total += trainingResume.checksTotal
-        passed += trainingResume.checksPassed
+        total += trainingResume.checksTotal; passed += trainingResume.checksPassed
         if (!trainingResume.passed && firstFailure == null) firstFailure = "TRAIN RESUME"
         details += "TRAIN RESUME · ${trainingResume.checksPassed}/${trainingResume.checksTotal} · ${trainingResume.reason}"
 
         val memoryGuard = V78HardwarelessMemoryGuardRuntime.run()
-        total += memoryGuard.checksTotal
-        passed += memoryGuard.checksPassed
+        total += memoryGuard.checksTotal; passed += memoryGuard.checksPassed
         if (!memoryGuard.passed && firstFailure == null) firstFailure = "HFR MEMORY"
         details += "HFR MEMORY · ${memoryGuard.checksPassed}/${memoryGuard.checksTotal} · ${memoryGuard.reason}"
 
         val lifecycle = V79HardwarelessLifecycleChurnRuntime.run()
-        total += lifecycle.checksTotal
-        passed += lifecycle.checksPassed
+        total += lifecycle.checksTotal; passed += lifecycle.checksPassed
         if (!lifecycle.passed && firstFailure == null) firstFailure = "LIFECYCLE"
         details += "LIFECYCLE · ${lifecycle.checksPassed}/${lifecycle.checksTotal} · ${lifecycle.reason}"
 
-        return V72HardwarelessSelfTestReport(
-            passed = passed == total,
-            checksPassed = passed,
-            checksTotal = total,
-            failedStage = firstFailure,
-            details = details.toList()
-        )
+        val timing = V80HardwarelessTimingDistortionRuntime.run()
+        total += timing.checksTotal; passed += timing.checksPassed
+        if (!timing.passed && firstFailure == null) firstFailure = "TIMING DISTORTION"
+        details += "TIMING DISTORTION · ${timing.checksPassed}/${timing.checksTotal} · ${timing.reason}"
+
+        return V72HardwarelessSelfTestReport(passed == total, passed, total, firstFailure, details.toList())
     }
 }
 
 object V72HardwarelessSelfTestRuntime {
     @Volatile private var latest: V72HardwarelessSelfTestReport? = null
-
     fun run(speedMps: Double, directionDeg: Double): V72HardwarelessSelfTestReport =
         V72HardwarelessSelfTestDashboard.run(speedMps, directionDeg).also { latest = it }
-
     fun snapshot(): V72HardwarelessSelfTestReport? = latest
-
     fun clear() {
         latest = null
         V68HardwarelessStereoRuntime.clear()
@@ -113,5 +91,6 @@ object V72HardwarelessSelfTestRuntime {
         V74HardwarelessTrainingResumeRuntime.clear()
         V78HardwarelessMemoryGuardRuntime.clear()
         V79HardwarelessLifecycleChurnRuntime.clear()
+        V80HardwarelessTimingDistortionRuntime.clear()
     }
 }
