@@ -44,6 +44,11 @@ class HfrVideoAnalyzer {
         val ballCm: PointF?,
         val heelCm: PointF?,
         val toeCm: PointF?,
+        val ballPx: PointF?,
+        val heelPx: PointF?,
+        val toePx: PointF?,
+        val imageWidthPx: Int,
+        val imageHeightPx: Int,
         val markerAngleDeg: Double? = null
     )
 
@@ -209,7 +214,18 @@ class HfrVideoAnalyzer {
                 }
 
                 if (ballCm != null) prevBall = ballCm
-                samples += Sample(frame, ballCm, heelCm, toeCm, d.markerAngleDeg)
+                samples += Sample(
+                    frame = frame,
+                    ballCm = ballCm,
+                    heelCm = heelCm,
+                    toeCm = toeCm,
+                    ballPx = d.ballPx,
+                    heelPx = d.heelPx,
+                    toePx = d.toePx,
+                    imageWidthPx = bmp.width,
+                    imageHeightPx = bmp.height,
+                    markerAngleDeg = d.markerAngleDeg
+                )
             }
 
             phase = "KINEMATICS"
@@ -274,7 +290,18 @@ class HfrVideoAnalyzer {
             if (origin == null && ball != null && abs(ball.x) < 30f && ball.y in -20f..40f) origin = PointF(ball.x, ball.y)
             val o = origin
             if (impact < 0 && o != null && ball != null && hypot((ball.x-o.x).toDouble(), (ball.y-o.y).toDouble()) >= .8) impact = index
-            samples += Sample(index, ball, heel, toe, d.markerAngleDeg)
+            samples += Sample(
+                frame = index,
+                ballCm = ball,
+                heelCm = heel,
+                toeCm = toe,
+                ballPx = d.ballPx,
+                heelPx = d.heelPx,
+                toePx = d.toePx,
+                imageWidthPx = bmp.width,
+                imageHeightPx = bmp.height,
+                markerAngleDeg = d.markerAngleDeg
+            )
         }
         val o = origin ?: return null
         if (impact < 0) return null
@@ -301,11 +328,25 @@ class HfrVideoAnalyzer {
                     heelYcm = s.heelCm?.y?.toDouble(),
                     toeXcm = s.toeCm?.x?.toDouble(),
                     toeYcm = s.toeCm?.y?.toDouble(),
-                    markerAngleDeg = s.markerAngleDeg
+                    markerAngleDeg = s.markerAngleDeg,
+                    ballXpx = s.ballPx?.x?.toDouble(),
+                    ballYpx = s.ballPx?.y?.toDouble(),
+                    heelXpx = s.heelPx?.x?.toDouble(),
+                    heelYpx = s.heelPx?.y?.toDouble(),
+                    toeXpx = s.toePx?.x?.toDouble(),
+                    toeYpx = s.toePx?.y?.toDouble()
                 )
             }
             .toList()
-        return HfrFeatureTrack(fps = fps, impactFrame = impactFrame, frames = compact)
+        val imageWidthPx = samples.map { it.imageWidthPx }.distinct().singleOrNull()
+        val imageHeightPx = samples.map { it.imageHeightPx }.distinct().singleOrNull()
+        return HfrFeatureTrack(
+            fps = fps,
+            impactFrame = impactFrame,
+            frames = compact,
+            imageWidthPx = imageWidthPx,
+            imageHeightPx = imageHeightPx
+        )
     }
 
     private fun clearFrameCache() {
