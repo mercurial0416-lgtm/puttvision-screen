@@ -74,6 +74,12 @@ object V72HardwarelessSelfTestDashboard {
         if (!trainingResume.passed && firstFailure == null) firstFailure = "TRAIN RESUME"
         details += "TRAIN RESUME · ${trainingResume.checksPassed}/${trainingResume.checksTotal} · ${trainingResume.reason}"
 
+        val memoryGuard = V78HardwarelessMemoryGuardRuntime.run()
+        total += memoryGuard.checksTotal
+        passed += memoryGuard.checksPassed
+        if (!memoryGuard.passed && firstFailure == null) firstFailure = "HFR MEMORY"
+        details += "HFR MEMORY · ${memoryGuard.checksPassed}/${memoryGuard.checksTotal} · ${memoryGuard.reason}"
+
         return V72HardwarelessSelfTestReport(
             passed = passed == total,
             checksPassed = passed,
@@ -99,5 +105,6 @@ object V72HardwarelessSelfTestRuntime {
         V70HardwarelessTransportTimebaseRuntime.clear()
         V71HardwarelessProvenanceRuntime.clear()
         V74HardwarelessTrainingResumeRuntime.clear()
+        V78HardwarelessMemoryGuardRuntime.clear()
     }
 }
