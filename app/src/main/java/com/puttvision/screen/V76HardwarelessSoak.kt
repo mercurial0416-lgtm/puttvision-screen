@@ -1,12 +1,6 @@
 package com.puttvision.screen
 
-/**
- * Deterministic long-run regression exercise for the no-hardware path.
- *
- * This deliberately reuses V72 rather than creating a parallel approximation. It is intended for
- * CI/regression use: repeated synthetic shots exercise the same stereo/LAN/provenance/training
- * invariants while checking that bounded diagnostic state stays bounded over time.
- */
+/** Deterministic long-run regression exercise for the no-hardware path. */
 data class V76HardwarelessSoakReport(
     val requestedRuns: Int,
     val completedRuns: Int,
@@ -30,14 +24,13 @@ data class V76HardwarelessSoakReport(
 
 object V76HardwarelessSoak {
     const val DEFAULT_RUNS = 240
-    const val EXPECTED_CHECKS_PER_RUN = 55
+    const val EXPECTED_CHECKS_PER_RUN = 64
 
     private val speeds = doubleArrayOf(0.35, 0.45, 0.75, 1.20, 1.80, 2.80, 3.20)
     private val directions = doubleArrayOf(-7.0, -5.0, -2.5, 0.0, 2.5, 5.0, 7.0)
 
     fun run(runs: Int = DEFAULT_RUNS): V76HardwarelessSoakReport {
         require(runs in 1..5_000) { "soak runs must be 1..5000" }
-
         V72HardwarelessSelfTestRuntime.clear()
         V75HardwarelessSelfTestHistoryRuntime.reset()
 
@@ -54,13 +47,10 @@ object V76HardwarelessSoak {
             val direction = directions[(index * 3 + index / speeds.size) % directions.size]
             val report = V72HardwarelessSelfTestRuntime.run(speed, direction)
             V75HardwarelessSelfTestHistoryRuntime.record(report, recordedAtMs = 1_000_000L + index)
-
             completed++
             minChecks = minOf(minChecks, report.checksTotal)
             maxChecks = maxOf(maxChecks, report.checksTotal)
-            val runPassed = report.passed &&
-                report.checksPassed == report.checksTotal &&
-                report.checksTotal == EXPECTED_CHECKS_PER_RUN
+            val runPassed = report.passed && report.checksPassed == report.checksTotal && report.checksTotal == EXPECTED_CHECKS_PER_RUN
             if (runPassed) {
                 passedRuns++
             } else if (firstFailureRun == null) {
@@ -71,7 +61,6 @@ object V76HardwarelessSoak {
                     else -> "CHECK TOTAL MISMATCH"
                 }
             }
-
             val history = V75HardwarelessSelfTestHistoryRuntime.summary()
             maxHistory = maxOf(maxHistory, history.samples)
             if (history.samples > V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES && firstFailureRun == null) {
@@ -81,12 +70,10 @@ object V76HardwarelessSoak {
         }
 
         val history = V75HardwarelessSelfTestHistoryRuntime.summary()
-        val bounded = maxHistory <= V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES &&
-            history.samples <= V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES
+        val bounded = maxHistory <= V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES && history.samples <= V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES
         val passed = firstFailureRun == null && passedRuns == runs && bounded &&
             minChecks == EXPECTED_CHECKS_PER_RUN && maxChecks == EXPECTED_CHECKS_PER_RUN &&
-            history.failures == 0 &&
-            history.consecutivePasses == minOf(runs, V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES)
+            history.failures == 0 && history.consecutivePasses == minOf(runs, V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES)
 
         return V76HardwarelessSoakReport(
             requestedRuns = runs,
