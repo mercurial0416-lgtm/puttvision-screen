@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Handler
@@ -13,6 +14,7 @@ import android.view.View
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
 
@@ -33,6 +35,9 @@ object HardwarelessShotFactory {
         sequence: Int = 0
     ): ShotMetrics {
         val read = GreenReadRuntime.peek(settings)
+        // Hardwareless UI must consume the same solved GreenRead facts as production, never a
+        // second hand-tuned approximation. The synthetic shot itself still remains synthetic.
+        V56HardwarelessParityRuntime.publish(read)
         val d = settings.holeDistanceM.coerceIn(1.0, 15.0)
         val baseSpeed = read?.recommendedBallSpeedMps ?: (0.72 + d * .18).coerceIn(.72, 3.20)
         val baseAngle = read?.recommendedLaunchAngleDeg ?: 0.0
@@ -81,6 +86,7 @@ object HardwarelessShotFactory {
         val width = 640
         val height = 360
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val parity = V56HardwarelessParityRuntime.snapshot()
         for (i in 0 until frames) {
             val b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val c = Canvas(b)
@@ -129,6 +135,21 @@ object HardwarelessShotFactory {
             paint.textSize = 14f
             paint.color = Color.argb(170, 190, 205, 196)
             c.drawText("BALL ${"%.2f".format(metrics.ballSpeedMps)}m/s · START ${"%+.2f".format(metrics.launchAngleDeg)}°", 22f, 54f, paint)
+            parity?.let { model ->
+                paint.color = Color.argb(220, 4, 9, 8)
+                c.drawRoundRect(RectF(20f, 72f, 340f, 124f), 12f, 12f, paint)
+                paint.color = Color.rgb(255, 211, 64)
+                paint.textSize = 15f
+                c.drawText("AR READ · ${model.aimText}", 32f, 94f, paint)
+                paint.color = Color.rgb(220, 232, 225)
+                paint.textSize = 12f
+                c.drawText(
+                    "${"%.2f".format(model.recommendedBallSpeedMps)} → ${"%.2f".format(model.targetCupSpeedMps)} m/s · ${model.paceText}",
+                    32f,
+                    114f,
+                    paint
+                )
+            }
             out += b
         }
         return ImpactReplay(out, fps, impact)
@@ -241,6 +262,9 @@ class TvImpactReplayView(context: Context) : View(context) {
         val bmp = data.replay.frames.getOrNull(frame) ?: return
         if (bmp.isRecycled || width <= 0 || height <= 0) return
         val w = width.toFloat(); val h = height.toFloat()
+        if (data.synthetic) {
+            V56HardwarelessParityRuntime.snapshot()?.let { drawSyntheticParityHud(canvas, it, w, h) }
+        }
         // Screen-putting style PiP: green and rolling ball remain fully visible underneath.
         val cardW = w * .285f
         val cardH = h * .285f
@@ -262,6 +286,84 @@ class TvImpactReplayView(context: Context) : View(context) {
         canvas.drawText(if(frame==data.replay.impactIndex) "IMPACT" else "IMPACT REPLAY",card.left+w*.012f,card.top+h*.034f,p)
         p.textSize=max(9f,w*.0058f); p.color=Color.rgb(78,209,121)
         canvas.drawText("BALL ${"%.2f".format(data.metrics.ballSpeedMps)} · START ${"%+.2f".format(data.metrics.launchAngleDeg)}°",card.left+w*.012f,card.bottom-h*.025f,p)
+    }
+
+    private fun drawSyntheticParityHud(canvas: Canvas, model: V56GreenReadPresentation, w: Float, h: Float) {
+        val panel = RectF(w * .025f, h * .105f, w * .345f, h * .345f)
+        p.style = Paint.Style.FILL
+        p.color = Color.argb(222, 4, 9, 8)
+        canvas.drawRoundRect(panel, h * .020f, h * .020f, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = max(2f, w * .0011f)
+        p.color = Color.argb(165, 255, 211, 64)
+        canvas.drawRoundRect(panel, h * .020f, h * .020f, p)
+        p.style = Paint.Style.FILL
+
+        p.typeface = Typeface.DEFAULT_BOLD
+        p.textSize = max(10f, w * .0062f)
+        p.color = Color.rgb(255, 211, 64)
+        canvas.drawText("NO HARDWARE · SAME GREEN READ", panel.left + w*.012f, panel.top + h*.035f, p)
+        p.textSize = max(15f, w * .0102f)
+        p.color = Color.WHITE
+        canvas.drawText(model.aimText, panel.left + w*.012f, panel.top + h*.078f, p)
+        p.textSize = max(9f, w * .0058f)
+        p.color = Color.rgb(78, 209, 121)
+        canvas.drawText(
+            "BALL ${"%.2f".format(model.recommendedBallSpeedMps)} → CUP ${"%.2f".format(model.targetCupSpeedMps)} m/s",
+            panel.left + w*.012f,
+            panel.top + h*.112f,
+            p
+        )
+        p.color = Color.argb(220, 220, 232, 225)
+        canvas.drawText(model.paceText, panel.left + w*.012f, panel.top + h*.143f, p)
+
+        val graph = RectF(panel.left + w*.018f, panel.top + h*.158f, panel.right - w*.018f, panel.bottom - h*.018f)
+        drawReadTrail(canvas, graph, model)
+    }
+
+    private fun drawReadTrail(canvas: Canvas, box: RectF, model: V56GreenReadPresentation) {
+        val trail = model.trail
+        if (trail.size < 2 || box.width() <= 1f || box.height() <= 1f) return
+        val xs = trail.map { it.first }.filter(Double::isFinite)
+        val ys = trail.map { it.second }.filter(Double::isFinite)
+        if (xs.isEmpty() || ys.isEmpty()) return
+        val minX = xs.minOrNull() ?: return
+        val maxX = xs.maxOrNull() ?: return
+        val minY = ys.minOrNull() ?: return
+        val maxY = ys.maxOrNull() ?: return
+        val spanX = max(0.10, maxX - minX)
+        val spanY = max(0.10, maxY - minY)
+        fun map(point: Pair<Double, Double>): Pair<Float, Float> {
+            val x = box.left + (((point.first - minX) / spanX).coerceIn(0.0, 1.0) * box.width()).toFloat()
+            val y = box.bottom - (((point.second - minY) / spanY).coerceIn(0.0, 1.0) * box.height()).toFloat()
+            return x to y
+        }
+
+        val path = Path()
+        trail.forEachIndexed { index, point ->
+            val mapped = map(point)
+            if (index == 0) path.moveTo(mapped.first, mapped.second) else path.lineTo(mapped.first, mapped.second)
+        }
+        p.style = Paint.Style.STROKE
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        p.strokeWidth = max(2f, width * .0015f)
+        p.color = Color.rgb(255, 211, 64)
+        canvas.drawPath(path, p)
+        p.style = Paint.Style.FILL
+
+        model.apexIndex?.let { index ->
+            trail.getOrNull(index)?.let { point ->
+                val mapped = map(point)
+                p.color = Color.WHITE
+                canvas.drawCircle(mapped.first, mapped.second, max(4f, width*.0032f), p)
+                p.typeface = Typeface.DEFAULT_BOLD
+                p.textSize = max(8f, width*.0051f)
+                p.color = Color.rgb(255, 211, 64)
+                canvas.drawText("APEX", mapped.first + width*.006f, mapped.second - width*.004f, p)
+            }
+        }
+        p.strokeCap = Paint.Cap.BUTT
     }
 }
 
