@@ -21,8 +21,18 @@ object V55PixelTrackValidator {
     const val EDGE_TOLERANCE_PX = 2.0
     const val MIN_BALL_PIXEL_FRAMES = 3
 
-    fun inspect(track: HfrFeatureTrack, view: V15CameraView): V55PixelTrackValidation {
-        val planar = V44TrackValidator.normalize(track, view)
+    fun inspect(
+        track: HfrFeatureTrack,
+        view: V15CameraView,
+        allowPrimary: Boolean = false
+    ): V55PixelTrackValidation {
+        if (view == V15CameraView.PRIMARY && !allowPrimary) {
+            return V55PixelTrackValidation(false, "remote pixel track cannot be PRIMARY")
+        }
+        // V44's structural checks are view-independent after its remote PRIMARY guard. Reuse them
+        // for a local PRIMARY track by supplying a non-primary surrogate only to that validator.
+        val structuralView = if (view == V15CameraView.PRIMARY) V15CameraView.FACE_ON else view
+        val planar = V44TrackValidator.normalize(track, structuralView)
             ?: return V55PixelTrackValidation(false, "planar track invalid")
         val width = planar.imageWidthPx
         val height = planar.imageHeightPx
@@ -51,7 +61,11 @@ object V55PixelTrackValidator {
         return V55PixelTrackValidation(true, "OK", planar)
     }
 
-    fun normalize(track: HfrFeatureTrack, view: V15CameraView): HfrFeatureTrack? = inspect(track, view).normalized
+    fun normalize(
+        track: HfrFeatureTrack,
+        view: V15CameraView,
+        allowPrimary: Boolean = false
+    ): HfrFeatureTrack? = inspect(track, view, allowPrimary).normalized
 
     private fun pixelPairValid(x: Double?, y: Double?, width: Int, height: Int): Boolean {
         if ((x == null) != (y == null)) return false
@@ -165,7 +179,7 @@ object V55StereoPixelMatcher {
         remote: HfrFeatureTrack,
         remoteView: V15CameraView
     ): List<V55MatchedBallPixels> {
-        val localTrack = V55PixelTrackValidator.normalize(local, localView) ?: return emptyList()
+        val localTrack = V55PixelTrackValidator.normalize(local, localView, allowPrimary = true) ?: return emptyList()
         val remoteTrack = V55PixelTrackValidator.normalize(remote, remoteView) ?: return emptyList()
         return V44StereoMatcher.match(localTrack, remoteTrack).mapNotNull { matched ->
             val lx = matched.local.ballXpx ?: return@mapNotNull null
