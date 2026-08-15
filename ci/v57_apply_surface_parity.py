@@ -1,28 +1,29 @@
 from pathlib import Path
-import re
 
 main_path = Path('app/src/main/java/com/puttvision/screen/MainActivity.kt')
 ext_path = Path('app/src/main/java/com/puttvision/screen/ExternalDisplayController.kt')
 
 main = main_path.read_text(encoding='utf-8')
 
-pair = re.compile(
-    r'(?m)^(?P<i>\s*)root\.addView\(V18SimulatorFactory\.create\(this, engine\), FrameLayout\.LayoutParams\(-1, -1\)\)\n'
-    r'(?P=i)root\.addView\(TvImpactReplayView\(this\), FrameLayout\.LayoutParams\(-1, -1\)\)'
-)
+preview_old = '''        val tv = V18SimulatorFactory.create(this, engine)
+        root.addView(tv, FrameLayout.LayoutParams(-1, -1))
+        root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))'''
+preview_new = '''        root.addView(V57ProductTvSurface.create(this, engine), FrameLayout.LayoutParams(-1, -1))'''
+if main.count(preview_old) != 1:
+    raise SystemExit(f'expected one TV preview composition, found {main.count(preview_old)}')
+main = main.replace(preview_old, preview_new, 1)
 
-def pair_repl(match: re.Match[str]) -> str:
-    i = match.group('i')
-    return f'{i}root.addView(V57ProductTvSurface.create(this, engine), FrameLayout.LayoutParams(-1, -1))'
-
-main, count = pair.subn(pair_repl, main)
-if count != 2:
-    raise SystemExit(f'expected exactly 2 MainActivity TV surface pairs, found {count}')
+lab_old = '''        root.addView(V18SimulatorFactory.create(this, engine), FrameLayout.LayoutParams(-1, -1))
+        root.addView(TvImpactReplayView(this), FrameLayout.LayoutParams(-1, -1))'''
+lab_new = '''        root.addView(V57ProductTvSurface.create(this, engine), FrameLayout.LayoutParams(-1, -1))'''
+if main.count(lab_old) != 1:
+    raise SystemExit(f'expected one hardwareless lab composition, found {main.count(lab_old)}')
+main = main.replace(lab_old, lab_new, 1)
 
 old_copy = 'CAMERA MOCK ●  ·  TV V17 LOCAL ●\\n실제 측정 파이프라인에 합성 샷을 주입합니다.'
 new_copy = 'SIM CAMERA ●  ·  PRODUCT TV PARITY ●\\n실제 TV와 동일한 화면 레이어에 합성 샷을 주입합니다.'
-if old_copy not in main:
-    raise SystemExit('hardwareless lab helper copy not found')
+if main.count(old_copy) != 1:
+    raise SystemExit(f'expected one hardwareless helper copy, found {main.count(old_copy)}')
 main = main.replace(old_copy, new_copy, 1)
 main_path.write_text(main, encoding='utf-8')
 
@@ -38,4 +39,4 @@ if external.count(old_block) != 1:
 external = external.replace(old_block, new_block, 1)
 ext_path.write_text(external, encoding='utf-8')
 
-print('V57 surface parity patch applied: 2 MainActivity surfaces + 1 external TV surface')
+print('V57 surface parity patch applied: preview + hardwareless lab + external TV')
