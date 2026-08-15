@@ -69,8 +69,9 @@ object V56GreenReadPresentationBuilder {
 /**
  * Short-lived bridge for the no-hardware replay UI.
  *
- * Every synthetic shot now proves both halves of stereo safety: V68 must reconstruct known truth
- * through the production path, and V69 must reject intentionally corrupted capture bindings.
+ * Every synthetic shot now verifies stereo reconstruction, fail-closed frame binding, and the
+ * companion LAN codec/time/sequence path. None of these synthetic checks are physical accuracy
+ * claims; they are regression diagnostics for production code paths while hardware is unavailable.
  */
 object V56HardwarelessParityRuntime {
     @Volatile private var latest: V56GreenReadPresentation? = null
@@ -80,6 +81,7 @@ object V56HardwarelessParityRuntime {
             latest = null
             V68HardwarelessStereoRuntime.clear()
             V69HardwarelessStereoGuardRuntime.clear()
+            V70HardwarelessTransportTimebaseRuntime.clear()
             return
         }
         val base = V56GreenReadPresentationBuilder.from(read)
@@ -88,8 +90,9 @@ object V56HardwarelessParityRuntime {
             read.recommendedLaunchAngleDeg
         )
         val guards = V69HardwarelessStereoGuardRuntime.run()
+        val transport = V70HardwarelessTransportTimebaseRuntime.run()
         latest = base.copy(
-            paceText = "${base.paceText} · ${stereo.shortLabel()} · ${guards.shortLabel()}"
+            paceText = "${base.paceText} · ${stereo.shortLabel()} · ${guards.shortLabel()} · ${transport.shortLabel()}"
         )
     }
 
@@ -99,5 +102,6 @@ object V56HardwarelessParityRuntime {
         latest = null
         V68HardwarelessStereoRuntime.clear()
         V69HardwarelessStereoGuardRuntime.clear()
+        V70HardwarelessTransportTimebaseRuntime.clear()
     }
 }
