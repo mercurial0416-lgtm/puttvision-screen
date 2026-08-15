@@ -42,6 +42,7 @@ class V53StereoTriangulationTest {
         assertEquals(target.z, point.z, 1e-6)
         assertTrue(requireNotNull(result.rayGapM) < 1e-6)
         assertTrue(requireNotNull(result.parallaxDeg) > 1.0)
+        assertTrue(requireNotNull(result.reprojectionErrorPx) < 1e-6)
         assertTrue(result.geometryScore > 50)
     }
 
@@ -85,6 +86,31 @@ class V53StereoTriangulationTest {
         assertNotNull(result.pointWorld)
         assertTrue(requireNotNull(result.parallaxDeg) < 1.0)
         assertTrue(result.reason.contains("parallax"))
+    }
+
+    @Test fun mismatchedCorrespondenceIsRejectedByReprojectionGate() {
+        val left = calibration(-0.15)
+        val right = calibration(0.15)
+        val target = V53Vec3(0.02, 0.01, 2.0)
+        val leftPixel = requireNotNull(V53StereoProjection.project(left, target))
+        val rightPixel = requireNotNull(V53StereoProjection.project(right, target))
+        val mismatchedRight = rightPixel.copy(y = rightPixel.y + 8.0)
+
+        val result = V53StereoTriangulator.triangulate(
+            left,
+            leftPixel,
+            right,
+            mismatchedRight,
+            V53TriangulationPolicy(
+                maxRayGapM = 1.0,
+                maxTriangulationReprojectionPx = 1.0
+            )
+        )
+
+        assertFalse(result.usableForFusion)
+        assertNotNull(result.pointWorld)
+        assertTrue(requireNotNull(result.reprojectionErrorPx) > 1.0)
+        assertTrue(result.reason.contains("reprojection"))
     }
 
     @Test fun identicalCameraCentersRejectNearParallelGeometry() {
