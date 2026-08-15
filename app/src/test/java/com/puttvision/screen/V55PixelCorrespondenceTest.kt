@@ -76,12 +76,12 @@ class V55PixelCorrespondenceTest {
         assertTrue(result.reason.contains("BALL pixel"))
     }
 
-    @Test fun timedStereoMatchesExposeV53PixelPairs() {
+    @Test fun timedStereoMatchesAllowExplicitLocalPrimaryAndExposeV53PixelPairs() {
         val local = track(pixelShift = 0.0)
         val remote = track(pixelShift = 28.0)
         val pairs = V55StereoPixelMatcher.ballPairs(
             local = local,
-            localView = V15CameraView.FACE_ON,
+            localView = V15CameraView.PRIMARY,
             remote = remote,
             remoteView = V15CameraView.TOP
         )
@@ -89,6 +89,12 @@ class V55PixelCorrespondenceTest {
         assertEquals(950.0, pairs.first().localPixel.x, 1e-9)
         assertEquals(978.0, pairs.first().remotePixel.x, 1e-9)
         assertTrue(pairs.all { it.deltaMs <= 1e-9 })
+    }
+
+    @Test fun remotePrimaryPixelTrackRemainsRejected() {
+        val result = V55PixelTrackValidator.inspect(track(), V15CameraView.PRIMARY)
+        assertFalse(result.valid)
+        assertTrue(result.reason.contains("cannot be PRIMARY"))
     }
 
     @Test fun wrongPairCodeCannotDecodePixelTrack() {
