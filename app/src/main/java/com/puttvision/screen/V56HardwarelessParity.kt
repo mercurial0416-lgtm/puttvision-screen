@@ -67,11 +67,8 @@ object V56GreenReadPresentationBuilder {
 }
 
 /**
- * Short-lived bridge for the no-hardware replay UI.
- *
- * Every synthetic shot verifies stereo reconstruction, fail-closed frame binding, companion LAN
- * codec/time/sequence behavior, and packet camera/event provenance. These are software regression
- * diagnostics only and never substitute for real-device calibration or accuracy validation.
+ * Short-lived bridge for the no-hardware replay UI. V72 owns the detailed regression suites and
+ * exposes one compact status so small phone/TV preview panels do not clip a chain of diagnostics.
  */
 object V56HardwarelessParityRuntime {
     @Volatile private var latest: V56GreenReadPresentation? = null
@@ -79,22 +76,16 @@ object V56HardwarelessParityRuntime {
     fun publish(read: GreenRead?) {
         if (read == null) {
             latest = null
-            V68HardwarelessStereoRuntime.clear()
-            V69HardwarelessStereoGuardRuntime.clear()
-            V70HardwarelessTransportTimebaseRuntime.clear()
-            V71HardwarelessProvenanceRuntime.clear()
+            V72HardwarelessSelfTestRuntime.clear()
             return
         }
         val base = V56GreenReadPresentationBuilder.from(read)
-        val stereo = V68HardwarelessStereoRuntime.run(
+        val selfTest = V72HardwarelessSelfTestRuntime.run(
             read.recommendedBallSpeedMps,
             read.recommendedLaunchAngleDeg
         )
-        val guards = V69HardwarelessStereoGuardRuntime.run()
-        val transport = V70HardwarelessTransportTimebaseRuntime.run()
-        val provenance = V71HardwarelessProvenanceRuntime.run()
         latest = base.copy(
-            paceText = "${base.paceText} · ${stereo.shortLabel()} · ${guards.shortLabel()} · ${transport.shortLabel()} · ${provenance.shortLabel()}"
+            paceText = "${base.paceText} · ${selfTest.shortLabel()}"
         )
     }
 
@@ -102,9 +93,6 @@ object V56HardwarelessParityRuntime {
 
     fun clear() {
         latest = null
-        V68HardwarelessStereoRuntime.clear()
-        V69HardwarelessStereoGuardRuntime.clear()
-        V70HardwarelessTransportTimebaseRuntime.clear()
-        V71HardwarelessProvenanceRuntime.clear()
+        V72HardwarelessSelfTestRuntime.clear()
     }
 }
