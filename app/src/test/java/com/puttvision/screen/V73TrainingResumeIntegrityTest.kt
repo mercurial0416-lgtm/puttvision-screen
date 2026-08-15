@@ -49,6 +49,15 @@ class V73TrainingResumeIntegrityTest {
         ).valid)
     }
 
+    @Test fun completedBlockHistoryMustRemainSequential() {
+        assertFalse(V73TrainingResumeIntegrity.evaluate(
+            state(completedBlocks = listOf(
+                V73TrainingBlockResultState(0, 5, 4),
+                V73TrainingBlockResultState(2, 5, 2)
+            )), now
+        ).valid)
+    }
+
     @Test fun corruptedCompletedBlockCountersFailClosed() {
         assertFalse(V73TrainingResumeIntegrity.evaluate(
             state(completedBlocks = listOf(
