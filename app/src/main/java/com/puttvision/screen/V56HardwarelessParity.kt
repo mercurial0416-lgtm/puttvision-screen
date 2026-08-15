@@ -66,17 +66,34 @@ object V56GreenReadPresentationBuilder {
     }
 }
 
-/** Short-lived bridge for synthetic replay UI; the lab only publishes an already-solved GreenRead. */
+/**
+ * Short-lived bridge for the no-hardware replay UI.
+ *
+ * Publishing a solved GreenRead also runs V68 with that exact recommended speed/direction. The
+ * existing replay/TV HUD already renders paceText, so the hardwareless test screen now visibly
+ * proves whether the production stereo path survived V67/V55/V60/V63 without requiring a camera.
+ */
 object V56HardwarelessParityRuntime {
     @Volatile private var latest: V56GreenReadPresentation? = null
 
     fun publish(read: GreenRead?) {
-        latest = read?.let { V56GreenReadPresentationBuilder.from(it) }
+        if (read == null) {
+            latest = null
+            V68HardwarelessStereoRuntime.clear()
+            return
+        }
+        val base = V56GreenReadPresentationBuilder.from(read)
+        val stereo = V68HardwarelessStereoRuntime.run(
+            read.recommendedBallSpeedMps,
+            read.recommendedLaunchAngleDeg
+        )
+        latest = base.copy(paceText = "${base.paceText} · ${stereo.shortLabel()}")
     }
 
     fun snapshot(): V56GreenReadPresentation? = latest
 
     fun clear() {
         latest = null
+        V68HardwarelessStereoRuntime.clear()
     }
 }
