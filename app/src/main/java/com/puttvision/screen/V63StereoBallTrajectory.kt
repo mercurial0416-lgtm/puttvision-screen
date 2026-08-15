@@ -6,9 +6,10 @@ import kotlin.math.hypot
 /**
  * First measurement-facing consumer of calibrated stereo: BALL only.
  *
- * Every sample must originate from V55 time-matched raw pixels and pass V59 + V53 + V60. The
- * output remains isolated from FACE/PATH and from ShotMetrics until real-device validation proves
- * it is safe to promote. Derived speed/direction are geometry outputs, not physical accuracy claims.
+ * Every sample must originate from V55 time-matched raw pixels, be bound by V67 to the exact
+ * active capture coordinate space, and pass V59 + V53 + V60. The output remains isolated from
+ * FACE/PATH and from ShotMetrics until real-device validation proves it is safe to promote.
+ * Derived speed/direction are geometry outputs, not physical accuracy claims.
  */
 data class V63StereoBallSample(
     val timeFromImpactMs: Double,
@@ -69,6 +70,15 @@ object V63StereoBallTrajectoryReconstructor {
             ?: return blocked("local raw-pixel track invalid")
         val remote = V55PixelTrackValidator.normalize(remoteTrack, remoteView)
             ?: return blocked("remote raw-pixel track invalid")
+
+        val frameBinding = V67StereoFrameBindingGate.evaluatePair(
+            firstTrack = local,
+            firstSignature = currentFirst,
+            secondTrack = remote,
+            secondSignature = currentSecond
+        )
+        if (!frameBinding.bound) return blocked("V67 gate: ${frameBinding.reason}")
+
         val localByFrame = local.frames.associateBy { it.frame }
         val pairs = V55StereoPixelMatcher.ballPairs(local, localView, remote, remoteView)
         if (pairs.isEmpty()) return blocked("no time-matched BALL pixel pairs")
