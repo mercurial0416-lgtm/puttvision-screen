@@ -4,6 +4,7 @@ import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** Guards the real HFR analyzer wiring, not only hand-built stereo fixtures. */
 class V58HfrPixelProductionTest {
     private fun analyzerSource(): String {
         val candidates = listOf(
