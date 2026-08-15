@@ -157,7 +157,7 @@ object V71HardwarelessProvenanceSuite {
             "baseline packet pair accepted" to bound(),
             "wrong local camera rejected" to !bound(local.copy(cameraId = "other-cam"), remote),
             "wrong remote camera rejected" to !bound(local, remote.copy(cameraId = "other-cam")),
-            "wrong remote view rejected" to !bound(local, remote.copy(view = V15CameraView.DOWN_THE_LINE)),
+            "wrong remote view rejected" to !bound(local, remote.copy(view = V15CameraView.PRIMARY)),
             "same camera id rejected" to !V71StereoPacketProvenanceGate.evaluate(
                 local,
                 remote.copy(cameraId = local.cameraId),
