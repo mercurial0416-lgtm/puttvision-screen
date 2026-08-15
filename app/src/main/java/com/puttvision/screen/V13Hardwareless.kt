@@ -14,7 +14,6 @@ import android.view.View
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.sin
 
@@ -34,13 +33,13 @@ object HardwarelessShotFactory {
         settings: GreenSettings,
         sequence: Int = 0
     ): ShotMetrics {
-        val read = GreenReadRuntime.peek(settings)
-        // Hardwareless UI must consume the same solved GreenRead facts as production, never a
-        // second hand-tuned approximation. The synthetic shot itself still remains synthetic.
+        // The lab must have a solved read on the first injected shot. Production normally prefetches
+        // this asynchronously; hardwareless mode can safely fall back to the exact same cached solver
+        // synchronously so its UI never drops back to a hand-tuned approximation.
+        val read = GreenReadRuntime.peek(settings) ?: GreenReadAdvisor.read(settings)
         V56HardwarelessParityRuntime.publish(read)
-        val d = settings.holeDistanceM.coerceIn(1.0, 15.0)
-        val baseSpeed = read?.recommendedBallSpeedMps ?: (0.72 + d * .18).coerceIn(.72, 3.20)
-        val baseAngle = read?.recommendedLaunchAngleDeg ?: 0.0
+        val baseSpeed = read.recommendedBallSpeedMps
+        val baseAngle = read.recommendedLaunchAngleDeg
         val wobble = ((sequence % 5) - 2) * .025
         val (speed, angle, face, path, confidence) = when (scenario) {
             HardwarelessScenario.CENTER -> listOf(baseSpeed + wobble, baseAngle + wobble * .8, 0.05, 0.03, .96)
@@ -217,6 +216,7 @@ object TvImpactReplayBus {
         val old = current
         current = null
         listeners.forEach { it(null) }
+        if (old?.synthetic == true) V56HardwarelessParityRuntime.clear()
         old?.let { recycleLater(it.replay.frames) }
     }
 
