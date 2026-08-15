@@ -44,4 +44,16 @@ class V45HfrDiagnosticsTest {
         assertEquals(0L, V45HfrFrameCachePolicy.estimatedArgbBytes(1920, -1, 4))
         assertEquals(0L, V45HfrFrameCachePolicy.estimatedArgbBytes(1920, 1080, -2))
     }
+
+    @Test fun invalidCacheAccountingFailsClosed() {
+        assertTrue(V45HfrFrameCachePolicy.shouldEvict(-1, 0L))
+        assertTrue(V45HfrFrameCachePolicy.shouldEvict(1, -1L))
+        assertFalse(V45HfrFrameCachePolicy.shouldEvict(0, 0L))
+    }
+
+    @Test fun byteEstimateSaturatesInsteadOfWrappingOnOverflow() {
+        val bytes = V45HfrFrameCachePolicy.estimatedArgbBytes(Int.MAX_VALUE, Int.MAX_VALUE, Int.MAX_VALUE)
+        assertEquals(Long.MAX_VALUE, bytes)
+        assertTrue(V45HfrFrameCachePolicy.shouldEvict(1, bytes))
+    }
 }
