@@ -71,7 +71,7 @@ object V56HardwarelessParityRuntime {
     @Volatile private var latest: V56GreenReadPresentation? = null
 
     fun publish(read: GreenRead?) {
-        latest = read?.let(V56GreenReadPresentationBuilder::from)
+        latest = read?.let { V56GreenReadPresentationBuilder.from(it) }
     }
 
     fun snapshot(): V56GreenReadPresentation? = latest
