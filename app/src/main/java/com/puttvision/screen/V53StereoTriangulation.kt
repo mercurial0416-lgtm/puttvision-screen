@@ -87,17 +87,20 @@ data class V53Ray(val origin: V53Vec3, val direction: V53Vec3)
 data class V53TriangulationPolicy(
     val minParallaxDeg: Double = 1.0,
     val maxRayGapM: Double = 0.020,
-    val maxCalibrationRmsPx: Double = 2.5
+    val maxCalibrationRmsPx: Double = 2.5,
+    val maxTriangulationReprojectionPx: Double = 2.0
 ) {
     fun valid(): Boolean = minParallaxDeg.isFinite() && minParallaxDeg > 0.0 &&
         maxRayGapM.isFinite() && maxRayGapM > 0.0 &&
-        maxCalibrationRmsPx.isFinite() && maxCalibrationRmsPx > 0.0
+        maxCalibrationRmsPx.isFinite() && maxCalibrationRmsPx > 0.0 &&
+        maxTriangulationReprojectionPx.isFinite() && maxTriangulationReprojectionPx > 0.0
 }
 
 data class V53TriangulationResult(
     val pointWorld: V53Vec3?,
     val rayGapM: Double?,
     val parallaxDeg: Double?,
+    val reprojectionErrorPx: Double?,
     /** Geometry-only quality score. This is not a real-device measurement-accuracy percentage. */
     val geometryScore: Int,
     val usableForFusion: Boolean,
@@ -165,32 +168,55 @@ object V53StereoTriangulator {
         val parallax = Math.toDegrees(acos(dot))
         if (!gap.isFinite() || !parallax.isFinite()) return failure("triangulation geometry non-finite")
 
+        val projectedFirst = V53StereoProjection.project(firstCalibration, midpoint)
+            ?: return failure("first reprojection invalid")
+        val projectedSecond = V53StereoProjection.project(secondCalibration, midpoint)
+            ?: return failure("second reprojection invalid")
+        val firstReprojection = pixelDistance(projectedFirst, firstPixel)
+        val secondReprojection = pixelDistance(projectedSecond, secondPixel)
+        val reprojection = max(firstReprojection, secondReprojection)
+        if (!reprojection.isFinite()) return failure("triangulation reprojection non-finite")
+
         val parallaxFactor = ((parallax - policy.minParallaxDeg) / 8.0).coerceIn(0.0, 1.0)
         val gapFactor = (1.0 - gap / policy.maxRayGapM).coerceIn(0.0, 1.0)
         val worstRms = max(firstCalibration.rmsReprojectionPx, secondCalibration.rmsReprojectionPx)
         val calibrationFactor = (1.0 - worstRms / policy.maxCalibrationRmsPx).coerceIn(0.0, 1.0)
-        val score = (100.0 * (0.45 * gapFactor + 0.35 * parallaxFactor + 0.20 * calibrationFactor))
-            .toInt().coerceIn(0, 100)
+        val reprojectionFactor = (1.0 - reprojection / policy.maxTriangulationReprojectionPx).coerceIn(0.0, 1.0)
+        val score = (100.0 * (
+            0.35 * gapFactor +
+                0.30 * parallaxFactor +
+                0.15 * calibrationFactor +
+                0.20 * reprojectionFactor
+            )).toInt().coerceIn(0, 100)
 
         val reason = when {
             parallax < policy.minParallaxDeg -> "parallax too small"
             gap > policy.maxRayGapM -> "ray agreement too weak"
+            reprojection > policy.maxTriangulationReprojectionPx -> "triangulation reprojection error too high"
             else -> "geometry ready for downstream validation"
         }
         return V53TriangulationResult(
             pointWorld = midpoint,
             rayGapM = gap,
             parallaxDeg = parallax,
+            reprojectionErrorPx = reprojection,
             geometryScore = score,
             usableForFusion = reason.startsWith("geometry ready"),
             reason = reason
         )
     }
 
+    private fun pixelDistance(a: V53Pixel, b: V53Pixel): Double {
+        val dx = a.x - b.x
+        val dy = a.y - b.y
+        return sqrt(dx * dx + dy * dy)
+    }
+
     private fun failure(reason: String) = V53TriangulationResult(
         pointWorld = null,
         rayGapM = null,
         parallaxDeg = null,
+        reprojectionErrorPx = null,
         geometryScore = 0,
         usableForFusion = false,
         reason = reason
