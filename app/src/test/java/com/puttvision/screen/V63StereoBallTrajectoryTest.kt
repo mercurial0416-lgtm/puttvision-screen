@@ -14,10 +14,10 @@ class V63StereoBallTrajectoryTest {
     )
     private val intrinsics = V53CameraIntrinsics(1200.0, 1200.0, 960.0, 540.0)
 
-    private fun signature(id: String, fps: Int = 240) = V59CaptureSignature(
+    private fun signature(id: String, fps: Int = 240, width: Int = 1920, height: Int = 1080) = V59CaptureSignature(
         cameraId = id,
-        widthPx = 1920,
-        heightPx = 1080,
+        widthPx = width,
+        heightPx = height,
         fps = fps,
         sensorOrientationDeg = 90,
         lensFacing = "BACK",
@@ -48,10 +48,13 @@ class V63StereoBallTrajectoryTest {
         sampleCount: Int = 7,
         vx: Double = 0.12,
         vy: Double = 1.20,
-        zAt: (Int) -> Double = { 0.021 }
+        zAt: (Int) -> Double = { 0.021 },
+        width: Int = 1920,
+        height: Int = 1080,
+        fps: Int = 240
     ): HfrFeatureTrack {
         val frames = (0 until sampleCount).map { i ->
-            val timeMs = i * (1000.0 / 240.0)
+            val timeMs = i * (1000.0 / fps.toDouble())
             val seconds = timeMs / 1000.0
             val point = V53Vec3(
                 x = 0.01 + vx * seconds,
@@ -74,11 +77,11 @@ class V63StereoBallTrajectoryTest {
             )
         }
         return HfrFeatureTrack(
-            fps = 240,
+            fps = fps,
             impactFrame = 10,
             frames = frames,
-            imageWidthPx = 1920,
-            imageHeightPx = 1080
+            imageWidthPx = width,
+            imageHeightPx = height
         )
     }
 
@@ -86,6 +89,7 @@ class V63StereoBallTrajectoryTest {
         local: HfrFeatureTrack = track(leftCal),
         remote: HfrFeatureTrack = track(rightCal),
         firstSignature: V59CaptureSignature = signature("left"),
+        secondSignature: V59CaptureSignature = signature("right"),
         policy: V63StereoBallPolicy = V63StereoBallPolicy()
     ) = V63StereoBallTrajectoryReconstructor.reconstruct(
         localTrack = local,
@@ -94,7 +98,7 @@ class V63StereoBallTrajectoryTest {
         remoteView = V15CameraView.FACE_ON,
         profile = profile(),
         currentFirst = firstSignature,
-        currentSecond = signature("right"),
+        currentSecond = secondSignature,
         activePairId = "pair-a",
         activeRigRevisionId = "rig-a",
         nowMs = 100_500L,
@@ -113,11 +117,27 @@ class V63StereoBallTrajectoryTest {
         assertTrue(result.samples.all { it.positionSensitivityM >= 0.0 && it.reprojectionErrorPx < 1e-4 })
     }
 
-    @Test fun captureSignatureMismatchIsBlockedByV59ThroughV60() {
+    @Test fun captureFpsMismatchIsBlockedBeforeTriangulationByV67() {
         val result = reconstruct(firstSignature = signature("left", fps = 120))
         assertFalse(result.usableForMeasurementValidation)
         assertTrue(result.samples.isEmpty())
-        assertTrue(result.reason.contains("insufficient V60-approved"))
+        assertTrue(result.reason.contains("V67 gate"))
+        assertTrue(result.reason.contains("fps"))
+    }
+
+    @Test fun captureShapeMismatchIsBlockedBeforeTriangulationByV67() {
+        val result = reconstruct(firstSignature = signature("left", width = 1280, height = 720))
+        assertFalse(result.usableForMeasurementValidation)
+        assertTrue(result.samples.isEmpty())
+        assertTrue(result.reason.contains("V67 gate"))
+        assertTrue(result.reason.contains("shape"))
+    }
+
+    @Test fun remoteTrackShapeMismatchIsBlockedBeforeTriangulationByV67() {
+        val result = reconstruct(remote = track(rightCal, width = 1280, height = 720))
+        assertFalse(result.usableForMeasurementValidation)
+        assertTrue(result.samples.isEmpty())
+        assertTrue(result.reason.contains("second camera"))
     }
 
     @Test fun tooFewStereoSamplesCannotBecomeMeasurementCandidate() {
