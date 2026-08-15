@@ -69,9 +69,8 @@ object V56GreenReadPresentationBuilder {
 /**
  * Short-lived bridge for the no-hardware replay UI.
  *
- * Publishing a solved GreenRead also runs V68 with that exact recommended speed/direction. The
- * existing replay/TV HUD already renders paceText, so the hardwareless test screen now visibly
- * proves whether the production stereo path survived V67/V55/V60/V63 without requiring a camera.
+ * Every synthetic shot now proves both halves of stereo safety: V68 must reconstruct known truth
+ * through the production path, and V69 must reject intentionally corrupted capture bindings.
  */
 object V56HardwarelessParityRuntime {
     @Volatile private var latest: V56GreenReadPresentation? = null
@@ -80,6 +79,7 @@ object V56HardwarelessParityRuntime {
         if (read == null) {
             latest = null
             V68HardwarelessStereoRuntime.clear()
+            V69HardwarelessStereoGuardRuntime.clear()
             return
         }
         val base = V56GreenReadPresentationBuilder.from(read)
@@ -87,7 +87,10 @@ object V56HardwarelessParityRuntime {
             read.recommendedBallSpeedMps,
             read.recommendedLaunchAngleDeg
         )
-        latest = base.copy(paceText = "${base.paceText} · ${stereo.shortLabel()}")
+        val guards = V69HardwarelessStereoGuardRuntime.run()
+        latest = base.copy(
+            paceText = "${base.paceText} · ${stereo.shortLabel()} · ${guards.shortLabel()}"
+        )
     }
 
     fun snapshot(): V56GreenReadPresentation? = latest
@@ -95,5 +98,6 @@ object V56HardwarelessParityRuntime {
     fun clear() {
         latest = null
         V68HardwarelessStereoRuntime.clear()
+        V69HardwarelessStereoGuardRuntime.clear()
     }
 }
