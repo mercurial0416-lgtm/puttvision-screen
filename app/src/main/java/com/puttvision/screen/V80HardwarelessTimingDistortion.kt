@@ -22,7 +22,7 @@ object V80HardwarelessTimingDistortion {
         val excessiveJitter = track(jitterMs = doubleArrayOf(0.0, 0.0, 0.0, 9.0, 0.0, 0.0, 0.0))
         val dropped = track(frameIds = intArrayOf(10, 11, 13, 14, 15, 16, 17))
         val compressedDrop = track(
-            frameIds = intArrayOf(10, 11, 13, 14, 15, 16, 17),
+            frameIds = intArrayOf(10, 11, 14, 15, 16, 17, 18),
             overrideTimesMs = doubleArrayOf(0.0, frameMs(), frameMs() * 2, frameMs() * 3, frameMs() * 4, frameMs() * 5, frameMs() * 6)
         )
         val duplicateTime = track(overrideTimesMs = doubleArrayOf(0.0, frameMs(), frameMs(), frameMs() * 3, frameMs() * 4, frameMs() * 5, frameMs() * 6))
@@ -46,8 +46,8 @@ object V80HardwarelessTimingDistortion {
         val checks = listOf(
             "bounded frame jitter accepted" to (V44TrackValidator.normalize(boundedJitter, V15CameraView.FACE_ON) != null),
             "excessive frame jitter rejected" to (V44TrackValidator.normalize(excessiveJitter, V15CameraView.FACE_ON) == null),
-            "real dropped frame with preserved timestamp accepted" to (V44TrackValidator.normalize(dropped, V15CameraView.FACE_ON) != null),
-            "compressed dropped-frame timeline rejected" to (V44TrackValidator.normalize(compressedDrop, V15CameraView.FACE_ON) == null),
+            "single dropped frame with preserved timestamp accepted" to (V44TrackValidator.normalize(dropped, V15CameraView.FACE_ON) != null),
+            "multi-frame compressed timeline rejected" to (V44TrackValidator.normalize(compressedDrop, V15CameraView.FACE_ON) == null),
             "duplicate/non-monotonic timestamp rejected" to (V44TrackValidator.normalize(duplicateTime, V15CameraView.FACE_ON) == null),
             "small physical-shot skew accepted" to goodGate.accepted,
             "high timestamp uncertainty rejected" to !V70StereoTimeQualityGate.evaluate(local, remote(uncertaintyMs = 81L), NOW_MS).accepted,
