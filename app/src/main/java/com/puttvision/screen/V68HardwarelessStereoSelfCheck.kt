@@ -43,11 +43,12 @@ object V68HardwarelessStereoSelfCheck {
     )
     private val intrinsics = V53CameraIntrinsics(1200.0, 1200.0, 960.0, 540.0)
 
-    fun verify(metrics: ShotMetrics): V68StereoSelfCheckResult = runCatching {
-        val speed = metrics.ballSpeedMps
-        val direction = metrics.launchAngleDeg
-        require(speed.isFinite() && speed > 0.01)
-        require(direction.isFinite())
+    fun verify(metrics: ShotMetrics): V68StereoSelfCheckResult =
+        verify(metrics.ballSpeedMps, metrics.launchAngleDeg)
+
+    fun verify(speedMps: Double, directionDeg: Double): V68StereoSelfCheckResult = runCatching {
+        require(speedMps.isFinite() && speedMps > 0.01)
+        require(directionDeg.isFinite())
 
         val first = calibration(-0.15)
         val second = calibration(0.15)
@@ -61,9 +62,9 @@ object V68HardwarelessStereoSelfCheck {
             calibratedAtMs = CALIBRATED_AT_MS,
             acceptedObservationCount = 5
         )
-        val rad = Math.toRadians(direction)
-        val vx = speed * sin(rad)
-        val vy = speed * cos(rad)
+        val rad = Math.toRadians(directionDeg)
+        val vx = speedMps * sin(rad)
+        val vy = speedMps * cos(rad)
         val firstTrack = track(first, vx, vy)
         val secondTrack = track(second, vx, vy)
 
@@ -81,17 +82,17 @@ object V68HardwarelessStereoSelfCheck {
         )
         val reconstructedSpeed = result.horizontalSpeedMps
         val reconstructedDirection = result.startDirectionDeg
-        val speedError = reconstructedSpeed?.let { abs(it - speed) }
-        val directionError = reconstructedDirection?.let { angularErrorDeg(it, direction) }
+        val speedError = reconstructedSpeed?.let { abs(it - speedMps) }
+        val directionError = reconstructedDirection?.let { angularErrorDeg(it, directionDeg) }
         val passed = result.usableForMeasurementValidation &&
             reconstructedSpeed != null && reconstructedDirection != null &&
             speedError != null && speedError <= 0.005 &&
             directionError != null && directionError <= 0.05
         V68StereoSelfCheckResult(
             passed = passed,
-            expectedSpeedMps = speed,
+            expectedSpeedMps = speedMps,
             reconstructedSpeedMps = reconstructedSpeed,
-            expectedDirectionDeg = direction,
+            expectedDirectionDeg = directionDeg,
             reconstructedDirectionDeg = reconstructedDirection,
             speedErrorMps = speedError,
             directionErrorDeg = directionError,
@@ -101,9 +102,9 @@ object V68HardwarelessStereoSelfCheck {
     }.getOrElse { error ->
         V68StereoSelfCheckResult(
             passed = false,
-            expectedSpeedMps = metrics.ballSpeedMps,
+            expectedSpeedMps = speedMps,
             reconstructedSpeedMps = null,
-            expectedDirectionDeg = metrics.launchAngleDeg,
+            expectedDirectionDeg = directionDeg,
             reconstructedDirectionDeg = null,
             speedErrorMps = null,
             directionErrorDeg = null,
@@ -175,7 +176,10 @@ object V68HardwarelessStereoRuntime {
     @Volatile private var latest: V68StereoSelfCheckResult? = null
 
     fun run(metrics: ShotMetrics): V68StereoSelfCheckResult =
-        V68HardwarelessStereoSelfCheck.verify(metrics).also { latest = it }
+        run(metrics.ballSpeedMps, metrics.launchAngleDeg)
+
+    fun run(speedMps: Double, directionDeg: Double): V68StereoSelfCheckResult =
+        V68HardwarelessStereoSelfCheck.verify(speedMps, directionDeg).also { latest = it }
 
     fun snapshot(): V68StereoSelfCheckResult? = latest
 
