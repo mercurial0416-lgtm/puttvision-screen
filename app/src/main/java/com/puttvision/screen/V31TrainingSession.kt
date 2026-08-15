@@ -405,6 +405,7 @@ object V31TrainingSessionRuntime {
                 val r = persistedResults.getJSONObject(i)
                 val resultIndex = r.getInt("i")
                 require(resultIndex in blocks.indices)
+                require(resultIndex == i)
                 restoredResults += BlockResult(
                     block = blocks[resultIndex],
                     attempts = r.getInt("a"),
