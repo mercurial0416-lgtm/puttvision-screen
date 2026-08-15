@@ -69,9 +69,9 @@ object V56GreenReadPresentationBuilder {
 /**
  * Short-lived bridge for the no-hardware replay UI.
  *
- * Every synthetic shot now verifies stereo reconstruction, fail-closed frame binding, and the
- * companion LAN codec/time/sequence path. None of these synthetic checks are physical accuracy
- * claims; they are regression diagnostics for production code paths while hardware is unavailable.
+ * Every synthetic shot verifies stereo reconstruction, fail-closed frame binding, companion LAN
+ * codec/time/sequence behavior, and packet camera/event provenance. These are software regression
+ * diagnostics only and never substitute for real-device calibration or accuracy validation.
  */
 object V56HardwarelessParityRuntime {
     @Volatile private var latest: V56GreenReadPresentation? = null
@@ -82,6 +82,7 @@ object V56HardwarelessParityRuntime {
             V68HardwarelessStereoRuntime.clear()
             V69HardwarelessStereoGuardRuntime.clear()
             V70HardwarelessTransportTimebaseRuntime.clear()
+            V71HardwarelessProvenanceRuntime.clear()
             return
         }
         val base = V56GreenReadPresentationBuilder.from(read)
@@ -91,8 +92,9 @@ object V56HardwarelessParityRuntime {
         )
         val guards = V69HardwarelessStereoGuardRuntime.run()
         val transport = V70HardwarelessTransportTimebaseRuntime.run()
+        val provenance = V71HardwarelessProvenanceRuntime.run()
         latest = base.copy(
-            paceText = "${base.paceText} · ${stereo.shortLabel()} · ${guards.shortLabel()} · ${transport.shortLabel()}"
+            paceText = "${base.paceText} · ${stereo.shortLabel()} · ${guards.shortLabel()} · ${transport.shortLabel()} · ${provenance.shortLabel()}"
         )
     }
 
@@ -103,5 +105,6 @@ object V56HardwarelessParityRuntime {
         V68HardwarelessStereoRuntime.clear()
         V69HardwarelessStereoGuardRuntime.clear()
         V70HardwarelessTransportTimebaseRuntime.clear()
+        V71HardwarelessProvenanceRuntime.clear()
     }
 }
