@@ -3,6 +3,7 @@ package com.puttvision.screen
 import android.content.Context
 import android.graphics.*
 import android.view.View
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 
@@ -56,11 +57,16 @@ class PhoneOverlayView(context: Context) : View(context) {
         c.drawText("BALL ZONE",cx,cy+r*2.35f,p);p.textAlign=Paint.Align.LEFT
     }
 
-    /** Improvement 16: AR line receives a soft halo and route breadcrumbs, keeping the actual solver path untouched. */
+    /**
+     * AR green read: keep the shared solver path intact, but make the advice actionable at address.
+     * The phone now exposes side/cup count, pace and the visual break apex instead of speed alone.
+     */
     private fun drawArGreenRead(c: Canvas, d: Float) {
         val frame = lastOverlay?.frameInfo ?: return
         if (calibrationImagePoints.size != 4) return
-        val snap = V33ArGreenReadRuntime.snapshot(V26ProductSettingsRuntime.settings, calibrationImagePoints, frame) ?: return
+        val settings = V26ProductSettingsRuntime.settings
+        val snap = V33ArGreenReadRuntime.snapshot(settings, calibrationImagePoints, frame) ?: return
+        val read = GreenReadRuntime.peekOrSchedule(settings)
         val points = snap.imagePoints.mapNotNull { mapRawToView(it, frame) }
         if (points.size < 2) return
         val path=Path().apply{moveTo(points.first().x,points.first().y);for(i in 1 until points.size)lineTo(points[i].x,points[i].y)}
@@ -73,9 +79,57 @@ class PhoneOverlayView(context: Context) : View(context) {
         val start=points.first();val cup=points.last()
         p.color=Color.argb(220,6,10,13);c.drawCircle(start.x,start.y,8f*d,p);p.color=Color.rgb(255,211,64);c.drawCircle(start.x,start.y,4.2f*d,p)
         p.style=Paint.Style.STROKE;p.strokeWidth=2.2f*d;p.color=Color.WHITE;c.drawCircle(cup.x,cup.y,9f*d,p);p.style=Paint.Style.FILL;p.color=Pv.amber;c.drawCircle(cup.x,cup.y,3f*d,p)
-        val label="AR READ  ·  %.2f → %.2f m/s".format(snap.ballSpeedMps,snap.cupSpeedMps)
-        p.textSize=7f*d;p.typeface=Typeface.DEFAULT_BOLD;val textW=p.measureText(label);val left=((width-textW)/2f-10f*d).coerceAtLeast(138f*d);val right=(left+textW+20f*d).coerceAtMost(width-10f*d)
-        if(right>left){val top=10f*d;p.color=Color.argb(210,6,10,13);c.drawRoundRect(RectF(left,top,right,top+22f*d),11f*d,11f*d,p);p.color=Pv.amber;c.drawText(label,left+10f*d,top+15f*d,p)}
+
+        arBreakApex(points)?.let { apex ->
+            val rr = 5.2f*d
+            p.style=Paint.Style.FILL
+            p.color=Color.argb(225,6,10,13)
+            c.drawCircle(apex.x,apex.y,rr+3f*d,p)
+            p.style=Paint.Style.STROKE;p.strokeWidth=1.8f*d;p.color=Pv.amber
+            c.drawPath(Path().apply {
+                moveTo(apex.x, apex.y-rr)
+                lineTo(apex.x+rr, apex.y)
+                lineTo(apex.x, apex.y+rr)
+                lineTo(apex.x-rr, apex.y)
+                close()
+            },p)
+            p.style=Paint.Style.FILL;p.textSize=5.4f*d;p.typeface=Typeface.DEFAULT_BOLD;p.color=Pv.amber
+            c.drawText("APEX",apex.x+8f*d,apex.y-7f*d,p)
+        }
+
+        val cupAdvice = when {
+            read == null -> "라인 계산 중"
+            read.cupCount < .08 -> "센터"
+            else -> "${read.aimSideLabel.removePrefix("홀 ")} ${"%.1f".format(read.cupCount)}컵"
+        }
+        val title = "AR READ  ·  $cupAdvice"
+        val pace = read?.paceHint?.take(18) ?: "기준 페이스"
+        val subtitle = "BALL %.2f → CUP %.2f m/s  ·  %s".format(snap.ballSpeedMps,snap.cupSpeedMps,pace)
+        p.typeface=Typeface.DEFAULT_BOLD;p.textSize=7f*d
+        val textW=maxOf(p.measureText(title),p.measureText(subtitle))
+        val left=((width-textW)/2f-10f*d).coerceAtLeast(138f*d);val right=(left+textW+20f*d).coerceAtMost(width-10f*d)
+        if(right>left){
+            val top=10f*d
+            p.color=Color.argb(220,6,10,13);c.drawRoundRect(RectF(left,top,right,top+36f*d),12f*d,12f*d,p)
+            p.color=Pv.amber;p.textSize=7f*d;c.drawText(title,left+10f*d,top+14f*d,p)
+            p.color=Pv.textMid;p.textSize=5.8f*d;c.drawText(subtitle,left+10f*d,top+28f*d,p)
+        }
+    }
+
+    private fun arBreakApex(points: List<PointF>): PointF? {
+        if (points.size < 3) return null
+        val start = points.first(); val end = points.last()
+        val dx = end.x - start.x; val dy = end.y - start.y
+        val length = hypot(dx.toDouble(), dy.toDouble()).toFloat()
+        if (!length.isFinite() || length < 1f) return null
+        var best: PointF? = null
+        var bestDistance = 0f
+        for (i in 1 until points.lastIndex) {
+            val point = points[i]
+            val distance = abs(dy * point.x - dx * point.y + end.x * start.y - end.y * start.x) / length
+            if (distance > bestDistance) { bestDistance = distance; best = point }
+        }
+        return best?.takeIf { bestDistance >= 2f }
     }
 
     /** Improvement 17: one compact instrument dock replaces static 240fps/FHD claims with live frame and mode state. */
