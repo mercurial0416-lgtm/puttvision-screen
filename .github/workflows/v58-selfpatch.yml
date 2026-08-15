@@ -1,0 +1,26 @@
+name: V58 one-shot HFR pixel production patch
+on:
+  push:
+    branches: [agent/solo-v58-hfr-pixel-production]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[v58-patched]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/solo-v58-hfr-pixel-production
+          fetch-depth: 0
+      - name: Apply production pixel wiring
+        run: python3 ci/v58_apply_hfr_pixel_production.py
+      - name: Remove one-shot plumbing
+        run: rm -f ci/v58_apply_hfr_pixel_production.py .github/workflows/v58-selfpatch.yml
+      - name: Commit product changes
+        run: |
+          git config user.name "mercurial0416-lgtm"
+          git config user.email "mercurial0416@gmail.com"
+          git add -A
+          git commit -m "Wire HFR detector pixels into stereo feature tracks [v58-patched]"
+          git push origin HEAD:agent/solo-v58-hfr-pixel-production
