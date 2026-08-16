@@ -233,14 +233,15 @@ object V43RemoteFeatureTrackRuntime {
     private val tracks = ConcurrentHashMap<String, ArrayDeque<V43FeatureTrackPacket>>()
 
     fun publish(packet: V43FeatureTrackPacket): Boolean {
+        if (packet.sequence < 0L) return false
         val normalized = V44TrackValidator.normalize(packet.track, packet.view) ?: return false
         val incoming = packet.copy(track = normalized)
         synchronized(tracks) {
             val queue = tracks.getOrPut(incoming.cameraId) { ArrayDeque() }
             val latest = queue.lastOrNull()
-            val newer = latest == null || incoming.sequence > latest.sequence ||
-                (incoming.sequence == latest.sequence && incoming.capturedAtMs > latest.capturedAtMs)
-            if (!newer) return false
+            // Sequence is the packet identity for a camera. Never let a newer timestamp mutate or
+            // replay an already-seen sequence; provenance must advance strictly monotonically.
+            if (latest != null && incoming.sequence <= latest.sequence) return false
             queue.addLast(incoming)
             while (queue.size > MAX_TRACKS_PER_CAMERA) queue.removeFirst()
             trimToCameraBudgetLocked()
