@@ -27,9 +27,9 @@ class ImpactReplaySamplePlannerTest {
         assertTrue(99 in late.sourceFrameIndices)
     }
 
-    @Test fun shortWindowKeepsAllFrames() {
+    @Test fun shortWindowKeepsEveryFrameInsideComputedWindow() {
         val plan = ImpactReplaySamplePlanner.plan(8, 4, 30, 24)!!
-        assertEquals((0..7).toList(), plan.sourceFrameIndices)
+        assertEquals((2..7).toList(), plan.sourceFrameIndices)
     }
 
     @Test fun invalidInputsFailClosed() {
