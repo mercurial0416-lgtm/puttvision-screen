@@ -73,6 +73,11 @@ object V72HardwarelessSelfTestDashboard {
         if (!timing.passed && firstFailure == null) firstFailure = "TIMING DISTORTION"
         details += "TIMING DISTORTION · ${timing.checksPassed}/${timing.checksTotal} · ${timing.reason}"
 
+        val trainingJourney = V82HardwarelessTrainingJourneyRuntime.run()
+        total += trainingJourney.checksTotal; passed += trainingJourney.checksPassed
+        if (!trainingJourney.passed && firstFailure == null) firstFailure = "TRAIN JOURNEY"
+        details += "TRAIN JOURNEY · ${trainingJourney.checksPassed}/${trainingJourney.checksTotal} · ${trainingJourney.reason}"
+
         return V72HardwarelessSelfTestReport(passed == total, passed, total, firstFailure, details.toList())
     }
 }
@@ -92,5 +97,6 @@ object V72HardwarelessSelfTestRuntime {
         V78HardwarelessMemoryGuardRuntime.clear()
         V79HardwarelessLifecycleChurnRuntime.clear()
         V80HardwarelessTimingDistortionRuntime.clear()
+        V82HardwarelessTrainingJourneyRuntime.clear()
     }
 }
