@@ -37,6 +37,15 @@ object V71StereoPacketProvenanceGate {
         if (!currentFirst.valid() || !currentSecond.valid()) return deny("active capture signature invalid")
         val local = localPacket ?: return deny("local feature packet missing")
         val remote = remotePacket ?: return deny("remote feature packet missing")
+        // Metadata provenance is not sufficient if the transported HFR geometry/timebase is malformed.
+        // Re-validate both payloads at the network boundary so companion packets cannot bypass the
+        // same V93 source-frame/time guarantees enforced for locally published HFR tracks.
+        if (!V93HfrFeatureTrackIntegrity.isValid(local.track)) {
+            return deny("local feature payload integrity invalid")
+        }
+        if (!V93HfrFeatureTrackIntegrity.isValid(remote.track)) {
+            return deny("remote feature payload integrity invalid")
+        }
         if (local.cameraId != currentFirst.cameraId) return deny("local camera id does not match active calibration")
         if (remote.cameraId != currentSecond.cameraId) return deny("remote camera id does not match active calibration")
         if (local.cameraId == remote.cameraId) return deny("stereo packets resolve to the same camera id")
@@ -56,7 +65,7 @@ object V71StereoPacketProvenanceGate {
         return V71StereoPacketBindingResult(
             bound = true,
             eventSkewMs = skew,
-            reason = "camera identity, view and same-shot packet provenance bound"
+            reason = "camera identity, view, payload integrity and same-shot packet provenance bound"
         )
     }
 
@@ -153,8 +162,11 @@ object V71HardwarelessProvenanceSuite {
                 l, r, first, second, V15CameraView.PRIMARY, V15CameraView.FACE_ON, NOW_MS
             ).bound
 
+        val invalidTrack = local.track.copy(frames = emptyList())
         val checks = listOf(
             "baseline packet pair accepted" to bound(),
+            "invalid local feature payload rejected" to !bound(local.copy(track = invalidTrack), remote),
+            "invalid remote feature payload rejected" to !bound(local, remote.copy(track = invalidTrack)),
             "wrong local camera rejected" to !bound(local.copy(cameraId = "other-cam"), remote),
             "wrong remote camera rejected" to !bound(local, remote.copy(cameraId = "other-cam")),
             "wrong remote view rejected" to !bound(local, remote.copy(view = V15CameraView.PRIMARY)),
@@ -177,7 +189,7 @@ object V71HardwarelessProvenanceSuite {
             passed = passed == checks.size,
             checksPassed = passed,
             checksTotal = checks.size,
-            reason = failure ?: "packet identity and same-shot provenance guards verified"
+            reason = failure ?: "packet identity, payload integrity and same-shot provenance guards verified"
         )
     }
 
@@ -205,7 +217,25 @@ object V71HardwarelessProvenanceSuite {
         track = HfrFeatureTrack(
             fps = 240,
             impactFrame = 0,
-            frames = emptyList(),
+            frames = listOf(
+                HfrFeatureFrame(
+                    frame = 0,
+                    timeFromImpactMs = 0.0,
+                    ballXcm = 0.0,
+                    ballYcm = 0.0,
+                    heelXcm = -1.0,
+                    heelYcm = 0.0,
+                    toeXcm = 1.0,
+                    toeYcm = 0.0,
+                    markerAngleDeg = 0.0,
+                    ballXpx = 960.0,
+                    ballYpx = 540.0,
+                    heelXpx = 900.0,
+                    heelYpx = 540.0,
+                    toeXpx = 1020.0,
+                    toeYpx = 540.0
+                )
+            ),
             imageWidthPx = 1920,
             imageHeightPx = 1080
         ),
