@@ -187,15 +187,19 @@ object V41HfrFeatureTrackRuntime {
         val event = latestPublishedAtMs
         val stored = latestStoredAtMs
         val rejected = latestRejectedAtMs
+        val fingerprint = latestProvenanceFingerprint
         if (rejected > 0L && rejected >= stored) return null
         if (event <= 0L || stored <= 0L || nowMs - stored !in 0L..maxAgeMs) return null
+        // Publication provenance is useful only if it still describes the exact geometry being handed
+        // to replay/diagnostics. Recompute at the consumer boundary and fail closed on any mismatch.
+        if (fingerprint != null && V101HfrPublicationProvenance.fingerprint(track) != fingerprint) return null
         return HfrFeatureTrackSnapshot(
             track = track,
             publishedAtMs = event,
             storedAtMs = stored,
             timeSource = latestTimeSource,
             timeUncertaintyMs = latestTimeUncertaintyMs,
-            provenanceFingerprint = latestProvenanceFingerprint
+            provenanceFingerprint = fingerprint
         )
     }
 
