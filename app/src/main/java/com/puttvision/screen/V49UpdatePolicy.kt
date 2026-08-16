@@ -14,6 +14,8 @@ object V49UpdatePolicy {
     const val MAX_UPDATE_CACHE_FILES = 3
     const val MAX_UPDATE_CACHE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
     const val MAX_FUTURE_FILE_SKEW_MS = 10L * 60L * 1000L
+    private const val PUBLIC_UPDATE_HOST = "razejagceyznnajioxgx.supabase.co"
+    private const val PUBLIC_UPDATE_PATH_PREFIX = "/storage/v1/object/public/puttvision-update/"
 
     data class ManifestCheck(val valid: Boolean, val reason: String? = null)
     data class CacheCleanup(val deleted: Int, val kept: Int)
@@ -28,11 +30,29 @@ object V49UpdatePolicy {
         }
         val apk = validateHttpsUrl(info.apkUrl, "apk")
         if (!apk.valid) return apk
+        if (publicChannel) {
+            val publicApk = validatePublicApkUrl(info.apkUrl)
+            if (!publicApk.valid) return publicApk
+        }
         val sha = info.sha256?.trim().orEmpty()
         if (publicChannel && !isSha256(sha)) return ManifestCheck(false, "공개 업데이트 SHA-256이 없거나 잘못되었습니다")
         if (sha.isNotBlank() && !isSha256(sha)) return ManifestCheck(false, "SHA-256 형식이 잘못되었습니다")
         return ManifestCheck(true)
     }
+
+    fun validatePublicApkUrl(url: String): ManifestCheck = runCatching {
+        val uri = URI(url.trim())
+        require(uri.scheme.equals("https", true)) { "공개 APK URL은 HTTPS여야 합니다" }
+        require(uri.host.equals(PUBLIC_UPDATE_HOST, true)) { "공개 APK host가 허용된 업데이트 저장소가 아닙니다" }
+        require(uri.port == -1 || uri.port == 443) { "공개 APK URL은 기본 HTTPS 포트만 허용됩니다" }
+        require(uri.userInfo == null) { "공개 APK URL에 userinfo를 넣을 수 없습니다" }
+        require(uri.fragment == null) { "공개 APK URL에 fragment를 넣을 수 없습니다" }
+        require(uri.rawQuery == null) { "공개 APK URL에 query를 넣을 수 없습니다" }
+        val path = uri.path.orEmpty()
+        require(path.startsWith(PUBLIC_UPDATE_PATH_PREFIX)) { "공개 APK 경로가 허용된 업데이트 버킷이 아닙니다" }
+        require(path.substringAfterLast('/').endsWith(".apk", true)) { "공개 업데이트 파일은 APK여야 합니다" }
+        ManifestCheck(true)
+    }.getOrElse { ManifestCheck(false, it.message ?: "공개 APK URL 형식 오류") }
 
     fun validateArtifactVersion(
         installedVersionCode: Long,
