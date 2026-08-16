@@ -17,6 +17,7 @@ class ImpactReplayView(context: Context) : View(context) {
     private var replay: ImpactReplay? = null
     private var metrics: ShotMetrics? = null
     private var referenceMetrics: ShotMetrics? = null
+    private var liveTrackBinding: V85ImpactReplayLiveTrackBinding? = null
     private var frame = 0
     private var loops = 0
     private var paused = false
@@ -55,11 +56,17 @@ class ImpactReplayView(context: Context) : View(context) {
         isFocusable = true
     }
 
-    fun play(value: ImpactReplay, shot: ShotMetrics, reference: ShotMetrics? = null) {
+    fun play(
+        value: ImpactReplay,
+        shot: ShotMetrics,
+        reference: ShotMetrics? = null,
+        featureTrack: HfrFeatureTrack? = V41HfrFeatureTrackRuntime.freshSnapshot(maxAgeMs = 8_000L)?.track
+    ) {
         stopReplay(recycleFrames = true)
         replay = value
         metrics = shot
         referenceMetrics = reference
+        liveTrackBinding = V85ImpactReplayLiveTrack.bind(featureTrack)
         frame = 0
         loops = 0
         paused = false
@@ -77,6 +84,7 @@ class ImpactReplayView(context: Context) : View(context) {
         replay = null
         metrics = null
         referenceMetrics = null
+        liveTrackBinding = null
         frame = 0
         loops = 0
         paused = false
@@ -99,7 +107,6 @@ class ImpactReplayView(context: Context) : View(context) {
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // Dim only enough to focus the replay while keeping the live camera context visible.
         paint.color = Color.argb(78, 0, 0, 0)
         canvas.drawRect(0f, 0f, w, h, paint)
 
@@ -123,13 +130,12 @@ class ImpactReplayView(context: Context) : View(context) {
         val mediaLeft = left + w * .014f
         val mediaRight = right - w * .014f
         val media = RectF(mediaLeft, mediaTop, mediaRight, mediaBottom)
-        mediaRect.set(media)
 
-        // Header
         paint.typeface = Typeface.DEFAULT_BOLD
         paint.textSize = max(15f, w * .015f)
         paint.color = if (frame == r.impactIndex) Pv.amber else Pv.textHi
-        canvas.drawText(if (frame == r.impactIndex) "IMPACT" else "240 FPS REPLAY", left + w * .020f, top + headerH * .60f, paint)
+        val replayFps = liveTrackBinding?.fps ?: r.fps.coerceAtLeast(1)
+        canvas.drawText(if (frame == r.impactIndex) "IMPACT" else "$replayFps FPS REPLAY", left + w * .020f, top + headerH * .60f, paint)
         paint.typeface = Typeface.DEFAULT
         paint.textSize = max(9f, w * .008f)
         paint.color = Pv.textLo
@@ -152,7 +158,6 @@ class ImpactReplayView(context: Context) : View(context) {
         canvas.drawText("${frame + 1}/$total", trackRight, top + headerH * .83f, paint)
         paint.textAlign = Paint.Align.LEFT
 
-        // Media with aspect-preserving fit.
         paint.color = Color.BLACK
         canvas.drawRoundRect(media, max(10f, h * .018f), max(10f, h * .018f), paint)
         val srcAspect = bmp.width.toFloat() / bmp.height.toFloat().coerceAtLeast(1f)
@@ -164,21 +169,30 @@ class ImpactReplayView(context: Context) : View(context) {
             val fitW = media.height() * srcAspect
             RectF(media.centerX() - fitW / 2f, media.top, media.centerX() + fitW / 2f, media.bottom)
         }
+        mediaRect.set(target)
         canvas.drawBitmap(bmp, null, target, paint)
+
+        V85ImpactReplayLiveTrack.modelAtPlayheadMs(
+            binding = liveTrackBinding,
+            playheadMs = r.relativeTimeMsAt(frame)
+        )?.let { drawV85LiveTrack(canvas, target, it) }
+
+        if (frame >= r.impactIndex) {
+            metrics?.let { drawV86StartLineInset(canvas, target, it) }
+        }
 
         if (frame == r.impactIndex) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(2f, w * .002f)
             paint.color = Color.argb(220, 246, 190, 74)
-            canvas.drawRoundRect(media, max(10f, h * .018f), max(10f, h * .018f), paint)
+            canvas.drawRoundRect(target, max(10f, h * .018f), max(10f, h * .018f), paint)
             paint.style = Paint.Style.FILL
-            drawBestShotComparison(canvas, media)
-            drawV19StudioComparison(canvas, media)
+            drawBestShotComparison(canvas, target)
+            drawV19StudioComparison(canvas, target)
         }
-        annotations.draw(canvas, media, paint, w)
+        annotations.draw(canvas, target, paint, w)
         drawV27Toolbar(canvas, media, w, h)
 
-        // Telemetry rail
         val railTop = mediaBottom + h * .022f
         metrics?.let { m ->
             val items = listOf(
@@ -201,6 +215,123 @@ class ImpactReplayView(context: Context) : View(context) {
             }
         }
         paint.typeface = Typeface.DEFAULT
+    }
+
+    private fun drawV86StartLineInset(canvas: Canvas, viewport: RectF, shot: ShotMetrics) {
+        if (viewport.width() <= 0f || viewport.height() <= 0f) return
+        val pad = max(8f, viewport.width() * .014f)
+        val boxW = max(150f, viewport.width() * .255f)
+        val boxH = max(108f, viewport.height() * .36f)
+        val box = RectF(
+            viewport.right - pad - boxW,
+            viewport.bottom - pad - boxH,
+            viewport.right - pad,
+            viewport.bottom - pad
+        )
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(205, 3, 7, 10)
+        canvas.drawRoundRect(box, max(9f, boxH * .07f), max(9f, boxH * .07f), paint)
+
+        val originX = box.centerX()
+        val originY = box.bottom - boxH * .18f
+        val lineLen = boxH * .48f
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = max(2f, viewport.width() * .0023f)
+        paint.pathEffect = DashPathEffect(floatArrayOf(10f, 8f), 0f)
+        paint.color = Color.argb(190, 245, 248, 250)
+        canvas.drawLine(originX, originY, originX, originY - lineLen, paint)
+        paint.pathEffect = null
+
+        val visualDeg = shot.launchAngleDeg.coerceIn(-18.0, 18.0)
+        val a = Math.toRadians(visualDeg)
+        val dx = kotlin.math.sin(a).toFloat() * lineLen
+        val dy = kotlin.math.cos(a).toFloat() * lineLen
+        paint.strokeWidth = max(3.5f, viewport.width() * .004f)
+        paint.color = Color.rgb(58, 210, 255)
+        canvas.drawLine(originX, originY, originX + dx, originY - dy, paint)
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(originX, originY, max(4f, viewport.width() * .005f), paint)
+
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textSize = max(9f, viewport.width() * .012f)
+        paint.color = Color.argb(210, 245, 248, 250)
+        canvas.drawText("TARGET  0.00°", box.left + pad * .7f, box.top + boxH * .16f, paint)
+        paint.color = Color.rgb(58, 210, 255)
+        canvas.drawText("BALL START  ${"%+.2f°".format(shot.launchAngleDeg)}", box.left + pad * .7f, box.top + boxH * .32f, paint)
+        paint.typeface = Typeface.DEFAULT
+    }
+
+    private fun drawV85LiveTrack(canvas: Canvas, viewport: RectF, model: V83LiveTrackRenderModel) {
+        if (!model.ready || viewport.width() <= 0f || viewport.height() <= 0f) return
+        fun x(v: Double) = viewport.left + (v.coerceIn(0.0, 1.0) * viewport.width()).toFloat()
+        fun y(v: Double) = viewport.top + (v.coerceIn(0.0, 1.0) * viewport.height()).toFloat()
+
+        if (model.ballTrail.size >= 2) {
+            val path = Path()
+            val first = model.ballTrail.first()
+            path.moveTo(x(first.x01), y(first.y01))
+            model.ballTrail.drop(1).forEach { path.lineTo(x(it.x01), y(it.y01)) }
+            paint.style = Paint.Style.STROKE
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+            paint.strokeWidth = max(3f, viewport.width() * .004f)
+            paint.color = Color.argb(225, 76, 219, 135)
+            canvas.drawPath(path, paint)
+        }
+
+        model.putterGhosts.forEachIndexed { index, pose ->
+            val alpha = (55 + 150.0 * (index + 1) / model.putterGhosts.size.coerceAtLeast(1)).toInt().coerceIn(35, 205)
+            drawV85Putter(canvas, viewport, pose, alpha, current = false)
+        }
+        model.currentPutter?.let { drawV85Putter(canvas, viewport, it, 245, current = true) }
+        model.currentBall?.let {
+            paint.style = Paint.Style.FILL
+            paint.color = if (model.impactReached) Color.rgb(246, 190, 74) else Color.WHITE
+            canvas.drawCircle(x(it.x01), y(it.y01), max(7f, viewport.width() * .010f), paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = max(2f, viewport.width() * .0022f)
+            paint.color = Color.argb(220, 0, 0, 0)
+            canvas.drawCircle(x(it.x01), y(it.y01), max(7f, viewport.width() * .010f), paint)
+        }
+
+        paint.style = Paint.Style.FILL
+        val pad = max(8f, viewport.width() * .012f)
+        val labelH = max(26f, viewport.height() * .085f)
+        val labelW = max(142f, viewport.width() * .31f)
+        val box = RectF(viewport.left + pad, viewport.bottom - pad - labelH, viewport.left + pad + labelW, viewport.bottom - pad)
+        paint.color = Color.argb(190, 3, 7, 10)
+        canvas.drawRoundRect(box, 10f, 10f, paint)
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textSize = max(11f, viewport.width() * .018f)
+        paint.color = Color.WHITE
+        canvas.drawText("LIVE TRACK · ${model.imageFaceLabel}", box.left + pad * .55f, box.centerY() + paint.textSize * .34f, paint)
+        paint.typeface = Typeface.DEFAULT
+    }
+
+    private fun drawV85Putter(
+        canvas: Canvas,
+        viewport: RectF,
+        pose: V81LivePutterPose,
+        alpha: Int,
+        current: Boolean
+    ) {
+        val cx = viewport.left + (pose.centerX01.coerceIn(0.0, 1.0) * viewport.width()).toFloat()
+        val cy = viewport.top + (pose.centerY01.coerceIn(0.0, 1.0) * viewport.height()).toFloat()
+        val angle = Math.toRadians(pose.faceAngleDeg)
+        val half = max(18f, viewport.width() * .055f)
+        val dx = kotlin.math.cos(angle).toFloat() * half
+        val dy = kotlin.math.sin(angle).toFloat() * half
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = if (current) max(5f, viewport.width() * .006f) else max(2f, viewport.width() * .003f)
+        paint.color = if (current) Color.argb(alpha, 246, 190, 74) else Color.argb(alpha, 86, 167, 255)
+        canvas.drawLine(cx - dx, cy - dy, cx + dx, cy + dy, paint)
+        if (current) {
+            paint.style = Paint.Style.FILL
+            canvas.drawCircle(cx, cy, max(4f, viewport.width() * .005f), paint)
+        }
     }
 
     private fun drawBestShotComparison(canvas: Canvas, media: RectF) {
