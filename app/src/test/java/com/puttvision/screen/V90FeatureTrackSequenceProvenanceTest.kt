@@ -34,8 +34,36 @@ class V90FeatureTrackSequenceProvenanceTest {
         assertEquals(listOf(11L, 10L), V43RemoteFeatureTrackRuntime.fresh(nowMs = 10_300L).map { it.sequence })
     }
 
-    private fun packet(sequence: Long, capturedAtMs: Long) = V43FeatureTrackPacket(
-        cameraId = "face-cam",
+    @Test
+    fun staleQueueCleanupDoesNotResetReplayWatermark() {
+        assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 20L, capturedAtMs = 1_000L)))
+        assertTrue(V43RemoteFeatureTrackRuntime.fresh(nowMs = 4_000L, maxAgeMs = 2_200L).isEmpty())
+        assertEquals(0, V43RemoteFeatureTrackRuntime.retainedTrackCount())
+
+        assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 20L, capturedAtMs = 4_100L)))
+        assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 19L, capturedAtMs = 4_200L)))
+        assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 21L, capturedAtMs = 4_300L)))
+    }
+
+    @Test
+    fun cameraIdChurnCannotEvictARegisteredCameraProvenanceWatermark() {
+        assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 1L, capturedAtMs = 1_000L, cameraId = "face")))
+        assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 1L, capturedAtMs = 1_010L, cameraId = "down")))
+        assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 1L, capturedAtMs = 1_020L, cameraId = "primary")))
+        assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 1L, capturedAtMs = 1_030L, cameraId = "spoof-4")))
+
+        V43RemoteFeatureTrackRuntime.fresh(nowMs = 4_000L, maxAgeMs = 2_200L)
+        assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 1L, capturedAtMs = 4_100L, cameraId = "face")))
+        assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 2L, capturedAtMs = 4_200L, cameraId = "face")))
+    }
+
+    @Test
+    fun blankCameraIdentityFailsClosed() {
+        assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 1L, capturedAtMs = 1_000L, cameraId = "   ")))
+    }
+
+    private fun packet(sequence: Long, capturedAtMs: Long, cameraId: String = "face-cam") = V43FeatureTrackPacket(
+        cameraId = cameraId,
         view = V15CameraView.FACE_ON,
         capturedAtMs = capturedAtMs,
         sequence = sequence,
