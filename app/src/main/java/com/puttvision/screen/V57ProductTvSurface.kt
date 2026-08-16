@@ -17,6 +17,7 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
         addView(V18SimulatorFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        // Visual physics lives immediately above the 3D world, while product HUD/read/reticle stay crisp above it.
         addView(V89ScreenGolfVisualPhysicsView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V51TvPolishOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V87TvVisualPolishView(context, engine), FrameLayout.LayoutParams(-1, -1))
