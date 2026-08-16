@@ -74,9 +74,18 @@ object V76HardwarelessSoak {
             history.failures == 0 && history.consecutivePasses == minOf(runs, V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES)
 
         return V76HardwarelessSoakReport(
-            requestedRuns, completed, passedRuns, firstFailureRun, firstFailureStage,
-            minChecks, maxChecks, maxHistory, history.samples, history.failures,
-            history.consecutivePasses, passed
+            requestedRuns = runs,
+            completedRuns = completed,
+            passedRuns = passedRuns,
+            firstFailureRun = firstFailureRun,
+            firstFailureStage = firstFailureStage,
+            minChecksPerRun = minChecks,
+            maxChecksPerRun = maxChecks,
+            maxHistorySamples = maxHistory,
+            finalHistorySamples = history.samples,
+            finalHistoryFailures = history.failures,
+            finalConsecutivePasses = history.consecutivePasses,
+            passed = passed
         )
     }
 }
