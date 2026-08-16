@@ -71,8 +71,9 @@ object ImpactReplaySamplePlanner {
 /**
  * Keeps Impact Replay honest about which decoded source frame is the actual contact frame.
  * A neighboring decoded frame must never be promoted to IMPACT when the requested source
- * impact frame itself failed to decode, and partially-present provenance must never silently
- * fall back to ordinal replay timing.
+ * impact frame itself failed to decode, partially-present provenance must never silently
+ * fall back to ordinal replay timing, and a replay must not silently lose an entire planned
+ * pre- or post-impact side because decoding failed.
  */
 object ImpactReplayExtractionIntegrity {
     fun exactImpactIndex(
@@ -83,6 +84,29 @@ object ImpactReplayExtractionIntegrity {
         if (extractedSourceFrameIndices.zipWithNext().any { (a, b) -> b <= a }) return null
         val index = extractedSourceFrameIndices.indexOf(sourceImpactFrame)
         return index.takeIf { it >= 0 }
+    }
+
+    fun hasRequiredTemporalContext(
+        plannedSourceFrameIndices: List<Int>,
+        extractedSourceFrameIndices: List<Int>,
+        sourceImpactFrame: Int
+    ): Boolean {
+        if (sourceImpactFrame < 0) return false
+        if (plannedSourceFrameIndices.isEmpty() || extractedSourceFrameIndices.isEmpty()) return false
+        if (plannedSourceFrameIndices.zipWithNext().any { (a, b) -> b <= a }) return false
+        if (extractedSourceFrameIndices.zipWithNext().any { (a, b) -> b <= a }) return false
+        if (sourceImpactFrame !in plannedSourceFrameIndices || sourceImpactFrame !in extractedSourceFrameIndices) {
+            return false
+        }
+
+        val plannedHasBefore = plannedSourceFrameIndices.first() < sourceImpactFrame
+        val plannedHasAfter = plannedSourceFrameIndices.last() > sourceImpactFrame
+        val extractedHasBefore = extractedSourceFrameIndices.first() < sourceImpactFrame
+        val extractedHasAfter = extractedSourceFrameIndices.last() > sourceImpactFrame
+
+        if (plannedHasBefore && !extractedHasBefore) return false
+        if (plannedHasAfter && !extractedHasAfter) return false
+        return true
     }
 
     fun relativeTimeMs(
@@ -167,7 +191,12 @@ object ImpactReplayExtractor {
                     extractedSourceFrameIndices = sourceFrameIndices,
                     sourceImpactFrame = plan.sourceImpactFrame
                 )
-                if (localImpact == null) {
+                val hasTemporalContext = ImpactReplayExtractionIntegrity.hasRequiredTemporalContext(
+                    plannedSourceFrameIndices = plan.sourceFrameIndices,
+                    extractedSourceFrameIndices = sourceFrameIndices,
+                    sourceImpactFrame = plan.sourceImpactFrame
+                )
+                if (localImpact == null || !hasTemporalContext) {
                     frames.forEach { if (!it.isRecycled) it.recycle() }
                     return null
                 }
