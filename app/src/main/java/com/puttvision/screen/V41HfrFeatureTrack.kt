@@ -48,7 +48,9 @@ data class HfrFeatureTrackSnapshot(
     /** When analysis actually published this compact track; used only for freshness. */
     val storedAtMs: Long = publishedAtMs,
     val timeSource: String = "LEGACY",
-    val timeUncertaintyMs: Long = 1_500L
+    val timeUncertaintyMs: Long = 1_500L,
+    /** Content fingerprint bound to this exact compact runtime track at the publication boundary. */
+    val provenanceFingerprint: String? = null
 )
 
 /**
@@ -118,6 +120,9 @@ object V41HfrFeatureTrackRuntime {
         private set
     @Volatile var latestTimeUncertaintyMs: Long = 0L
         private set
+    /** Fingerprint is cleared on every raw publish and must be bound to that exact compact track. */
+    @Volatile var latestProvenanceFingerprint: String? = null
+        private set
     /**
      * Most recent rejected producer write. The last valid geometry is retained for diagnostics, but
      * freshSnapshot() must not expose it after a newer invalid capture attempt or consumers could
@@ -142,7 +147,21 @@ object V41HfrFeatureTrackRuntime {
         latestStoredAtMs = nowMs
         latestTimeSource = estimate.source
         latestTimeUncertaintyMs = estimate.uncertaintyMs
+        latestProvenanceFingerprint = null
         latestRejectedAtMs = 0L
+        return true
+    }
+
+    /**
+     * Binds content provenance only when [track] is still the exact compact track currently published.
+     * Callers must hold no assumptions about `latest`: a newer shot makes this fail closed rather than
+     * attaching an old fingerprint to new geometry.
+     */
+    @Synchronized
+    fun bindPublicationProvenance(track: HfrFeatureTrack, fingerprint: String): Boolean {
+        if (fingerprint.length != 64 || fingerprint.any { it !in '0'..'9' && it !in 'a'..'f' }) return false
+        if (latest != track || latestStoredAtMs <= 0L) return false
+        latestProvenanceFingerprint = fingerprint
         return true
     }
 
@@ -170,7 +189,14 @@ object V41HfrFeatureTrackRuntime {
         val rejected = latestRejectedAtMs
         if (rejected > 0L && rejected >= stored) return null
         if (event <= 0L || stored <= 0L || nowMs - stored !in 0L..maxAgeMs) return null
-        return HfrFeatureTrackSnapshot(track, event, stored, latestTimeSource, latestTimeUncertaintyMs)
+        return HfrFeatureTrackSnapshot(
+            track = track,
+            publishedAtMs = event,
+            storedAtMs = stored,
+            timeSource = latestTimeSource,
+            timeUncertaintyMs = latestTimeUncertaintyMs,
+            provenanceFingerprint = latestProvenanceFingerprint
+        )
     }
 
     @Synchronized
@@ -180,6 +206,7 @@ object V41HfrFeatureTrackRuntime {
         latestStoredAtMs = 0L
         latestTimeSource = "NONE"
         latestTimeUncertaintyMs = 0L
+        latestProvenanceFingerprint = null
         latestRejectedAtMs = 0L
     }
 }
