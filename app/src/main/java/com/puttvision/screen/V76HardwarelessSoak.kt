@@ -24,7 +24,7 @@ data class V76HardwarelessSoakReport(
 
 object V76HardwarelessSoak {
     const val DEFAULT_RUNS = 240
-    const val EXPECTED_CHECKS_PER_RUN = 73
+    const val EXPECTED_CHECKS_PER_RUN = 80
 
     private val speeds = doubleArrayOf(0.35, 0.45, 0.75, 1.20, 1.80, 2.80, 3.20)
     private val directions = doubleArrayOf(-7.0, -5.0, -2.5, 0.0, 2.5, 5.0, 7.0)
