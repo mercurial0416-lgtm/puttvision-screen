@@ -216,7 +216,7 @@ object V43FeatureTrackWire {
                 ))
             }
         }
-        val view = runCatching { V15CameraView.valueOf(j.getString("view")) }.getOrDefault(V15CameraView.PRIMARY)
+        val view = V15CameraView.valueOf(j.getString("view"))
         val normalized = V44TrackValidator.normalize(HfrFeatureTrack(j.getInt("fps"), j.getInt("impact"), frames), view)
             ?: error("invalid feature track")
         V43FeatureTrackPacket(
