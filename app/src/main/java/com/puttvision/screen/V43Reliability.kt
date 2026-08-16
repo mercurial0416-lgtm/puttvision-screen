@@ -231,20 +231,24 @@ object V43RemoteFeatureTrackRuntime {
     private const val MAX_CAMERAS = 3
     private const val MAX_TRACKS_PER_CAMERA = 4
     private val tracks = ConcurrentHashMap<String, ArrayDeque<V43FeatureTrackPacket>>()
+    private val latestSequence = ConcurrentHashMap<String, Long>()
 
     fun publish(packet: V43FeatureTrackPacket): Boolean {
-        if (packet.sequence < 0L) return false
+        if (packet.cameraId.isBlank() || packet.sequence < 0L) return false
         val normalized = V44TrackValidator.normalize(packet.track, packet.view) ?: return false
-        val incoming = packet.copy(track = normalized)
+        val incoming = packet.copy(cameraId = packet.cameraId.trim(), track = normalized)
         synchronized(tracks) {
+            val previous = latestSequence[incoming.cameraId]
+            // Keep the sequence watermark even when a stale track queue is pruned. Otherwise an old
+            // packet could be replayed after freshness cleanup and silently regain measurement eligibility.
+            if (previous != null && incoming.sequence <= previous) return false
+            // Camera identity is part of provenance for the whole runtime session. Fail closed instead
+            // of evicting a known camera and losing its replay watermark under camera-id churn.
+            if (previous == null && latestSequence.size >= MAX_CAMERAS) return false
             val queue = tracks.getOrPut(incoming.cameraId) { ArrayDeque() }
-            val latest = queue.lastOrNull()
-            // Sequence is the packet identity for a camera. Never let a newer timestamp mutate or
-            // replay an already-seen sequence; provenance must advance strictly monotonically.
-            if (latest != null && incoming.sequence <= latest.sequence) return false
             queue.addLast(incoming)
             while (queue.size > MAX_TRACKS_PER_CAMERA) queue.removeFirst()
-            trimToCameraBudgetLocked()
+            latestSequence[incoming.cameraId] = incoming.sequence
         }
         return true
     }
@@ -261,15 +265,12 @@ object V43RemoteFeatureTrackRuntime {
             tracks.values.flatMap { it.toList() }.sortedByDescending { it.capturedAtMs }
         }
 
-    fun clear() = synchronized(tracks) { tracks.clear() }
+    fun clear() = synchronized(tracks) {
+        tracks.clear()
+        latestSequence.clear()
+    }
     internal fun size(): Int = synchronized(tracks) { tracks.size }
     internal fun retainedTrackCount(): Int = synchronized(tracks) { tracks.values.sumOf { it.size } }
-
-    private fun trimToCameraBudgetLocked() {
-        if (tracks.size <= MAX_CAMERAS) return
-        tracks.entries.sortedByDescending { it.value.lastOrNull()?.receivedAtMs ?: Long.MIN_VALUE }
-            .drop(MAX_CAMERAS).forEach { tracks.remove(it.key) }
-    }
 }
 
 
