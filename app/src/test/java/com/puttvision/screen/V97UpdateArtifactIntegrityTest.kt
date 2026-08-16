@@ -8,6 +8,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class V97UpdateArtifactIntegrityTest {
+    private val publicApk =
+        "https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/releases/puttvision.apk"
+    private val sha = "a".repeat(64)
+
     @Test
     fun artifactVersionMustExactlyMatchManifestAndAdvanceInstalledVersion() {
         assertTrue(V49UpdatePolicy.validateArtifactVersion(100, 101, 101).valid)
@@ -29,6 +33,25 @@ class V97UpdateArtifactIntegrityTest {
         assertFalse(V49UpdatePolicy.validateManifestUrl("https://user@example.com/update.json").valid)
         assertFalse(V49UpdatePolicy.validateManifestUrl("http://example.com/update.json").valid)
         assertTrue(V49UpdatePolicy.validateManifestUrl("https://example.com/update.json").valid)
+    }
+
+    @Test
+    fun publicUpdateArtifactStaysPinnedToSupabaseBucket() {
+        assertTrue(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", publicApk, sha), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", publicApk, null), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", publicApk, "abcd"), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "https://example.com/app.apk", sha), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/other/app.apk", sha), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "$publicApk?download=1", sha), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "https://razejagceyznnajioxgx.supabase.co:444/storage/v1/object/public/puttvision-update/app.apk", sha), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/update.json", sha), true).valid)
+    }
+
+    @Test
+    fun contentLengthPolicyRejectsZeroAndOversizeButAllowsUnknownLength() {
+        assertFalse(V49UpdatePolicy.validateContentLength(0).valid)
+        assertTrue(V49UpdatePolicy.validateContentLength(-1).valid)
+        assertFalse(V49UpdatePolicy.validateContentLength(V49UpdatePolicy.MAX_APK_BYTES + 1).valid)
     }
 
     @Test
@@ -56,10 +79,10 @@ class V97UpdateArtifactIntegrityTest {
     }
 
     @Test
-    fun hardwarelessUpdateSuiteExercisesFourteenGuards() {
+    fun hardwarelessUpdateSuiteExercisesTwentyFourGuards() {
         val report = V97HardwarelessUpdateIntegrity.run()
         assertTrue(report.passed)
-        assertTrue(report.checksPassed >= 14)
-        assertTrue(report.checksTotal >= 14)
+        assertTrue(report.checksPassed >= 24)
+        assertTrue(report.checksTotal >= 24)
     }
 }
