@@ -82,7 +82,6 @@ class V89ScreenGolfVisualPhysicsView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width <= 0 || height <= 0) return
-
         val settings = engine.settings
         val state = engine.state
         updateTravel(state)
@@ -166,16 +165,7 @@ class V89ScreenGolfVisualPhysicsView(
         p.shader = null
     }
 
-    private fun drawVelocityComet(
-        c: Canvas,
-        settings: GreenSettings,
-        x: Double,
-        y: Double,
-        vx: Double,
-        vy: Double,
-        radius: Float,
-        plan: V89VisualPhysicsPlan
-    ) {
+    private fun drawVelocityComet(c: Canvas, settings: GreenSettings, x: Double, y: Double, vx: Double, vy: Double, radius: Float, plan: V89VisualPhysicsPlan) {
         if (plan.speedMps < .18) return
         val speed = plan.speedMps.coerceAtLeast(.01)
         val nx = vx / speed
@@ -186,12 +176,8 @@ class V89ScreenGolfVisualPhysicsView(
         val tailY = y - ny * plan.cometLengthM
         val tailZ = GreenTerrain.effectiveHeightAt(settings, tailX, tailY) + V89VisualPhysicsPlanner.BALL_RADIUS_M
         val tail = V25FlagProjectionRuntime.project(tailX, tailY, tailZ) ?: return
-        p.shader = android.graphics.LinearGradient(
-            tail.x, tail.y, head.x, head.y,
-            Color.TRANSPARENT,
-            Color.argb((110f * plan.blurStrength).roundToInt().coerceIn(18, 110), 236, 250, 255),
-            Shader.TileMode.CLAMP
-        )
+        p.shader = android.graphics.LinearGradient(tail.x, tail.y, head.x, head.y, Color.TRANSPARENT,
+            Color.argb((110f * plan.blurStrength).roundToInt().coerceIn(18, 110), 236, 250, 255), Shader.TileMode.CLAMP)
         p.style = Paint.Style.STROKE
         p.strokeCap = Paint.Cap.ROUND
         p.strokeWidth = max(1.5f, radius * (.40f + plan.blurStrength * .42f))
@@ -250,14 +236,12 @@ class V89ScreenGolfVisualPhysicsView(
         p.style = Paint.Style.FILL
         p.color = Color.argb((24f + 28f * plan.blurStrength).roundToInt(), 210, 244, 220)
         c.drawCircle(cx, cy + radius * .10f, radius * 1.20f, p)
-
         ballRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
         p.shader = RadialGradient(cx - radius * .34f, cy - radius * .42f, radius * 1.35f,
             intArrayOf(Color.WHITE, Color.rgb(246, 249, 250), Color.rgb(188, 198, 202), Color.rgb(92, 102, 108)),
             floatArrayOf(0f, .36f, .78f, 1f), Shader.TileMode.CLAMP)
         c.drawOval(ballRect, p)
         p.shader = null
-
         c.save()
         c.rotate(plan.spinDegrees, cx, cy)
         p.style = Paint.Style.STROKE
@@ -268,7 +252,6 @@ class V89ScreenGolfVisualPhysicsView(
         c.drawArc(RectF(cx - radius * .24f, cy - radius * .78f, cx + radius * .24f, cy + radius * .78f), -78f, 156f, false, p)
         drawDimples(c, cx, cy, radius, plan)
         c.restore()
-
         p.style = Paint.Style.FILL
         p.color = Color.argb((130f * plan.highlightStrength).roundToInt().coerceIn(80, 160), 255, 255, 255)
         c.drawCircle(cx - radius * .32f, cy - radius * .38f, radius * .16f, p)
