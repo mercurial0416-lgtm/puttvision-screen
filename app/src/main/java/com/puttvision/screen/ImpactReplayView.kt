@@ -137,7 +137,7 @@ class ImpactReplayView(context: Context) : View(context) {
         paint.typeface = Typeface.DEFAULT_BOLD
         paint.textSize = max(15f, w * .015f)
         paint.color = if (frame == r.impactIndex) Pv.amber else Pv.textHi
-        val replayFps = liveTrackBinding?.fps ?: 240
+        val replayFps = liveTrackBinding?.fps ?: r.fps.coerceAtLeast(1)
         canvas.drawText(if (frame == r.impactIndex) "IMPACT" else "$replayFps FPS REPLAY", left + w * .020f, top + headerH * .60f, paint)
         paint.typeface = Typeface.DEFAULT
         paint.textSize = max(9f, w * .008f)
@@ -175,10 +175,9 @@ class ImpactReplayView(context: Context) : View(context) {
         }
         canvas.drawBitmap(bmp, null, target, paint)
 
-        V85ImpactReplayLiveTrack.modelAtReplayFrame(
+        V85ImpactReplayLiveTrack.modelAtPlayheadMs(
             binding = liveTrackBinding,
-            replayFrame = frame,
-            replayImpactIndex = r.impactIndex
+            playheadMs = r.relativeTimeMsAt(frame)
         )?.let { drawV85LiveTrack(canvas, target, it) }
 
         if (frame == r.impactIndex) {
