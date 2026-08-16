@@ -1,5 +1,7 @@
 package com.puttvision.screen
 
+import kotlin.math.abs
+
 data class HfrFeatureFrame(
     val frame: Int,
     val timeFromImpactMs: Double,
@@ -49,6 +51,58 @@ data class HfrFeatureTrackSnapshot(
     val timeUncertaintyMs: Long = 1_500L
 )
 
+/**
+ * Guards the compact HFR track's source-frame/time provenance before it can become the runtime
+ * snapshot used by stereo pairing, diagnostics, replay overlays, or companion transport.
+ */
+object V93HfrFeatureTrackIntegrity {
+    private const val MAX_TIME_ERROR_MS = 0.75
+
+    fun isValid(track: HfrFeatureTrack): Boolean {
+        if (track.fps <= 0 || track.impactFrame < 0 || track.frames.isEmpty()) return false
+        if (track.frames.zipWithNext().any { (a, b) -> b.frame <= a.frame }) return false
+        if (track.frames.none { it.frame == track.impactFrame }) return false
+
+        val width = track.imageWidthPx
+        val height = track.imageHeightPx
+        if ((width == null) != (height == null)) return false
+        if (width != null && (width <= 0 || height == null || height <= 0)) return false
+
+        for (frame in track.frames) {
+            if (!frame.timeFromImpactMs.isFinite()) return false
+            val expectedMs = (frame.frame - track.impactFrame) * 1000.0 / track.fps.toDouble()
+            if (abs(frame.timeFromImpactMs - expectedMs) > MAX_TIME_ERROR_MS) return false
+            if (!validPair(frame.ballXcm, frame.ballYcm)) return false
+            if (!validPair(frame.ballXpx, frame.ballYpx)) return false
+            if (!validPair(frame.heelXcm, frame.heelYcm) || !validPair(frame.toeXcm, frame.toeYcm)) return false
+            if (!validPair(frame.heelXpx, frame.heelYpx) || !validPair(frame.toeXpx, frame.toeYpx)) return false
+            if ((frame.heelXcm == null) != (frame.toeXcm == null)) return false
+            if ((frame.heelXpx == null) != (frame.toeXpx == null)) return false
+            if (frame.markerAngleDeg?.isFinite() == false) return false
+
+            val hasPixelCoordinates = frame.ballXpx != null || frame.heelXpx != null || frame.toeXpx != null
+            if (hasPixelCoordinates && (width == null || height == null)) return false
+            if (width != null && height != null) {
+                if (!insideFrame(frame.ballXpx, frame.ballYpx, width, height)) return false
+                if (!insideFrame(frame.heelXpx, frame.heelYpx, width, height)) return false
+                if (!insideFrame(frame.toeXpx, frame.toeYpx, width, height)) return false
+            }
+        }
+        return true
+    }
+
+    private fun validPair(x: Double?, y: Double?): Boolean {
+        if ((x == null) != (y == null)) return false
+        return x?.isFinite() != false && y?.isFinite() != false
+    }
+
+    private fun insideFrame(x: Double?, y: Double?, width: Int, height: Int): Boolean {
+        if (x == null && y == null) return true
+        if (x == null || y == null) return false
+        return x >= 0.0 && x < width.toDouble() && y >= 0.0 && y < height.toDouble()
+    }
+}
+
 /** Latest compact HFR geometry for diagnostics/companion transport. No bitmaps are retained. */
 object V41HfrFeatureTrackRuntime {
     private const val MAX_FRAMES = 32
@@ -65,13 +119,34 @@ object V41HfrFeatureTrackRuntime {
     @Volatile var latestTimeUncertaintyMs: Long = 0L
         private set
 
-    fun publish(track: HfrFeatureTrack, nowMs: Long = System.currentTimeMillis()) {
-        val estimate = V50HfrCaptureClockRuntime.estimate(track, nowMs)
-        latest = track.copy(frames = track.frames.take(MAX_FRAMES).toList())
+    fun publish(track: HfrFeatureTrack, nowMs: Long = System.currentTimeMillis()): Boolean {
+        // Validate every producer frame before truncating. Otherwise malformed provenance outside the
+        // retained runtime window could be silently discarded and the shortened track would look valid.
+        if (!V93HfrFeatureTrackIntegrity.isValid(track)) return false
+
+        val compactTrack = compactAroundImpact(track)
+        val estimate = V50HfrCaptureClockRuntime.estimate(compactTrack, nowMs)
+        latest = compactTrack
         latestPublishedAtMs = estimate.impactAtMs
         latestStoredAtMs = nowMs
         latestTimeSource = estimate.source
         latestTimeUncertaintyMs = estimate.uncertaintyMs
+        return true
+    }
+
+    private fun compactAroundImpact(track: HfrFeatureTrack): HfrFeatureTrack {
+        if (track.frames.size <= MAX_FRAMES) return track.copy(frames = track.frames.toList())
+
+        val impactIndex = track.frames.indexOfFirst { it.frame == track.impactFrame }
+        if (impactIndex < 0) return track.copy(frames = track.frames.take(MAX_FRAMES).toList())
+
+        val framesBeforeImpact = (MAX_FRAMES - 1) / 2
+        var start = (impactIndex - framesBeforeImpact).coerceAtLeast(0)
+        var endExclusive = (start + MAX_FRAMES).coerceAtMost(track.frames.size)
+        start = (endExclusive - MAX_FRAMES).coerceAtLeast(0)
+        endExclusive = (start + MAX_FRAMES).coerceAtMost(track.frames.size)
+
+        return track.copy(frames = track.frames.subList(start, endExclusive).toList())
     }
 
     fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 1_500L): HfrFeatureTrackSnapshot? {
