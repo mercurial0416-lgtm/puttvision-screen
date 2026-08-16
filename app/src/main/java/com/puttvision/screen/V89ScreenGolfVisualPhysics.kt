@@ -3,26 +3,18 @@ package com.puttvision.screen
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.os.SystemClock
 import android.view.View
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/**
- * Pure visual-physics policy. It never modifies measured metrics or GreenPhysics state.
- * The screen effect is derived from physical speed and travelled distance so animation
- * does not change when the TV render cadence changes.
- */
 data class V89VisualPhysicsPlan(
     val speedMps: Double,
     val spinDegrees: Float,
@@ -58,9 +50,8 @@ object V89VisualPhysicsPlanner {
 }
 
 /**
- * Screen-golf visual physics layer shared by the physical TV, phone TV preview and
- * hardwareless TV surface. World position comes from the same GameEngine/GreenPhysics
- * state as the simulator. This layer only renders contact/rotation/motion cues.
+ * Screen-golf visual physics layer. World position comes from the same GameEngine/
+ * GreenPhysics state as the simulator; this view only renders contact/rotation/motion cues.
  */
 class V89ScreenGolfVisualPhysicsView(
     context: Context,
@@ -101,15 +92,17 @@ class V89ScreenGolfVisualPhysicsView(
         val groundZ = GreenTerrain.effectiveHeightAt(settings, x, y)
         if (!groundZ.isFinite()) return
         val center = V25FlagProjectionRuntime.project(x, y, groundZ + V89VisualPhysicsPlanner.BALL_RADIUS_M)
-            ?: scheduleAndReturn(state)
+            ?: run { schedule(state); return }
         val ground = V25FlagProjectionRuntime.project(x, y, groundZ + .001)
-            ?: scheduleAndReturn(state)
+            ?: run { schedule(state); return }
         val side = V25FlagProjectionRuntime.project(
             x + V89VisualPhysicsPlanner.BALL_RADIUS_M,
             y,
             groundZ + V89VisualPhysicsPlanner.BALL_RADIUS_M
         )
-        val projectedRadius = side?.let { hypot((it.x - center.x).toDouble(), (it.y - center.y).toDouble()).toFloat() }
+        val projectedRadius = side?.let {
+            hypot((it.x - center.x).toDouble(), (it.y - center.y).toDouble()).toFloat()
+        }
         val unit = min(width, height).toFloat()
         val radius = (projectedRadius ?: unit * .0105f).coerceIn(unit * .0052f, unit * .024f)
 
@@ -118,7 +111,7 @@ class V89ScreenGolfVisualPhysicsView(
         val speed = hypot(vx, vy)
         val plan = V89VisualPhysicsPlanner.plan(speed, travelledM)
 
-        drawRollingGhosts(canvas, settings, x, y, groundZ, vx, vy, radius, plan)
+        drawRollingGhosts(canvas, settings, x, y, vx, vy, radius, plan)
         drawContactShadow(canvas, ground.x, ground.y, radius, plan)
         drawBall(canvas, center.x, center.y, radius, plan)
         drawCupInteraction(canvas, settings)
@@ -141,7 +134,6 @@ class V89ScreenGolfVisualPhysicsView(
         if (!x.isFinite() || !y.isFinite()) return
         if (lastWorldX.isFinite() && lastWorldY.isFinite()) {
             val d = hypot(x - lastWorldX, y - lastWorldY)
-            // A display/state reset must not spin the ball several revolutions in one frame.
             if (d.isFinite() && d in 0.0..0.40) travelledM += d
         }
         lastWorldX = x
@@ -161,7 +153,6 @@ class V89ScreenGolfVisualPhysicsView(
         settings: GreenSettings,
         x: Double,
         y: Double,
-        z: Double,
         vx: Double,
         vy: Double,
         radius: Float,
@@ -180,7 +171,10 @@ class V89ScreenGolfVisualPhysicsView(
             val sp = V25FlagProjectionRuntime.project(px, py, pz + V89VisualPhysicsPlanner.BALL_RADIUS_M) ?: continue
             val t = i.toFloat() / (plan.blurSamples + 1).toFloat()
             p.style = Paint.Style.FILL
-            p.color = Color.argb((42f * plan.blurStrength * (1f - t * .55f)).roundToInt().coerceIn(0, 48), 244, 250, 255)
+            p.color = Color.argb(
+                (42f * plan.blurStrength * (1f - t * .55f)).roundToInt().coerceIn(0, 48),
+                244, 250, 255
+            )
             c.drawCircle(sp.x, sp.y, radius * (1f - t * .16f), p)
         }
     }
@@ -203,9 +197,8 @@ class V89ScreenGolfVisualPhysicsView(
     }
 
     private fun drawBall(c: Canvas, cx: Float, cy: Float, radius: Float, plan: V89VisualPhysicsPlan) {
-        // Soft contact halo makes the ball feel seated on the green instead of floating.
         p.style = Paint.Style.FILL
-        p.color = Color.argb((24 + 28 * plan.blurStrength).roundToInt(), 210, 244, 220)
+        p.color = Color.argb((24f + 28f * plan.blurStrength).roundToInt(), 210, 244, 220)
         c.drawCircle(cx, cy + radius * .10f, radius * 1.20f, p)
 
         ballRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
@@ -221,7 +214,6 @@ class V89ScreenGolfVisualPhysicsView(
         c.drawOval(ballRect, p)
         p.shader = null
 
-        // A distance-driven seam gives real rolling rotation without tying spin to FPS.
         c.save()
         c.rotate(plan.spinDegrees, cx, cy)
         p.style = Paint.Style.STROKE
@@ -232,7 +224,6 @@ class V89ScreenGolfVisualPhysicsView(
         c.drawArc(RectF(cx - radius * .24f, cy - radius * .78f, cx + radius * .24f, cy + radius * .78f), -78f, 156f, false, p)
         c.restore()
 
-        // Specular glint strengthens slightly with speed, like a broadcast/simulator ball shader.
         p.style = Paint.Style.FILL
         p.color = Color.argb((130f * plan.highlightStrength).roundToInt().coerceIn(80, 160), 255, 255, 255)
         c.drawCircle(cx - radius * .32f, cy - radius * .38f, radius * .16f, p)
@@ -268,12 +259,18 @@ class V89ScreenGolfVisualPhysicsView(
             val sweep = 105f + 160f * t
             p.strokeWidth = max(2f, base * .16f)
             p.color = Color.argb(alpha, 255, 148, 56)
-            c.drawArc(RectF(cup.x - base * grow, cup.y - base * grow, cup.x + base * grow, cup.y + base * grow), -35f, sweep, false, p)
+            c.drawArc(
+                RectF(cup.x - base * grow, cup.y - base * grow, cup.x + base * grow, cup.y + base * grow),
+                -35f,
+                sweep,
+                false,
+                p
+            )
         }
         p.style = Paint.Style.FILL
     }
 
-    private fun scheduleAndReturn(state: SimState?) {
+    private fun schedule(state: SimState?) {
         postInvalidateDelayed(if (state?.running == true) 16L else 120L)
     }
 }
