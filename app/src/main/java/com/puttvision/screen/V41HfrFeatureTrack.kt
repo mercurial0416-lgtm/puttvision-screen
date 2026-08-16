@@ -118,11 +118,22 @@ object V41HfrFeatureTrackRuntime {
         private set
     @Volatile var latestTimeUncertaintyMs: Long = 0L
         private set
+    /**
+     * Most recent rejected producer write. The last valid geometry is retained for diagnostics, but
+     * freshSnapshot() must not expose it after a newer invalid capture attempt or consumers could
+     * accidentally bind the previous stroke's HFR evidence to the current stroke.
+     */
+    @Volatile var latestRejectedAtMs: Long = 0L
+        private set
 
+    @Synchronized
     fun publish(track: HfrFeatureTrack, nowMs: Long = System.currentTimeMillis()): Boolean {
         // Validate every producer frame before truncating. Otherwise malformed provenance outside the
         // retained runtime window could be silently discarded and the shortened track would look valid.
-        if (!V93HfrFeatureTrackIntegrity.isValid(track)) return false
+        if (!V93HfrFeatureTrackIntegrity.isValid(track)) {
+            latestRejectedAtMs = maxOf(latestRejectedAtMs, nowMs)
+            return false
+        }
 
         val compactTrack = compactAroundImpact(track)
         val estimate = V50HfrCaptureClockRuntime.estimate(compactTrack, nowMs)
@@ -131,6 +142,7 @@ object V41HfrFeatureTrackRuntime {
         latestStoredAtMs = nowMs
         latestTimeSource = estimate.source
         latestTimeUncertaintyMs = estimate.uncertaintyMs
+        latestRejectedAtMs = 0L
         return true
     }
 
@@ -149,19 +161,25 @@ object V41HfrFeatureTrackRuntime {
         return track.copy(frames = track.frames.subList(start, endExclusive).toList())
     }
 
+    @Synchronized
     fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 1_500L): HfrFeatureTrackSnapshot? {
+        if (maxAgeMs < 0L) return null
         val track = latest ?: return null
         val event = latestPublishedAtMs
         val stored = latestStoredAtMs
+        val rejected = latestRejectedAtMs
+        if (rejected > 0L && rejected >= stored) return null
         if (event <= 0L || stored <= 0L || nowMs - stored !in 0L..maxAgeMs) return null
         return HfrFeatureTrackSnapshot(track, event, stored, latestTimeSource, latestTimeUncertaintyMs)
     }
 
+    @Synchronized
     fun clear() {
         latest = null
         latestPublishedAtMs = 0L
         latestStoredAtMs = 0L
         latestTimeSource = "NONE"
         latestTimeUncertaintyMs = 0L
+        latestRejectedAtMs = 0L
     }
 }
