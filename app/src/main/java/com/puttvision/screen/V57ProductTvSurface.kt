@@ -18,6 +18,7 @@ object V57ProductTvSurface {
         setBackgroundColor(Color.BLACK)
         addView(V18SimulatorFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V51TvPolishOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
+        addView(V87TvVisualPolishView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V27PaceLineOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V86ScreenGolfReticleView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
