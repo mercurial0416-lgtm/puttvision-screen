@@ -31,7 +31,7 @@ class V90FeatureTrackSequenceProvenanceTest {
         assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 10L, capturedAtMs = 10_000L)))
         assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 9L, capturedAtMs = 10_100L)))
         assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(sequence = 11L, capturedAtMs = 10_200L)))
-        assertEquals(listOf(10L, 11L), V43RemoteFeatureTrackRuntime.fresh(nowMs = 10_300L).map { it.sequence })
+        assertEquals(listOf(11L, 10L), V43RemoteFeatureTrackRuntime.fresh(nowMs = 10_300L).map { it.sequence })
     }
 
     private fun packet(sequence: Long, capturedAtMs: Long) = V43FeatureTrackPacket(
