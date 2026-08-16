@@ -60,9 +60,13 @@ object V98HfrPublicationGate {
             // while holding the same monitor as publish(), so provenance cannot drift to another shot.
             val publishedTrack = V41HfrFeatureTrackRuntime.latest
                 ?: return@synchronized V98HfrPublicationDecision(V98HfrPublicationStatus.REJECTED_INTEGRITY)
+            val fingerprint = V101HfrPublicationProvenance.fingerprint(publishedTrack)
+            if (!V41HfrFeatureTrackRuntime.bindPublicationProvenance(publishedTrack, fingerprint)) {
+                return@synchronized V98HfrPublicationDecision(V98HfrPublicationStatus.REJECTED_INTEGRITY)
+            }
             V98HfrPublicationDecision(
                 status = V98HfrPublicationStatus.ACCEPTED,
-                provenanceFingerprint = V101HfrPublicationProvenance.fingerprint(publishedTrack)
+                provenanceFingerprint = fingerprint
             )
         } else {
             V98HfrPublicationDecision(V98HfrPublicationStatus.REJECTED_INTEGRITY)
