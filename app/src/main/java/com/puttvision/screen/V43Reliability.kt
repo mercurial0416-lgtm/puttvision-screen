@@ -173,6 +173,7 @@ data class V43FeatureTrackPacket(
 object V43FeatureTrackWire {
     const val MAX_FRAMES = 32
     const val MAX_EVENT_AGE_MS = 15_000L
+    const val MAX_CAMERA_ID_LENGTH = 96
 
     fun encode(code: String, packet: V43FeatureTrackPacket): String = JSONObject().apply {
         put("pv", V28CompanionProtocol.VERSION); put("type", "feature_track"); put("code", code)
@@ -219,8 +220,10 @@ object V43FeatureTrackWire {
         val view = V15CameraView.valueOf(j.getString("view"))
         val normalized = V44TrackValidator.normalize(HfrFeatureTrack(j.getInt("fps"), j.getInt("impact"), frames), view)
             ?: error("invalid feature track")
+        val cameraId = j.getString("camera").trim()
+        require(cameraId.isNotEmpty() && cameraId.length <= MAX_CAMERA_ID_LENGTH)
         V43FeatureTrackPacket(
-            cameraId = j.getString("camera").trim().takeIf { it.isNotEmpty() } ?: error("camera"),
+            cameraId = cameraId,
             view = view, capturedAtMs = captured,
             sequence = j.getLong("seq").also { require(it >= 0L) }, track = normalized, receivedAtMs = nowMs
         )
@@ -233,11 +236,14 @@ object V43RemoteFeatureTrackRuntime {
     private val tracks = ConcurrentHashMap<String, ArrayDeque<V43FeatureTrackPacket>>()
 
     fun publish(packet: V43FeatureTrackPacket): Boolean {
+        val cameraId = packet.cameraId.trim()
+        if (cameraId.isEmpty() || cameraId.length > V43FeatureTrackWire.MAX_CAMERA_ID_LENGTH) return false
         val normalized = V44TrackValidator.normalize(packet.track, packet.view) ?: return false
-        val incoming = packet.copy(track = normalized)
+        val incoming = packet.copy(cameraId = cameraId, track = normalized)
         synchronized(tracks) {
             val queue = tracks.getOrPut(incoming.cameraId) { ArrayDeque() }
             val latest = queue.lastOrNull()
+            if (latest != null && latest.view != incoming.view) return false
             val newer = latest == null || incoming.sequence > latest.sequence ||
                 (incoming.sequence == latest.sequence && incoming.capturedAtMs > latest.capturedAtMs)
             if (!newer) return false
