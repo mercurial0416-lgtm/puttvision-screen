@@ -9,29 +9,31 @@ class V72HardwarelessSelfTestDashboardTest {
     @Test fun dashboardRunsCurrentShotMatrixAndAllFailClosedSuites() {
         val result = V72HardwarelessSelfTestDashboard.run(1.35, 1.8)
         assertTrue(result.details.joinToString("\n"), result.passed)
-        assertEquals(80, result.checksTotal)
-        assertEquals(80, result.checksPassed)
+        assertEquals(88, result.checksTotal)
+        assertEquals(88, result.checksPassed)
         assertNull(result.failedStage)
-        assertEquals(19, result.details.size)
+        assertEquals(20, result.details.size)
         assertTrue(result.details.any { it.startsWith("TRAIN RESUME") })
         assertTrue(result.details.any { it.startsWith("TRAIN JOURNEY") })
         assertTrue(result.details.any { it.startsWith("HFR MEMORY") })
         assertTrue(result.details.any { it.startsWith("LIFECYCLE") })
         assertTrue(result.details.any { it.startsWith("TIMING DISTORTION") })
         assertTrue(result.details.any { it.startsWith("LIVE TRACK UI") })
+        assertTrue(result.details.any { it.startsWith("LIVE PLAYBACK") })
     }
 
     @Test fun compactLabelFitsHardwarelessHudBetterThanRawDiagnostics() {
         val result = V72HardwarelessSelfTestDashboard.run(1.1, -2.0)
         val label = result.shortLabel()
         assertTrue(label.startsWith("SELFTEST PASS"))
-        assertTrue(label.contains("80/80"))
+        assertTrue(label.contains("88/88"))
         assertTrue(label.length < 40)
         assertTrue(result.details.any { it.startsWith("LAN/TIME") })
         assertTrue(result.details.any { it.startsWith("PACKET BIND") })
         assertTrue(result.details.any { it.startsWith("TIMING DISTORTION") })
         assertTrue(result.details.any { it.startsWith("TRAIN JOURNEY") })
         assertTrue(result.details.any { it.startsWith("LIVE TRACK UI") })
+        assertTrue(result.details.any { it.startsWith("LIVE PLAYBACK") })
     }
 
     @Test fun runtimePublishesAndClearsAggregateReport() {
@@ -39,7 +41,7 @@ class V72HardwarelessSelfTestDashboardTest {
         assertNull(V72HardwarelessSelfTestRuntime.snapshot())
         val report = V72HardwarelessSelfTestRuntime.run(1.4, 0.0)
         assertTrue(report.passed)
-        assertEquals(80, V72HardwarelessSelfTestRuntime.snapshot()?.checksPassed)
+        assertEquals(88, V72HardwarelessSelfTestRuntime.snapshot()?.checksPassed)
         V72HardwarelessSelfTestRuntime.clear()
         assertNull(V72HardwarelessSelfTestRuntime.snapshot())
         assertNull(V68HardwarelessStereoRuntime.snapshot())
@@ -52,5 +54,6 @@ class V72HardwarelessSelfTestDashboardTest {
         assertNull(V80HardwarelessTimingDistortionRuntime.snapshot())
         assertNull(V82HardwarelessTrainingJourneyRuntime.snapshot())
         assertNull(V83HardwarelessLiveTrackVisualRuntime.snapshot())
+        assertNull(V84HardwarelessPlaybackRuntime.snapshot())
     }
 }
