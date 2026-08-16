@@ -15,16 +15,15 @@ data class ImpactReplay(
     val sourceFrameIndices: List<Int> = emptyList(),
     val sourceImpactFrame: Int? = null
 ) {
-    fun relativeTimeMsAt(frameIndex: Int): Double? {
-        if (fps <= 0 || frameIndex !in frames.indices) return null
-        val sourceFrame = sourceFrameIndices.getOrNull(frameIndex)
-        val impactFrame = sourceImpactFrame
-        return if (sourceFrame != null && impactFrame != null) {
-            (sourceFrame - impactFrame) * 1000.0 / fps.toDouble()
-        } else {
-            (frameIndex - impactIndex) * 1000.0 / fps.toDouble()
-        }
-    }
+    fun relativeTimeMsAt(frameIndex: Int): Double? =
+        ImpactReplayExtractionIntegrity.relativeTimeMs(
+            frameIndex = frameIndex,
+            frameCount = frames.size,
+            fps = fps,
+            impactIndex = impactIndex,
+            sourceFrameIndices = sourceFrameIndices,
+            sourceImpactFrame = sourceImpactFrame
+        )
 }
 
 data class ImpactReplaySamplePlan(
@@ -72,7 +71,8 @@ object ImpactReplaySamplePlanner {
 /**
  * Keeps Impact Replay honest about which decoded source frame is the actual contact frame.
  * A neighboring decoded frame must never be promoted to IMPACT when the requested source
- * impact frame itself failed to decode.
+ * impact frame itself failed to decode, and partially-present provenance must never silently
+ * fall back to ordinal replay timing.
  */
 object ImpactReplayExtractionIntegrity {
     fun exactImpactIndex(
@@ -83,6 +83,30 @@ object ImpactReplayExtractionIntegrity {
         if (extractedSourceFrameIndices.zipWithNext().any { (a, b) -> b <= a }) return null
         val index = extractedSourceFrameIndices.indexOf(sourceImpactFrame)
         return index.takeIf { it >= 0 }
+    }
+
+    fun relativeTimeMs(
+        frameIndex: Int,
+        frameCount: Int,
+        fps: Int,
+        impactIndex: Int,
+        sourceFrameIndices: List<Int>,
+        sourceImpactFrame: Int?
+    ): Double? {
+        if (fps <= 0 || frameCount <= 0 || frameIndex !in 0 until frameCount) return null
+        if (impactIndex !in 0 until frameCount) return null
+
+        val hasAnyProvenance = sourceFrameIndices.isNotEmpty() || sourceImpactFrame != null
+        if (!hasAnyProvenance) {
+            return (frameIndex - impactIndex) * 1000.0 / fps.toDouble()
+        }
+
+        val impactFrame = sourceImpactFrame ?: return null
+        if (sourceFrameIndices.size != frameCount) return null
+        if (sourceFrameIndices.zipWithNext().any { (a, b) -> b <= a }) return null
+        if (sourceFrameIndices.getOrNull(impactIndex) != impactFrame) return null
+        val sourceFrame = sourceFrameIndices.getOrNull(frameIndex) ?: return null
+        return (sourceFrame - impactFrame) * 1000.0 / fps.toDouble()
     }
 }
 
