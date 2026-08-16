@@ -43,7 +43,7 @@ class V89ScreenGolfVisualPhysicsTest {
         assertTrue(p.focusStrength in 0f..0.62f)
         assertTrue(p.cometLengthM in .025..0.24)
         assertTrue(p.dimpleAlpha in 42..110)
-        assertTrue(p.spinDegrees in 0f..360f)
+        assertTrue(p.spinDegrees >= 0f && p.spinDegrees < 360f)
     }
 
     @Test
