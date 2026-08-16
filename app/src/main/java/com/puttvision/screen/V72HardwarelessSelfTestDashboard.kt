@@ -72,6 +72,9 @@ object V72HardwarelessSelfTestDashboard {
         val liveVisual = V83HardwarelessLiveTrackVisualRuntime.run()
         recordSuite("LIVE TRACK UI", liveVisual.passed, liveVisual.checksPassed, liveVisual.checksTotal, liveVisual.reason)
 
+        val playback = V84HardwarelessPlaybackRuntime.run()
+        recordSuite("LIVE PLAYBACK", playback.passed, playback.checksPassed, playback.checksTotal, playback.reason)
+
         return V72HardwarelessSelfTestReport(passed == total, passed, total, firstFailure, details.toList())
     }
 }
@@ -93,5 +96,6 @@ object V72HardwarelessSelfTestRuntime {
         V80HardwarelessTimingDistortionRuntime.clear()
         V82HardwarelessTrainingJourneyRuntime.clear()
         V83HardwarelessLiveTrackVisualRuntime.clear()
+        V84HardwarelessPlaybackRuntime.clear()
     }
 }
