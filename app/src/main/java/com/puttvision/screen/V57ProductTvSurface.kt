@@ -4,11 +4,6 @@ import android.content.Context
 import android.graphics.Color
 import android.widget.FrameLayout
 
-/**
- * Canonical TV surface shared by the physical presentation, on-phone TV preview,
- * and no-hardware lab. Keeping the composition here prevents those three surfaces
- * from silently drifting apart as product HUD layers evolve.
- */
 object V57ProductTvSurface {
     fun create(
         context: Context,
