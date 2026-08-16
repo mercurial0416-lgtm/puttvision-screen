@@ -7,11 +7,13 @@ import java.net.URI
 
 /** Security and lifecycle policy for self-update. Pure Kotlin so it is regression-testable. */
 object V49UpdatePolicy {
+    const val MIN_APK_BYTES = 32L * 1024L
     const val MAX_APK_BYTES = 220L * 1024L * 1024L
     const val MAX_MANIFEST_BYTES = 256L * 1024L
     const val MAX_VERSION_NAME_CHARS = 48
     const val MAX_UPDATE_CACHE_FILES = 3
     const val MAX_UPDATE_CACHE_AGE_MS = 7L * 24L * 60L * 60L * 1000L
+    const val MAX_FUTURE_FILE_SKEW_MS = 10L * 60L * 1000L
 
     data class ManifestCheck(val valid: Boolean, val reason: String? = null)
     data class CacheCleanup(val deleted: Int, val kept: Int)
@@ -32,6 +34,25 @@ object V49UpdatePolicy {
         return ManifestCheck(true)
     }
 
+    fun validateArtifactVersion(
+        installedVersionCode: Long,
+        manifestVersionCode: Long,
+        candidateVersionCode: Long
+    ): ManifestCheck {
+        if (installedVersionCode < 0L) return ManifestCheck(false, "설치 버전을 읽을 수 없습니다")
+        if (manifestVersionCode <= installedVersionCode) return ManifestCheck(false, "manifest가 현재 버전보다 새 버전이 아닙니다")
+        if (candidateVersionCode != manifestVersionCode) {
+            return ManifestCheck(false, "APK versionCode가 manifest와 일치하지 않습니다")
+        }
+        return ManifestCheck(true)
+    }
+
+    fun validateDownloadedApkSize(bytes: Long): ManifestCheck = when {
+        bytes <= MIN_APK_BYTES -> ManifestCheck(false, "APK가 비정상적으로 작습니다")
+        bytes > MAX_APK_BYTES -> ManifestCheck(false, "APK가 허용 크기를 초과합니다")
+        else -> ManifestCheck(true)
+    }
+
     fun validateContentLength(length: Long): ManifestCheck = when {
         length < 0L -> ManifestCheck(true)
         length == 0L -> ManifestCheck(false, "APK Content-Length가 0입니다")
@@ -39,15 +60,18 @@ object V49UpdatePolicy {
         else -> ManifestCheck(true)
     }
 
-    fun limited(input: InputStream, maxBytes: Long = MAX_APK_BYTES): InputStream = object : FilterInputStream(input) {
-        private var readBytes = 0L
-        private fun account(n: Int) {
-            if (n <= 0) return
-            readBytes += n
-            if (readBytes > maxBytes) throw IllegalStateException("APK 다운로드가 허용 크기를 초과했습니다")
+    fun limited(input: InputStream, maxBytes: Long = MAX_APK_BYTES): InputStream {
+        require(maxBytes > 0L) { "stream 제한 크기는 1 byte 이상이어야 합니다" }
+        return object : FilterInputStream(input) {
+            private var readBytes = 0L
+            private fun account(n: Int) {
+                if (n <= 0) return
+                readBytes += n
+                if (readBytes > maxBytes) throw IllegalStateException("APK 다운로드가 허용 크기를 초과했습니다")
+            }
+            override fun read(): Int = super.read().also { if (it >= 0) account(1) }
+            override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also(::account)
         }
-        override fun read(): Int = super.read().also { if (it >= 0) account(1) }
-        override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also(::account)
     }
 
     fun cleanCache(dir: File, keep: File? = null, nowMs: Long = System.currentTimeMillis()): CacheCleanup {
@@ -57,7 +81,9 @@ object V49UpdatePolicy {
         var deleted = 0
         files.filter { file ->
             val canonical = runCatching { file.canonicalFile }.getOrNull()
-            canonical != null && canonical != keepCanonical && nowMs - file.lastModified() > MAX_UPDATE_CACHE_AGE_MS
+            val age = nowMs - file.lastModified()
+            canonical != null && canonical != keepCanonical &&
+                (age > MAX_UPDATE_CACHE_AGE_MS || age < -MAX_FUTURE_FILE_SKEW_MS)
         }.forEach { if (runCatching { it.delete() }.getOrDefault(false)) deleted++ }
 
         val remaining = dir.listFiles()?.filter { it.isFile && it.name.endsWith(".apk", true) }
@@ -90,6 +116,8 @@ object V49UpdatePolicy {
         require(uri.scheme.equals("https", true)) { "$label URL은 HTTPS여야 합니다" }
         require(!uri.host.isNullOrBlank()) { "$label URL host가 없습니다" }
         require(uri.userInfo == null) { "$label URL에 userinfo를 넣을 수 없습니다" }
+        require(uri.fragment == null) { "$label URL에 fragment를 넣을 수 없습니다" }
+        require(uri.port == -1 || uri.port in 1..65535) { "$label URL port가 잘못되었습니다" }
         ManifestCheck(true)
     }.getOrElse { ManifestCheck(false, it.message ?: "$label URL 형식 오류") }
 }
