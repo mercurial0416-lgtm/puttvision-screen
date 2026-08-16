@@ -25,13 +25,7 @@ data class V90CinematicPlan(
 )
 
 object V90CinematicPlanner {
-    fun plan(
-        running: Boolean,
-        progress01: Double,
-        speedMps: Double,
-        result: SimResult?,
-        resultAgeMs: Long
-    ): V90CinematicPlan {
+    fun plan(running: Boolean, progress01: Double, speedMps: Double, result: SimResult?, resultAgeMs: Long): V90CinematicPlan {
         val progress = progress01.takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.0
         val speed = speedMps.takeIf { it.isFinite() }?.coerceIn(0.0, 5.0) ?: 0.0
         val age = resultAgeMs.coerceAtLeast(0L)
@@ -56,10 +50,7 @@ object V90CinematicPlanner {
     }
 }
 
-class V90ScreenGolfCinematicOverlay(
-    context: Context,
-    private val engine: GameEngine
-) : View(context) {
+class V90ScreenGolfCinematicOverlay(context: Context, private val engine: GameEngine) : View(context) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private var seenResult: SimResult? = null
     private var resultSeenAtMs = 0L
