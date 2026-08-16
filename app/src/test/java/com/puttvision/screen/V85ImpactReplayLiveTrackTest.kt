@@ -10,8 +10,8 @@ class V85ImpactReplayLiveTrackTest {
     @Test fun hardwarelessSuitePasses() {
         val result = V85HardwarelessImpactReplayLiveTrackSuite.verify()
         assertTrue(result.reason, result.passed)
-        assertEquals(9, result.checksTotal)
-        assertEquals(9, result.checksPassed)
+        assertEquals(11, result.checksTotal)
+        assertEquals(11, result.checksPassed)
     }
 
     @Test fun replayFrameUsesCaptureFpsForTimelineAlignment() {
@@ -33,6 +33,22 @@ class V85ImpactReplayLiveTrackTest {
 
     @Test fun unreadyTrackDoesNotLeakIntoReplay() {
         val bad = fixtureTrack().copy(imageHeightPx = null)
+        assertNull(V85ImpactReplayLiveTrack.bind(bad))
+    }
+
+    @Test fun outOfFramePixelsAreRejectedInsteadOfClampedIntoReplay() {
+        val track = fixtureTrack()
+        val bad = track.copy(frames = track.frames.mapIndexed { index, frame ->
+            if (index == 2) frame.copy(ballXpx = 1001.0) else frame
+        })
+        assertNull(V85ImpactReplayLiveTrack.bind(bad))
+    }
+
+    @Test fun inconsistentFrameTimingIsRejectedBeforeReplayProjection() {
+        val track = fixtureTrack()
+        val bad = track.copy(frames = track.frames.mapIndexed { index, frame ->
+            if (index == 3) frame.copy(timeFromImpactMs = 99.0) else frame
+        })
         assertNull(V85ImpactReplayLiveTrack.bind(bad))
     }
 
