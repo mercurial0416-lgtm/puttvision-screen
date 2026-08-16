@@ -69,6 +69,23 @@ object ImpactReplaySamplePlanner {
     }
 }
 
+/**
+ * Keeps Impact Replay honest about which decoded source frame is the actual contact frame.
+ * A neighboring decoded frame must never be promoted to IMPACT when the requested source
+ * impact frame itself failed to decode.
+ */
+object ImpactReplayExtractionIntegrity {
+    fun exactImpactIndex(
+        extractedSourceFrameIndices: List<Int>,
+        sourceImpactFrame: Int
+    ): Int? {
+        if (sourceImpactFrame < 0 || extractedSourceFrameIndices.isEmpty()) return null
+        if (extractedSourceFrameIndices.zipWithNext().any { (a, b) -> b <= a }) return null
+        val index = extractedSourceFrameIndices.indexOf(sourceImpactFrame)
+        return index.takeIf { it >= 0 }
+    }
+}
+
 object ImpactReplayExtractor {
 
     fun extract(
@@ -122,13 +139,18 @@ object ImpactReplayExtractor {
                 frames.forEach { if (!it.isRecycled) it.recycle() }
                 null
             } else {
-                val localImpact = sourceFrameIndices.indices.minByOrNull {
-                    abs(sourceFrameIndices[it] - plan.sourceImpactFrame)
-                } ?: 0
+                val localImpact = ImpactReplayExtractionIntegrity.exactImpactIndex(
+                    extractedSourceFrameIndices = sourceFrameIndices,
+                    sourceImpactFrame = plan.sourceImpactFrame
+                )
+                if (localImpact == null) {
+                    frames.forEach { if (!it.isRecycled) it.recycle() }
+                    return null
+                }
                 ImpactReplay(
                     frames = frames,
                     fps = captureFps,
-                    impactIndex = localImpact.coerceIn(0, frames.lastIndex),
+                    impactIndex = localImpact,
                     sourceFrameIndices = sourceFrameIndices,
                     sourceImpactFrame = plan.sourceImpactFrame
                 )
