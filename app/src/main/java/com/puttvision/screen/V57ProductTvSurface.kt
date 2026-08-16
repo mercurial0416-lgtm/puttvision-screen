@@ -19,6 +19,7 @@ object V57ProductTvSurface {
         addView(V18SimulatorFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V51TvPolishOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V27PaceLineOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
+        addView(V86ScreenGolfReticleView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
         if (includeImpactReplay) {
             addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
