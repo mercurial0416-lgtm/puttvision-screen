@@ -120,9 +120,11 @@ object V41HfrFeatureTrackRuntime {
         private set
 
     fun publish(track: HfrFeatureTrack, nowMs: Long = System.currentTimeMillis()): Boolean {
-        val compactTrack = track.copy(frames = track.frames.take(MAX_FRAMES).toList())
-        if (!V93HfrFeatureTrackIntegrity.isValid(compactTrack)) return false
+        // Validate every producer frame before truncating. Otherwise malformed provenance outside the
+        // retained runtime window could be silently discarded and the shortened track would look valid.
+        if (!V93HfrFeatureTrackIntegrity.isValid(track)) return false
 
+        val compactTrack = compactAroundImpact(track)
         val estimate = V50HfrCaptureClockRuntime.estimate(compactTrack, nowMs)
         latest = compactTrack
         latestPublishedAtMs = estimate.impactAtMs
@@ -130,6 +132,21 @@ object V41HfrFeatureTrackRuntime {
         latestTimeSource = estimate.source
         latestTimeUncertaintyMs = estimate.uncertaintyMs
         return true
+    }
+
+    private fun compactAroundImpact(track: HfrFeatureTrack): HfrFeatureTrack {
+        if (track.frames.size <= MAX_FRAMES) return track.copy(frames = track.frames.toList())
+
+        val impactIndex = track.frames.indexOfFirst { it.frame == track.impactFrame }
+        if (impactIndex < 0) return track.copy(frames = track.frames.take(MAX_FRAMES).toList())
+
+        val framesBeforeImpact = (MAX_FRAMES - 1) / 2
+        var start = (impactIndex - framesBeforeImpact).coerceAtLeast(0)
+        var endExclusive = (start + MAX_FRAMES).coerceAtMost(track.frames.size)
+        start = (endExclusive - MAX_FRAMES).coerceAtLeast(0)
+        endExclusive = (start + MAX_FRAMES).coerceAtMost(track.frames.size)
+
+        return track.copy(frames = track.frames.subList(start, endExclusive).toList())
     }
 
     fun freshSnapshot(nowMs: Long = System.currentTimeMillis(), maxAgeMs: Long = 1_500L): HfrFeatureTrackSnapshot? {
