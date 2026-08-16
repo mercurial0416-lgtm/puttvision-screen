@@ -174,6 +174,12 @@ object V43FeatureTrackWire {
     const val MAX_FRAMES = 32
     const val MAX_EVENT_AGE_MS = 15_000L
     const val MAX_CAMERA_ID_LENGTH = 96
+    private val CAMERA_ID_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,95}")
+
+    fun normalizeCameraId(raw: String): String? {
+        val id = raw.trim()
+        return id.takeIf { it.length <= MAX_CAMERA_ID_LENGTH && CAMERA_ID_PATTERN.matches(it) }
+    }
 
     fun encode(code: String, packet: V43FeatureTrackPacket): String = JSONObject().apply {
         put("pv", V28CompanionProtocol.VERSION); put("type", "feature_track"); put("code", code)
@@ -220,8 +226,7 @@ object V43FeatureTrackWire {
         val view = V15CameraView.valueOf(j.getString("view"))
         val normalized = V44TrackValidator.normalize(HfrFeatureTrack(j.getInt("fps"), j.getInt("impact"), frames), view)
             ?: error("invalid feature track")
-        val cameraId = j.getString("camera").trim()
-        require(cameraId.isNotEmpty() && cameraId.length <= MAX_CAMERA_ID_LENGTH)
+        val cameraId = normalizeCameraId(j.getString("camera")) ?: error("invalid camera identity")
         V43FeatureTrackPacket(
             cameraId = cameraId,
             view = view, capturedAtMs = captured,
@@ -236,8 +241,9 @@ object V43RemoteFeatureTrackRuntime {
     private val tracks = ConcurrentHashMap<String, ArrayDeque<V43FeatureTrackPacket>>()
 
     fun publish(packet: V43FeatureTrackPacket): Boolean {
-        val cameraId = packet.cameraId.trim()
-        if (cameraId.isEmpty() || cameraId.length > V43FeatureTrackWire.MAX_CAMERA_ID_LENGTH) return false
+        val cameraId = V43FeatureTrackWire.normalizeCameraId(packet.cameraId) ?: return false
+        if (packet.sequence < 0L) return false
+        if (packet.receivedAtMs - packet.capturedAtMs !in -300L..V43FeatureTrackWire.MAX_EVENT_AGE_MS) return false
         val normalized = V44TrackValidator.normalize(packet.track, packet.view) ?: return false
         val incoming = packet.copy(cameraId = cameraId, track = normalized)
         synchronized(tracks) {
