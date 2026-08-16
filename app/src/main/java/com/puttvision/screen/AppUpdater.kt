@@ -163,7 +163,8 @@ class AppUpdater(
             try {
                 val validation = V49UpdatePolicy.validateInfo(info, publicChannel = info.githubToken.isNullOrBlank())
                 require(validation.valid) { validation.reason ?: "업데이트 정보 검증 실패" }
-                require(V49UpdatePolicy.isUpgrade(currentInstalledVersionCode(), info.versionCode.toLong())) {
+                val installedCode = currentInstalledVersionCode()
+                require(V49UpdatePolicy.isUpgrade(installedCode, info.versionCode.toLong())) {
                     "현재 버전보다 새 버전이 아닙니다"
                 }
 
@@ -179,9 +180,8 @@ class AppUpdater(
                 }
 
                 input.use { source -> targetApk.outputStream().use { output -> source.copyTo(output) } }
-                require(targetApk.length() in (32 * 1024L + 1)..V49UpdatePolicy.MAX_APK_BYTES) {
-                    "다운로드된 APK 파일 크기가 비정상적입니다."
-                }
+                val sizeCheck = V49UpdatePolicy.validateDownloadedApkSize(targetApk.length())
+                require(sizeCheck.valid) { sizeCheck.reason ?: "다운로드된 APK 파일 크기가 비정상적입니다." }
 
                 info.sha256?.let { expected ->
                     val actual = sha256(targetApk)
@@ -189,9 +189,12 @@ class AppUpdater(
                 }
 
                 val candidateCode = verifyApkIdentity(targetApk)
-                require(V49UpdatePolicy.isUpgrade(currentInstalledVersionCode(), candidateCode)) {
-                    "다운로드 APK가 현재 버전보다 새 버전이 아닙니다"
-                }
+                val artifactCheck = V49UpdatePolicy.validateArtifactVersion(
+                    installedVersionCode = installedCode,
+                    manifestVersionCode = info.versionCode.toLong(),
+                    candidateVersionCode = candidateCode
+                )
+                require(artifactCheck.valid) { artifactCheck.reason ?: "다운로드 APK 버전 검증 실패" }
 
                 failedApk = null
                 onUi { install(targetApk, info) }
@@ -379,14 +382,20 @@ class AppUpdater(
         val expectedSha = prefs.getString(KEY_PENDING_SHA, "").orEmpty()
         val expectedVersion = prefs.getInt(KEY_PENDING_VERSION, -1)
         val ok = runCatching {
-            require(apk.length() in (32 * 1024L + 1)..V49UpdatePolicy.MAX_APK_BYTES) { "대기 중 APK 크기 오류" }
+            val sizeCheck = V49UpdatePolicy.validateDownloadedApkSize(apk.length())
+            require(sizeCheck.valid) { sizeCheck.reason ?: "대기 중 APK 크기 오류" }
+            require(expectedVersion > 0) { "대기 중 APK 버전 정보가 없습니다" }
             if (expectedSha.isNotBlank()) {
                 require(V49UpdatePolicy.isSha256(expectedSha)) { "대기 중 SHA 형식 오류" }
                 require(sha256(apk).equals(expectedSha, ignoreCase = true)) { "대기 중 APK SHA 검증 실패" }
             }
             val candidate = verifyApkIdentity(apk)
-            require(expectedVersion <= 0 || candidate == expectedVersion.toLong()) { "대기 중 APK 버전이 바뀌었습니다" }
-            require(V49UpdatePolicy.isUpgrade(currentInstalledVersionCode(), candidate)) { "이미 설치된 버전보다 새 APK가 아닙니다" }
+            val artifactCheck = V49UpdatePolicy.validateArtifactVersion(
+                installedVersionCode = currentInstalledVersionCode(),
+                manifestVersionCode = expectedVersion.toLong(),
+                candidateVersionCode = candidate
+            )
+            require(artifactCheck.valid) { artifactCheck.reason ?: "대기 중 APK 버전 검증 실패" }
         }.isSuccess
         if (!ok) {
             runCatching { apk.delete() }
