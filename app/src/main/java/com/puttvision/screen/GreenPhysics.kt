@@ -44,6 +44,14 @@ class GreenPhysics {
         // Center-path radius that lets the ball fall rather than ride the rim.
         private const val CAPTURE_CENTER_RADIUS_M = CUP_RADIUS_M - BALL_RADIUS_M * 0.24
         private const val RIM_CONTACT_RADIUS_M = CUP_RADIUS_M + BALL_RADIUS_M * 0.80
+
+        // Keep the putting simulation independent from TV/phone render cadence. 30/60/120/240 Hz
+        // frame intervals all decompose into the same 240 Hz physics quantum instead of changing
+        // break/cup outcomes just because a display frame was late.
+        private const val MAX_SUBSTEP_SEC = 1.0 / 240.0
+        // A short renderer/GC stall should preserve physical elapsed time, but a multi-second app
+        // suspension must not fast-forward the entire putt in one callback after resume.
+        private const val MAX_FRAME_GAP_SEC = 0.250
     }
 
     fun launch(
@@ -71,8 +79,24 @@ class GreenPhysics {
         cupEnabled: Boolean = true
     ): SimResult? {
         if (!state.running) return result(state, settings)
+        if (!dtRaw.isFinite() || dtRaw <= 0.0) return null
 
-        val dt = dtRaw.coerceIn(0.001, 0.025)
+        var remaining = dtRaw.coerceAtMost(MAX_FRAME_GAP_SEC)
+        while (remaining > 1e-12 && state.running) {
+            val dt = min(MAX_SUBSTEP_SEC, remaining)
+            val finished = stepInternal(state, settings, dt, cupEnabled)
+            if (finished != null) return finished
+            remaining -= dt
+        }
+        return if (state.running) null else result(state, settings)
+    }
+
+    private fun stepInternal(
+        state: SimState,
+        settings: GreenSettings,
+        dt: Double,
+        cupEnabled: Boolean
+    ): SimResult? {
         val stimp = settings.stimpMeters.coerceIn(1.5, 5.0)
 
         // A Stimpmeter launches at a fixed speed; if it stops after S meters under
