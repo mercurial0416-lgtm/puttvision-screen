@@ -18,7 +18,9 @@ data class V95SoloDebriefPlan(
     val phase: V95ShotPhase,
     val headline: String,
     val speedMps: Double,
+    val targetDistanceM: Double,
     val distanceToCupM: Double,
+    val progress01: Float,
     val lateralCm: Double,
     val longitudinalCm: Double,
     val cupContacts: Int,
@@ -31,16 +33,23 @@ data class V95SoloDebriefPlan(
 
 object V95SoloDebriefPlanner {
     fun plan(settings: GreenSettings, state: SimState?, result: SimResult?): V95SoloDebriefPlan {
+        val targetDistance = settings.holeDistanceM
+            .takeIf { it.isFinite() && it >= 0.0 }
+            ?: 0.0
         val sx = state?.x?.takeIf { it.isFinite() } ?: 0.0
         val sy = state?.y?.takeIf { it.isFinite() } ?: 0.0
         val speed = state?.let { hypot(it.vx, it.vy) }?.takeIf { it.isFinite() } ?: 0.0
-        val liveDistance = hypot(sx, settings.holeDistanceM - sy).takeIf { it.isFinite() }
-            ?: settings.holeDistanceM.coerceAtLeast(0.0)
+        val liveDistance = hypot(sx, targetDistance - sy).takeIf { it.isFinite() }
+            ?: targetDistance
         val resultDistance = result?.distanceToCupM?.takeIf { it.isFinite() && it >= 0.0 }
-        val distance = resultDistance ?: liveDistance
+        val distance = (resultDistance ?: liveDistance).takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
         val lateral = ((result?.finishX ?: sx) * 100.0).takeIf { it.isFinite() } ?: 0.0
-        val longitudinal = (((result?.finishY ?: sy) - settings.holeDistanceM) * 100.0)
+        val longitudinal = (((result?.finishY ?: sy) - targetDistance) * 100.0)
             .takeIf { it.isFinite() } ?: 0.0
+        val progress = when {
+            targetDistance <= .01 -> if (distance <= .01) 1f else 0f
+            else -> (1.0 - distance / targetDistance).coerceIn(0.0, 1.0).toFloat()
+        }
 
         val phase = when {
             result != null -> V95ShotPhase.RESULT
@@ -52,7 +61,7 @@ object V95SoloDebriefPlanner {
         val headline = when {
             result?.holed == true -> "HOLED"
             result?.lipOut == true -> "LIP OUT"
-            result != null && result.distanceToCupM <= 0.15 -> "TAP-IN"
+            result != null && distance <= 0.15 -> "TAP-IN"
             result != null && abs(longitudinal) >= abs(lateral) && longitudinal < 0.0 -> "SHORT"
             result != null && abs(longitudinal) >= abs(lateral) && longitudinal > 0.0 -> "LONG"
             result != null && lateral < 0.0 -> "LEFT"
@@ -72,7 +81,9 @@ object V95SoloDebriefPlanner {
             phase = phase,
             headline = headline,
             speedMps = speed.coerceAtLeast(0.0),
-            distanceToCupM = distance.coerceAtLeast(0.0),
+            targetDistanceM = targetDistance,
+            distanceToCupM = distance,
+            progress01 = progress,
             lateralCm = lateral,
             longitudinalCm = longitudinal,
             cupContacts = (result?.cupContacts ?: state?.cupContacts ?: 0).coerceAtLeast(0),
@@ -151,7 +162,7 @@ class V95SoloBroadcastDebriefView(
             V95ShotPhase.RESULT -> "SIDE ${signed(plan.lateralCm)} cm"
         }
         val third = when (plan.phase) {
-            V95ShotPhase.ADDRESS -> "TARGET ${fmt(engine.settings.holeDistanceM, 1)} m"
+            V95ShotPhase.ADDRESS -> "TARGET ${fmt(plan.targetDistanceM, 1)} m"
             V95ShotPhase.ROLL, V95ShotPhase.CUP_APPROACH -> "BREAK ${breakLabel(plan.lateralCm)}"
             V95ShotPhase.RESULT -> "DEPTH ${signed(plan.longitudinalCm)} cm"
         }
@@ -178,8 +189,7 @@ class V95SoloBroadcastDebriefView(
     }
 
     private fun drawProgress(c: Canvas, plan: V95SoloDebriefPlan, left: Float, top: Float, railW: Float, railH: Float) {
-        val target = engine.settings.holeDistanceM.coerceAtLeast(.01)
-        val progress = (1.0 - plan.distanceToCupM / target).coerceIn(0.0, 1.0).toFloat()
+        val progress = plan.progress01.coerceIn(0f, 1f)
         val barLeft = left + railW * .60f
         val barTop = top + railH * .18f
         val barW = railW * .32f
