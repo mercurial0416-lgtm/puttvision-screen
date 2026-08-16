@@ -56,5 +56,6 @@ class V89ScreenGolfVisualPhysicsTest {
         assertTrue(p.highlightStrength.isFinite())
         assertTrue(p.focusStrength.isFinite())
         assertTrue(p.cometLengthM.isFinite())
+        assertTrue(p.dimpleAlpha in 42..110)
     }
 }
