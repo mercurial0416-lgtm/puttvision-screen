@@ -6,11 +6,9 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
-import android.graphics.RectF
 import android.graphics.Shader
 import android.os.SystemClock
 import android.view.View
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -58,13 +56,11 @@ object V90CinematicPlanner {
     }
 }
 
-/** Visual-only cinematic director layered above the simulator and below gameplay HUDs. */
 class V90ScreenGolfCinematicOverlay(
     context: Context,
     private val engine: GameEngine
 ) : View(context) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val r = RectF()
     private var seenResult: SimResult? = null
     private var resultSeenAtMs = 0L
 
@@ -78,7 +74,6 @@ class V90ScreenGolfCinematicOverlay(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (width <= 0 || height <= 0) return
-
         val settings = engine.settings
         val state = engine.state
         val result = engine.lastResult
@@ -86,18 +81,15 @@ class V90ScreenGolfCinematicOverlay(
             seenResult = result
             resultSeenAtMs = if (result == null) 0L else SystemClock.uptimeMillis()
         }
-
         val y = state?.y ?: 0.0
         val progress = if (settings.holeDistanceM > .2) (y / settings.holeDistanceM).coerceIn(0.0, 1.0) else 0.0
         val speed = state?.let { kotlin.math.hypot(it.vx, it.vy) } ?: 0.0
         val age = if (resultSeenAtMs == 0L) 0L else SystemClock.uptimeMillis() - resultSeenAtMs
         val plan = V90CinematicPlanner.plan(state?.running == true, progress, speed, result, age)
-
         drawLetterbox(canvas, plan)
         drawCupFocus(canvas, settings, plan)
         drawSpeedLines(canvas, state, plan)
         drawResultFlash(canvas, plan)
-
         val animate = state?.running == true || (result != null && age < 1900L)
         postInvalidateDelayed(if (animate) 16L else 140L)
     }
@@ -117,21 +109,11 @@ class V90ScreenGolfCinematicOverlay(
         val z = GreenTerrain.effectiveHeightAt(settings, 0.0, settings.holeDistanceM)
         val cup = V25FlagProjectionRuntime.project(0.0, settings.holeDistanceM, z + .003) ?: return
         val radius = min(width, height) * (.095f + .13f * plan.cupFocus)
-        p.shader = RadialGradient(
-            cup.x,
-            cup.y,
-            radius,
-            intArrayOf(
-                Color.argb((22f * plan.cupFocus).roundToInt(), 255, 255, 255),
-                Color.TRANSPARENT,
-                Color.argb((92f * plan.cupFocus).roundToInt(), 0, 0, 0)
-            ),
-            floatArrayOf(0f, .44f, 1f),
-            Shader.TileMode.CLAMP
-        )
+        p.shader = RadialGradient(cup.x, cup.y, radius,
+            intArrayOf(Color.argb((22f * plan.cupFocus).roundToInt(), 255, 255, 255), Color.TRANSPARENT, Color.argb((92f * plan.cupFocus).roundToInt(), 0, 0, 0)),
+            floatArrayOf(0f, .44f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), p)
         p.shader = null
-
         p.style = Paint.Style.STROKE
         p.strokeWidth = max(1.5f, min(width, height) * .0022f)
         p.color = Color.argb((120f * plan.cupFocus).roundToInt().coerceIn(0, 130), 236, 247, 241)
@@ -146,16 +128,14 @@ class V90ScreenGolfCinematicOverlay(
         val settings = engine.settings
         val z = GreenTerrain.effectiveHeightAt(settings, state.x, state.y)
         val ball = V25FlagProjectionRuntime.project(state.x, state.y, z + .03) ?: return
-        val strength = plan.speedLines
         p.style = Paint.Style.STROKE
         p.strokeCap = Paint.Cap.ROUND
         p.strokeWidth = max(1f, min(width, height) * .0015f)
-        val count = 10
-        for (i in 0 until count) {
-            val f = (i + 1f) / count
+        for (i in 0 until 10) {
+            val f = (i + 1f) / 10f
             val spread = width * (.05f + f * .18f)
             val yOff = height * ((i % 5) - 2) * .018f
-            val alpha = (68f * strength * (1f - f * .45f)).roundToInt().coerceIn(0, 76)
+            val alpha = (68f * plan.speedLines * (1f - f * .45f)).roundToInt().coerceIn(0, 76)
             p.color = Color.argb(alpha, 234, 246, 255)
             c.drawLine(ball.x - spread, ball.y + yOff, ball.x - spread * .32f, ball.y + yOff * .72f, p)
             c.drawLine(ball.x + spread * .32f, ball.y - yOff * .48f, ball.x + spread, ball.y - yOff, p)
@@ -172,14 +152,8 @@ class V90ScreenGolfCinematicOverlay(
             V90CinematicPhase.LIP_OUT -> Color.argb(a, 255, 158, 70)
             else -> Color.argb(a / 2, 220, 235, 245)
         }
-        p.shader = RadialGradient(
-            width * .5f,
-            height * .52f,
-            max(width, height) * .62f,
-            intArrayOf(color, Color.TRANSPARENT),
-            floatArrayOf(0f, 1f),
-            Shader.TileMode.CLAMP
-        )
+        p.shader = RadialGradient(width * .5f, height * .52f, max(width, height) * .62f,
+            intArrayOf(color, Color.TRANSPARENT), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), p)
         p.shader = null
     }
