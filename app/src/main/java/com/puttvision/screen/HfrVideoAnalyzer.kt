@@ -232,7 +232,19 @@ class HfrVideoAnalyzer {
             val calculated = calculate(samples, startBall, fps)
                 ?: return fail(V45HfrFailureReason.KINEMATICS, phase, fps, frameCount, "samples=${samples.size}")
             val featureTrack = buildFeatureTrack(samples, calculated.second, fps)
-            V41HfrFeatureTrackRuntime.publish(featureTrack)
+
+            phase = "PROVENANCE"
+            val publication = V98HfrPublicationGate.publish(featureTrack)
+            if (!publication.accepted) {
+                return fail(
+                    V45HfrFailureReason.FEATURE_TRACK_INTEGRITY,
+                    phase,
+                    fps,
+                    frameCount,
+                    "V93 rejected runtime feature track"
+                )
+            }
+
             val totalAnalysisMs = ((System.nanoTime() - analysisStartedNs) / 1_000_000L).coerceAtLeast(0L)
             V42HfrAnalysisHealthRuntime.publish(
                 V42HfrAnalysisHealth(
@@ -437,7 +449,6 @@ class HfrVideoAnalyzer {
                 )?.let { return VideoCalibration(it, "MARKERLESS_FALLBACK") }
             }
         }
-
         return null
     }
 
