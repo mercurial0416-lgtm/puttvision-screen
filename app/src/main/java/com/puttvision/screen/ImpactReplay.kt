@@ -9,8 +9,21 @@ import kotlin.math.min
 data class ImpactReplay(
     val frames: List<Bitmap>,
     val fps: Int,
-    val impactIndex: Int
-)
+    val impactIndex: Int,
+    val sourceFrameIndices: List<Int> = emptyList(),
+    val sourceImpactFrame: Int? = null
+) {
+    fun relativeTimeMsAt(frameIndex: Int): Double? {
+        if (fps <= 0 || frameIndex !in frames.indices) return null
+        val sourceFrame = sourceFrameIndices.getOrNull(frameIndex)
+        val impactFrame = sourceImpactFrame
+        return if (sourceFrame != null && impactFrame != null) {
+            (sourceFrame - impactFrame) * 1000.0 / fps.toDouble()
+        } else {
+            (frameIndex - impactIndex) * 1000.0 / fps.toDouble()
+        }
+    }
+}
 
 object ImpactReplayExtractor {
 
@@ -40,6 +53,7 @@ object ImpactReplayExtractor {
             val stride = max(1, count / maxFrames)
 
             val frames = ArrayList<Bitmap>()
+            val sourceFrameIndices = ArrayList<Int>()
             var localImpact = 0
             var i = start
 
@@ -67,6 +81,7 @@ object ImpactReplayExtractor {
 
                     if (i <= impactFrame) localImpact = frames.size
                     frames += displayFrame
+                    sourceFrameIndices += i
                 }
 
                 i += stride
@@ -78,7 +93,9 @@ object ImpactReplayExtractor {
             } else ImpactReplay(
                 frames = frames,
                 fps = captureFps,
-                impactIndex = localImpact.coerceIn(0, frames.lastIndex)
+                impactIndex = localImpact.coerceIn(0, frames.lastIndex),
+                sourceFrameIndices = sourceFrameIndices,
+                sourceImpactFrame = impactFrame
             )
         } finally {
             mmr.release()
