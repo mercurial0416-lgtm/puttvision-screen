@@ -10,6 +10,7 @@ enum class V45HfrFailureReason {
     BALL_ORIGIN,
     IMPACT_NOT_FOUND,
     KINEMATICS,
+    FEATURE_TRACK_INTEGRITY,
     DECODE_EXCEPTION
 }
 
