@@ -107,7 +107,6 @@ class ImpactReplayView(context: Context) : View(context) {
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // Dim only enough to focus the replay while keeping the live camera context visible.
         paint.color = Color.argb(78, 0, 0, 0)
         canvas.drawRect(0f, 0f, w, h, paint)
 
@@ -131,9 +130,7 @@ class ImpactReplayView(context: Context) : View(context) {
         val mediaLeft = left + w * .014f
         val mediaRight = right - w * .014f
         val media = RectF(mediaLeft, mediaTop, mediaRight, mediaBottom)
-        mediaRect.set(media)
 
-        // Header
         paint.typeface = Typeface.DEFAULT_BOLD
         paint.textSize = max(15f, w * .015f)
         paint.color = if (frame == r.impactIndex) Pv.amber else Pv.textHi
@@ -161,7 +158,6 @@ class ImpactReplayView(context: Context) : View(context) {
         canvas.drawText("${frame + 1}/$total", trackRight, top + headerH * .83f, paint)
         paint.textAlign = Paint.Align.LEFT
 
-        // Media with aspect-preserving fit.
         paint.color = Color.BLACK
         canvas.drawRoundRect(media, max(10f, h * .018f), max(10f, h * .018f), paint)
         val srcAspect = bmp.width.toFloat() / bmp.height.toFloat().coerceAtLeast(1f)
@@ -173,6 +169,7 @@ class ImpactReplayView(context: Context) : View(context) {
             val fitW = media.height() * srcAspect
             RectF(media.centerX() - fitW / 2f, media.top, media.centerX() + fitW / 2f, media.bottom)
         }
+        mediaRect.set(target)
         canvas.drawBitmap(bmp, null, target, paint)
 
         V85ImpactReplayLiveTrack.modelAtPlayheadMs(
@@ -180,19 +177,22 @@ class ImpactReplayView(context: Context) : View(context) {
             playheadMs = r.relativeTimeMsAt(frame)
         )?.let { drawV85LiveTrack(canvas, target, it) }
 
+        if (frame >= r.impactIndex) {
+            metrics?.let { drawV86StartLineInset(canvas, target, it) }
+        }
+
         if (frame == r.impactIndex) {
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = max(2f, w * .002f)
             paint.color = Color.argb(220, 246, 190, 74)
-            canvas.drawRoundRect(media, max(10f, h * .018f), max(10f, h * .018f), paint)
+            canvas.drawRoundRect(target, max(10f, h * .018f), max(10f, h * .018f), paint)
             paint.style = Paint.Style.FILL
-            drawBestShotComparison(canvas, media)
-            drawV19StudioComparison(canvas, media)
+            drawBestShotComparison(canvas, target)
+            drawV19StudioComparison(canvas, target)
         }
-        annotations.draw(canvas, media, paint, w)
+        annotations.draw(canvas, target, paint, w)
         drawV27Toolbar(canvas, media, w, h)
 
-        // Telemetry rail
         val railTop = mediaBottom + h * .022f
         metrics?.let { m ->
             val items = listOf(
@@ -214,6 +214,52 @@ class ImpactReplayView(context: Context) : View(context) {
                 canvas.drawText(value, x, railTop + h * .046f, paint)
             }
         }
+        paint.typeface = Typeface.DEFAULT
+    }
+
+    private fun drawV86StartLineInset(canvas: Canvas, viewport: RectF, shot: ShotMetrics) {
+        if (viewport.width() <= 0f || viewport.height() <= 0f) return
+        val pad = max(8f, viewport.width() * .014f)
+        val boxW = max(150f, viewport.width() * .255f)
+        val boxH = max(108f, viewport.height() * .36f)
+        val box = RectF(
+            viewport.right - pad - boxW,
+            viewport.bottom - pad - boxH,
+            viewport.right - pad,
+            viewport.bottom - pad
+        )
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(205, 3, 7, 10)
+        canvas.drawRoundRect(box, max(9f, boxH * .07f), max(9f, boxH * .07f), paint)
+
+        val originX = box.centerX()
+        val originY = box.bottom - boxH * .18f
+        val lineLen = boxH * .48f
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = max(2f, viewport.width() * .0023f)
+        paint.pathEffect = DashPathEffect(floatArrayOf(10f, 8f), 0f)
+        paint.color = Color.argb(190, 245, 248, 250)
+        canvas.drawLine(originX, originY, originX, originY - lineLen, paint)
+        paint.pathEffect = null
+
+        val visualDeg = shot.launchAngleDeg.coerceIn(-18.0, 18.0)
+        val a = Math.toRadians(visualDeg)
+        val dx = kotlin.math.sin(a).toFloat() * lineLen
+        val dy = kotlin.math.cos(a).toFloat() * lineLen
+        paint.strokeWidth = max(3.5f, viewport.width() * .004f)
+        paint.color = Color.rgb(58, 210, 255)
+        canvas.drawLine(originX, originY, originX + dx, originY - dy, paint)
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(originX, originY, max(4f, viewport.width() * .005f), paint)
+
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textSize = max(9f, viewport.width() * .012f)
+        paint.color = Color.argb(210, 245, 248, 250)
+        canvas.drawText("TARGET  0.00°", box.left + pad * .7f, box.top + boxH * .16f, paint)
+        paint.color = Color.rgb(58, 210, 255)
+        canvas.drawText("BALL START  ${"%+.2f°".format(shot.launchAngleDeg)}", box.left + pad * .7f, box.top + boxH * .32f, paint)
         paint.typeface = Typeface.DEFAULT
     }
 
