@@ -24,7 +24,7 @@ data class V76HardwarelessSoakReport(
 
 object V76HardwarelessSoak {
     const val DEFAULT_RUNS = 240
-    const val EXPECTED_CHECKS_PER_RUN = 64
+    const val EXPECTED_CHECKS_PER_RUN = 73
 
     private val speeds = doubleArrayOf(0.35, 0.45, 0.75, 1.20, 1.80, 2.80, 3.20)
     private val directions = doubleArrayOf(-7.0, -5.0, -2.5, 0.0, 2.5, 5.0, 7.0)
@@ -51,9 +51,7 @@ object V76HardwarelessSoak {
             minChecks = minOf(minChecks, report.checksTotal)
             maxChecks = maxOf(maxChecks, report.checksTotal)
             val runPassed = report.passed && report.checksPassed == report.checksTotal && report.checksTotal == EXPECTED_CHECKS_PER_RUN
-            if (runPassed) {
-                passedRuns++
-            } else if (firstFailureRun == null) {
+            if (runPassed) passedRuns++ else if (firstFailureRun == null) {
                 firstFailureRun = index + 1
                 firstFailureStage = when {
                     report.checksTotal != EXPECTED_CHECKS_PER_RUN -> "CHECK COUNT ${report.checksTotal}"
@@ -76,18 +74,9 @@ object V76HardwarelessSoak {
             history.failures == 0 && history.consecutivePasses == minOf(runs, V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES)
 
         return V76HardwarelessSoakReport(
-            requestedRuns = runs,
-            completedRuns = completed,
-            passedRuns = passedRuns,
-            firstFailureRun = firstFailureRun,
-            firstFailureStage = firstFailureStage,
-            minChecksPerRun = minChecks,
-            maxChecksPerRun = maxChecks,
-            maxHistorySamples = maxHistory,
-            finalHistorySamples = history.samples,
-            finalHistoryFailures = history.failures,
-            finalConsecutivePasses = history.consecutivePasses,
-            passed = passed
+            requestedRuns, completed, passedRuns, firstFailureRun, firstFailureStage,
+            minChecks, maxChecks, maxHistory, history.samples, history.failures,
+            history.consecutivePasses, passed
         )
     }
 }
