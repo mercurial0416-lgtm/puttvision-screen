@@ -12,7 +12,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-internal enum class V95ShotPhase { ADDRESS, ROLL, CUP_APPROACH, RESULT }
+enum class V95ShotPhase { ADDRESS, ROLL, CUP_APPROACH, RESULT }
 
 data class V95SoloDebriefPlan(
     val phase: V95ShotPhase,
