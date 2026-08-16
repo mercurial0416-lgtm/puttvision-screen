@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -37,5 +38,36 @@ class ImpactReplaySamplePlannerTest {
         assertNull(ImpactReplaySamplePlanner.plan(100, 50, 0, 24))
         assertNull(ImpactReplaySamplePlanner.plan(100, 50, 240, 0))
         assertNotNull(ImpactReplaySamplePlanner.plan(100, 50, 240, 1))
+    }
+
+    @Test fun timingPolicyAcceptsCoherentHfrContainerTiming() {
+        val check = ImpactReplayTimingPolicy.evaluate(
+            totalFrames = 240,
+            captureFps = 240,
+            durationMs = 1_000L
+        )
+        assertTrue(check.coherent)
+        assertEquals(1_000.0, check.expectedDurationMs, 0.001)
+        assertEquals(0.0, check.relativeError, 0.0001)
+    }
+
+    @Test fun timingPolicyRejectsPlaybackTimelineThatDoesNotMatchCaptureFps() {
+        val check = ImpactReplayTimingPolicy.evaluate(
+            totalFrames = 240,
+            captureFps = 240,
+            durationMs = 4_000L
+        )
+        assertFalse(check.coherent)
+        assertTrue(check.relativeError > 0.12)
+    }
+
+    @Test fun timingPolicyFailsClosedWhenDurationMetadataIsMissing() {
+        val check = ImpactReplayTimingPolicy.evaluate(
+            totalFrames = 240,
+            captureFps = 240,
+            durationMs = 0L
+        )
+        assertFalse(check.coherent)
+        assertTrue(check.relativeError.isInfinite())
     }
 }
