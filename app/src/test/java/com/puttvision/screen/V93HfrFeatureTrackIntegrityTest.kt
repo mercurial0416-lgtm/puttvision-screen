@@ -80,22 +80,61 @@ class V93HfrFeatureTrackIntegrityTest {
         assertFalse(V93HfrFeatureTrackIntegrity.isValid(good.copy(frames = frames)))
     }
 
+    @Test
+    fun longTrackCompactionKeepsImpactAndBothTemporalSides() {
+        val longTrack = trackForRange(0..80, impactFrame = 50)
+
+        assertTrue(V41HfrFeatureTrackRuntime.publish(longTrack, nowMs = 10_000L))
+
+        val stored = requireNotNull(V41HfrFeatureTrackRuntime.latest)
+        assertEquals(32, stored.frames.size)
+        assertTrue(stored.frames.first().frame < stored.impactFrame)
+        assertTrue(stored.frames.last().frame > stored.impactFrame)
+        assertTrue(stored.frames.any { it.frame == stored.impactFrame })
+        assertEquals(0.0, stored.frames.first { it.frame == 50 }.timeFromImpactMs, 0.0)
+    }
+
+    @Test
+    fun malformedFrameOutsideCompactWindowStillFailsClosed() {
+        val longTrack = trackForRange(0..80, impactFrame = 50)
+        val forged = longTrack.copy(
+            frames = longTrack.frames.map {
+                if (it.frame == 80) it.copy(timeFromImpactMs = 999.0) else it
+            }
+        )
+
+        assertFalse(V41HfrFeatureTrackRuntime.publish(forged, nowMs = 10_000L))
+        assertEquals(null, V41HfrFeatureTrackRuntime.latest)
+    }
+
     private fun validTrack(
+        imageWidthPx: Int? = null,
+        imageHeightPx: Int? = null
+    ): HfrFeatureTrack = trackForRange(
+        range = 44..56,
+        impactFrame = 50,
+        imageWidthPx = imageWidthPx,
+        imageHeightPx = imageHeightPx
+    )
+
+    private fun trackForRange(
+        range: IntRange,
+        impactFrame: Int,
         imageWidthPx: Int? = null,
         imageHeightPx: Int? = null
     ): HfrFeatureTrack = HfrFeatureTrack(
         fps = 240,
-        impactFrame = 50,
-        frames = (44..56).map { frame ->
+        impactFrame = impactFrame,
+        frames = range.map { frame ->
             HfrFeatureFrame(
                 frame = frame,
-                timeFromImpactMs = (frame - 50) * 1000.0 / 240.0,
-                ballXcm = (frame - 44) * 0.1,
-                ballYcm = (frame - 44) * 0.2,
-                heelXcm = (frame - 44) * 0.1 - 1.0,
-                heelYcm = (frame - 44) * 0.2 - 0.5,
-                toeXcm = (frame - 44) * 0.1 + 1.0,
-                toeYcm = (frame - 44) * 0.2 + 0.5,
+                timeFromImpactMs = (frame - impactFrame) * 1000.0 / 240.0,
+                ballXcm = (frame - range.first) * 0.1,
+                ballYcm = (frame - range.first) * 0.2,
+                heelXcm = (frame - range.first) * 0.1 - 1.0,
+                heelYcm = (frame - range.first) * 0.2 - 0.5,
+                toeXcm = (frame - range.first) * 0.1 + 1.0,
+                toeYcm = (frame - range.first) * 0.2 + 0.5,
                 markerAngleDeg = 0.2
             )
         },
