@@ -12,6 +12,7 @@ class V89ScreenGolfVisualPhysicsTest {
         assertEquals(0, p.blurSamples)
         assertEquals(0f, p.blurStrength, 1e-6f)
         assertEquals(0f, p.spinDegrees, 1e-6f)
+        assertEquals(0f, p.focusStrength, 1e-6f)
     }
 
     @Test
@@ -22,6 +23,8 @@ class V89ScreenGolfVisualPhysicsTest {
         assertTrue(fast.blurSamples > slow.blurSamples)
         assertTrue(fast.shadowStretch > slow.shadowStretch)
         assertTrue(fast.highlightStrength > slow.highlightStrength)
+        assertTrue(fast.focusStrength > slow.focusStrength)
+        assertTrue(fast.cometLengthM > slow.cometLengthM)
     }
 
     @Test
@@ -34,6 +37,16 @@ class V89ScreenGolfVisualPhysicsTest {
     }
 
     @Test
+    fun visualPhysicsRemainsBoundedAtExtremeSpeed() {
+        val p = V89VisualPhysicsPlanner.plan(99.0, 1000.0)
+        assertTrue(p.blurStrength in 0f..1f)
+        assertTrue(p.focusStrength in 0f..0.62f)
+        assertTrue(p.cometLengthM in .025..0.24)
+        assertTrue(p.dimpleAlpha in 42..110)
+        assertTrue(p.spinDegrees in 0f..360f)
+    }
+
+    @Test
     fun invalidVisualInputsFailSafeInsteadOfCreatingNanEffects() {
         val p = V89VisualPhysicsPlanner.plan(Double.NaN, Double.POSITIVE_INFINITY)
         assertEquals(0.0, p.speedMps, 0.0)
@@ -41,5 +54,7 @@ class V89ScreenGolfVisualPhysicsTest {
         assertEquals(0, p.blurSamples)
         assertTrue(p.shadowStretch.isFinite())
         assertTrue(p.highlightStrength.isFinite())
+        assertTrue(p.focusStrength.isFinite())
+        assertTrue(p.cometLengthM.isFinite())
     }
 }
