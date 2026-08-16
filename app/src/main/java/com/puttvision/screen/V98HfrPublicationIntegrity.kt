@@ -54,13 +54,18 @@ object V98HfrPublicationGate {
     fun publish(
         track: HfrFeatureTrack,
         nowMs: Long = System.currentTimeMillis()
-    ): V98HfrPublicationDecision =
+    ): V98HfrPublicationDecision = synchronized(V41HfrFeatureTrackRuntime) {
         if (V41HfrFeatureTrackRuntime.publish(track, nowMs)) {
+            // Runtime publication may compact long tracks around impact. Hash the exact compact track
+            // while holding the same monitor as publish(), so provenance cannot drift to another shot.
+            val publishedTrack = V41HfrFeatureTrackRuntime.latest
+                ?: return@synchronized V98HfrPublicationDecision(V98HfrPublicationStatus.REJECTED_INTEGRITY)
             V98HfrPublicationDecision(
                 status = V98HfrPublicationStatus.ACCEPTED,
-                provenanceFingerprint = V101HfrPublicationProvenance.fingerprint(track)
+                provenanceFingerprint = V101HfrPublicationProvenance.fingerprint(publishedTrack)
             )
         } else {
             V98HfrPublicationDecision(V98HfrPublicationStatus.REJECTED_INTEGRITY)
         }
+    }
 }

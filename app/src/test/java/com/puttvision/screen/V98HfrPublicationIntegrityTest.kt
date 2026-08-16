@@ -27,6 +27,40 @@ class V98HfrPublicationIntegrityTest {
     }
 
     @Test
+    fun longTrackFingerprintsExactCompactRuntimePublication() {
+        val longTrack = validTrack().copy(
+            impactFrame = 50,
+            frames = (20..80).map { frame ->
+                HfrFeatureFrame(
+                    frame = frame,
+                    timeFromImpactMs = (frame - 50) * 1000.0 / 240.0,
+                    ballXcm = frame * 0.01,
+                    ballYcm = frame * 0.02,
+                    heelXcm = frame * 0.01 - 1.0,
+                    heelYcm = frame * 0.02 - 0.5,
+                    toeXcm = frame * 0.01 + 1.0,
+                    toeYcm = frame * 0.02 + 0.5,
+                    markerAngleDeg = 0.2
+                )
+            }
+        )
+
+        val decision = V98HfrPublicationGate.publish(longTrack, nowMs = 10_000L)
+        val published = V41HfrFeatureTrackRuntime.latest!!
+
+        assertTrue(decision.accepted)
+        assertEquals(32, published.frames.size)
+        assertEquals(
+            V101HfrPublicationProvenance.fingerprint(published),
+            decision.provenanceFingerprint
+        )
+        assertNotEquals(
+            V101HfrPublicationProvenance.fingerprint(longTrack),
+            decision.provenanceFingerprint
+        )
+    }
+
+    @Test
     fun fingerprintChangesWhenAnyPublishedGeometryChanges() {
         val a = validTrack()
         val b = a.copy(
