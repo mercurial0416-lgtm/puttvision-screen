@@ -15,6 +15,8 @@ class V95SoloBroadcastDebriefTest {
         assertEquals(2.8, plan.stimpM, 0.0001)
         assertEquals(1.2, plan.sideSlopePct, 0.0001)
         assertEquals(-0.8, plan.longSlopePct, 0.0001)
+        assertEquals(5.0, plan.targetDistanceM, 0.0001)
+        assertEquals(0f, plan.progress01, 0.0001f)
     }
 
     @Test fun rollingReportsLiveSpeedDistanceAndFastRefresh() {
@@ -24,6 +26,7 @@ class V95SoloBroadcastDebriefTest {
         assertEquals("ROLLING", plan.headline)
         assertEquals(.5, plan.speedMps, 0.0001)
         assertTrue(plan.distanceToCupM > 3.0)
+        assertTrue(plan.progress01 in 0f..1f)
         assertEquals(2, plan.trailSamples)
         assertEquals(33L, plan.refreshMs)
     }
@@ -41,6 +44,7 @@ class V95SoloBroadcastDebriefTest {
         val plan = V95SoloDebriefPlanner.plan(settings, null, result)
         assertEquals(V95ShotPhase.RESULT, plan.phase)
         assertEquals("HOLED", plan.headline)
+        assertEquals(1f, plan.progress01, 0.0001f)
         assertEquals(1, plan.cupContacts)
         assertEquals(120L, plan.refreshMs)
     }
@@ -69,15 +73,45 @@ class V95SoloBroadcastDebriefTest {
     }
 
     @Test fun nonFiniteRuntimeValuesFailSafeToFiniteNeutralPlan() {
-        val badSettings = GreenSettings(stimpMeters = Double.NaN, holeDistanceM = 5.0, sideSlopePct = Double.POSITIVE_INFINITY, longSlopePct = Double.NaN)
-        val state = SimState(x = Double.NaN, y = Double.NaN, vx = Double.NaN, vy = Double.POSITIVE_INFINITY, running = true)
+        val badSettings = GreenSettings(
+            stimpMeters = Double.NaN,
+            holeDistanceM = Double.NaN,
+            sideSlopePct = Double.POSITIVE_INFINITY,
+            longSlopePct = Double.NaN
+        )
+        val state = SimState(
+            x = Double.NaN,
+            y = Double.NaN,
+            vx = Double.NaN,
+            vy = Double.POSITIVE_INFINITY,
+            running = true
+        )
         val plan = V95SoloDebriefPlanner.plan(badSettings, state, null)
         assertTrue(plan.speedMps.isFinite())
+        assertTrue(plan.targetDistanceM.isFinite())
         assertTrue(plan.distanceToCupM.isFinite())
+        assertTrue(plan.progress01.isFinite())
+        assertTrue(plan.progress01 in 0f..1f)
         assertTrue(plan.lateralCm.isFinite())
         assertTrue(plan.longitudinalCm.isFinite())
         assertTrue(plan.stimpM.isFinite())
         assertTrue(plan.sideSlopePct.isFinite())
         assertTrue(plan.longSlopePct.isFinite())
+    }
+
+    @Test fun zeroTargetNeverProducesInvalidProgressGeometry() {
+        val planAtCup = V95SoloDebriefPlanner.plan(
+            GreenSettings(holeDistanceM = 0.0),
+            SimState(x = 0.0, y = 0.0, running = false),
+            null
+        )
+        assertEquals(1f, planAtCup.progress01, 0.0001f)
+
+        val planAway = V95SoloDebriefPlanner.plan(
+            GreenSettings(holeDistanceM = 0.0),
+            SimState(x = .2, y = 0.0, running = true),
+            null
+        )
+        assertEquals(0f, planAway.progress01, 0.0001f)
     }
 }
