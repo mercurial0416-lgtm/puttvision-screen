@@ -9,7 +9,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 enum class ImpactReplayTimingProvenance {
-    VERIFIED_CAPTURE_TIMELINE,
+    FRAME_DURATION_COHERENT,
     UNVERIFIED
 }
 
@@ -26,7 +26,7 @@ data class ImpactReplay(
         val sourceFrame = sourceFrameIndices.getOrNull(frameIndex)
         val impactFrame = sourceImpactFrame
         return if (sourceFrame != null && impactFrame != null) {
-            if (timingProvenance != ImpactReplayTimingProvenance.VERIFIED_CAPTURE_TIMELINE) return null
+            if (timingProvenance != ImpactReplayTimingProvenance.FRAME_DURATION_COHERENT) return null
             (sourceFrame - impactFrame) * 1000.0 / fps.toDouble()
         } else {
             (frameIndex - impactIndex) * 1000.0 / fps.toDouble()
@@ -35,7 +35,7 @@ data class ImpactReplay(
 }
 
 data class ImpactReplayTimingCheck(
-    val verified: Boolean,
+    val coherent: Boolean,
     val expectedDurationMs: Double,
     val observedDurationMs: Long,
     val relativeError: Double
@@ -55,7 +55,7 @@ object ImpactReplayTimingPolicy {
         val expectedDurationMs = totalFrames * 1000.0 / captureFps.toDouble()
         val relativeError = abs(durationMs.toDouble() - expectedDurationMs) / max(1.0, expectedDurationMs)
         return ImpactReplayTimingCheck(
-            verified = relativeError <= maxRelativeError,
+            coherent = relativeError <= maxRelativeError,
             expectedDurationMs = expectedDurationMs,
             observedDurationMs = durationMs,
             relativeError = relativeError
@@ -128,8 +128,8 @@ object ImpactReplayExtractor {
                 MediaMetadataRetriever.METADATA_KEY_DURATION
             )?.toLongOrNull() ?: 0L
             val timingCheck = ImpactReplayTimingPolicy.evaluate(total, captureFps, durationMs)
-            val timingProvenance = if (timingCheck.verified) {
-                ImpactReplayTimingProvenance.VERIFIED_CAPTURE_TIMELINE
+            val timingProvenance = if (timingCheck.coherent) {
+                ImpactReplayTimingProvenance.FRAME_DURATION_COHERENT
             } else {
                 ImpactReplayTimingProvenance.UNVERIFIED
             }
