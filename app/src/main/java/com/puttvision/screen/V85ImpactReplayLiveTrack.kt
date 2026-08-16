@@ -16,7 +16,10 @@ data class V85ImpactReplayLiveTrackBinding(
 object V85ImpactReplayLiveTrack {
     fun bind(track: HfrFeatureTrack?): V85ImpactReplayLiveTrackBinding? {
         val source = track ?: return null
-        if (source.fps <= 0) return null
+        // Replay is user-facing evidence of a measured stroke. Never normalize/clamp malformed
+        // detector provenance into apparently valid geometry; share the same fail-closed gate used
+        // by the HFR runtime before projecting pixels into display coordinates.
+        if (!V93HfrFeatureTrackIntegrity.isValid(source)) return null
         val overlay = V81LiveTrackProjector.from(source)
         if (!overlay.ready) return null
         val playback = V84LiveTrackPlayback.initial(overlay) ?: return null
@@ -83,6 +86,16 @@ object V85HardwarelessImpactReplayLiveTrackSuite {
         val after = V85ImpactReplayLiveTrack.modelAtReplayFrame(binding, replayFrame = 11, replayImpactIndex = 10)
         val strideAfter = V85ImpactReplayLiveTrack.modelAtPlayheadMs(binding, 2000.0 / 240.0)
         val missingShape = V85ImpactReplayLiveTrack.bind(track.copy(imageWidthPx = null))
+        val outOfBounds = V85ImpactReplayLiveTrack.bind(
+            track.copy(frames = track.frames.mapIndexed { index, frame ->
+                if (index == 2) frame.copy(ballXpx = 1001.0) else frame
+            })
+        )
+        val invalidTiming = V85ImpactReplayLiveTrack.bind(
+            track.copy(frames = track.frames.mapIndexed { index, frame ->
+                if (index == 3) frame.copy(timeFromImpactMs = 99.0) else frame
+            })
+        )
         val checks = listOf(
             "valid HFR track binds to product replay" to (binding != null),
             "pre-impact replay stays pre-impact" to (before?.impactReached == false),
@@ -91,6 +104,8 @@ object V85HardwarelessImpactReplayLiveTrackSuite {
             "source-frame playhead survives replay stride" to (after != null && strideAfter != null && strideAfter.ballTrail.size >= after.ballTrail.size),
             "V83 image-face label survives product bridge" to (impact?.imageFaceLabel?.startsWith("IMAGE FACE") == true),
             "missing source shape fails closed" to (missingShape == null),
+            "out-of-frame detector provenance fails closed before normalization" to (outOfBounds == null),
+            "inconsistent source-frame timing fails closed" to (invalidTiming == null),
             "invalid replay index fails closed" to (V85ImpactReplayLiveTrack.modelAtReplayFrame(binding, -1, 10) == null),
             "invalid playhead fails closed" to (V85ImpactReplayLiveTrack.modelAtPlayheadMs(binding, Double.NaN) == null)
         )
