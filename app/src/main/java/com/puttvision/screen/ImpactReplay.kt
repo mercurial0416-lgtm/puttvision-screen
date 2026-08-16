@@ -8,22 +8,58 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+enum class ImpactReplayTimingProvenance {
+    VERIFIED_CAPTURE_TIMELINE,
+    UNVERIFIED
+}
+
 data class ImpactReplay(
     val frames: List<Bitmap>,
     val fps: Int,
     val impactIndex: Int,
     val sourceFrameIndices: List<Int> = emptyList(),
-    val sourceImpactFrame: Int? = null
+    val sourceImpactFrame: Int? = null,
+    val timingProvenance: ImpactReplayTimingProvenance = ImpactReplayTimingProvenance.UNVERIFIED
 ) {
     fun relativeTimeMsAt(frameIndex: Int): Double? {
         if (fps <= 0 || frameIndex !in frames.indices) return null
         val sourceFrame = sourceFrameIndices.getOrNull(frameIndex)
         val impactFrame = sourceImpactFrame
         return if (sourceFrame != null && impactFrame != null) {
+            if (timingProvenance != ImpactReplayTimingProvenance.VERIFIED_CAPTURE_TIMELINE) return null
             (sourceFrame - impactFrame) * 1000.0 / fps.toDouble()
         } else {
             (frameIndex - impactIndex) * 1000.0 / fps.toDouble()
         }
+    }
+}
+
+data class ImpactReplayTimingCheck(
+    val verified: Boolean,
+    val expectedDurationMs: Double,
+    val observedDurationMs: Long,
+    val relativeError: Double
+)
+
+object ImpactReplayTimingPolicy {
+    fun evaluate(
+        totalFrames: Int,
+        captureFps: Int,
+        durationMs: Long,
+        maxRelativeError: Double = 0.12
+    ): ImpactReplayTimingCheck {
+        if (totalFrames <= 0 || captureFps <= 0 || durationMs <= 0L || !maxRelativeError.isFinite() || maxRelativeError < 0.0) {
+            return ImpactReplayTimingCheck(false, 0.0, durationMs, Double.POSITIVE_INFINITY)
+        }
+
+        val expectedDurationMs = totalFrames * 1000.0 / captureFps.toDouble()
+        val relativeError = abs(durationMs.toDouble() - expectedDurationMs) / max(1.0, expectedDurationMs)
+        return ImpactReplayTimingCheck(
+            verified = relativeError <= maxRelativeError,
+            expectedDurationMs = expectedDurationMs,
+            observedDurationMs = durationMs,
+            relativeError = relativeError
+        )
     }
 }
 
@@ -88,6 +124,15 @@ object ImpactReplayExtractor {
             val total = mmr.extractMetadata(
                 MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT
             )?.toIntOrNull() ?: return null
+            val durationMs = mmr.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_DURATION
+            )?.toLongOrNull() ?: 0L
+            val timingCheck = ImpactReplayTimingPolicy.evaluate(total, captureFps, durationMs)
+            val timingProvenance = if (timingCheck.verified) {
+                ImpactReplayTimingProvenance.VERIFIED_CAPTURE_TIMELINE
+            } else {
+                ImpactReplayTimingProvenance.UNVERIFIED
+            }
             val plan = ImpactReplaySamplePlanner.plan(total, impactFrame, captureFps, maxFrames) ?: return null
 
             val frames = ArrayList<Bitmap>(plan.sourceFrameIndices.size)
@@ -130,7 +175,8 @@ object ImpactReplayExtractor {
                     fps = captureFps,
                     impactIndex = localImpact.coerceIn(0, frames.lastIndex),
                     sourceFrameIndices = sourceFrameIndices,
-                    sourceImpactFrame = plan.sourceImpactFrame
+                    sourceImpactFrame = plan.sourceImpactFrame,
+                    timingProvenance = timingProvenance
                 )
             }
         } finally {
