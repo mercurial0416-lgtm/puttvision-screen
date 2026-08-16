@@ -20,7 +20,8 @@ class V93HfrFeatureTrackIntegrityTest {
         assertTrue(V93HfrFeatureTrackIntegrity.isValid(track))
         assertTrue(V41HfrFeatureTrackRuntime.publish(track, nowMs = 10_000L))
 
-        val stored = assertNotNull(V41HfrFeatureTrackRuntime.latest)
+        assertNotNull(V41HfrFeatureTrackRuntime.latest)
+        val stored = requireNotNull(V41HfrFeatureTrackRuntime.latest)
         assertEquals(50, stored.impactFrame)
         assertEquals(0.0, stored.frames.first { it.frame == 50 }.timeFromImpactMs, 0.0)
     }
