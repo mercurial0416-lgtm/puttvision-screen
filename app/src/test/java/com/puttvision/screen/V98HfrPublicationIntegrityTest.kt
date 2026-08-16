@@ -24,6 +24,10 @@ class V98HfrPublicationIntegrityTest {
         assertEquals(V101HfrPublicationProvenance.fingerprint(track), decision.provenanceFingerprint)
         assertEquals(64, decision.provenanceFingerprint?.length)
         assertTrue(V41HfrFeatureTrackRuntime.latest != null)
+        assertEquals(
+            decision.provenanceFingerprint,
+            V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 10_000L)?.provenanceFingerprint
+        )
     }
 
     @Test
@@ -47,6 +51,7 @@ class V98HfrPublicationIntegrityTest {
 
         val decision = V98HfrPublicationGate.publish(longTrack, nowMs = 10_000L)
         val published = V41HfrFeatureTrackRuntime.latest!!
+        val snapshot = V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 10_000L)
 
         assertTrue(decision.accepted)
         assertEquals(32, published.frames.size)
@@ -54,9 +59,30 @@ class V98HfrPublicationIntegrityTest {
             V101HfrPublicationProvenance.fingerprint(published),
             decision.provenanceFingerprint
         )
+        assertEquals(decision.provenanceFingerprint, snapshot?.provenanceFingerprint)
         assertNotEquals(
             V101HfrPublicationProvenance.fingerprint(longTrack),
             decision.provenanceFingerprint
+        )
+    }
+
+    @Test
+    fun rawRepublishCannotInheritPreviousFingerprint() {
+        val first = validTrack()
+        val firstDecision = V98HfrPublicationGate.publish(first, nowMs = 10_000L)
+        assertTrue(firstDecision.accepted)
+        assertTrue(V41HfrFeatureTrackRuntime.latestProvenanceFingerprint != null)
+
+        val second = first.copy(
+            frames = first.frames.mapIndexed { index, frame ->
+                if (index == 0) frame.copy(ballXcm = frame.ballXcm!! + 0.001) else frame
+            }
+        )
+        assertTrue(V41HfrFeatureTrackRuntime.publish(second, nowMs = 11_000L))
+
+        assertNull(V41HfrFeatureTrackRuntime.latestProvenanceFingerprint)
+        assertNull(
+            V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 11_000L)?.provenanceFingerprint
         )
     }
 
