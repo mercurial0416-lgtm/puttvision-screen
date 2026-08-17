@@ -22,27 +22,13 @@ jobs:
           from pathlib import Path
           p = Path('app/src/main/java/com/puttvision/screen/AppUpdater.kt')
           s = p.read_text()
-          old = '''        fun signerDigests(info: android.content.pm.PackageInfo): Set<String> {
-              val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                  val signing = info.signingInfo ?: return emptySet()
-                  val current = signing.apkContentsSigners?.toList().orEmpty()
-                  val history = if (signing.hasMultipleSigners()) emptyList() else signing.signingCertificateHistory?.toList().orEmpty()
-                  (current + history).distinctBy { it.toCharsString() }
-              } else {
-                  @Suppress("DEPRECATION") info.signatures?.toList().orEmpty()
-              }
-              return signatures.mapTo(linkedSetOf()) { signature ->
-                  val md = MessageDigest.getInstance("SHA-256")
-                  md.digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
-              }
-          }
-
-          val installedSigners = signerDigests(installed)
-          val candidateSigners = signerDigests(candidate)
-          require(installedSigners.isNotEmpty() && candidateSigners.isNotEmpty()) { "APK 서명 정보를 읽을 수 없습니다" }
-          require(installedSigners.any { it in candidateSigners }) { "업데이트 APK 서명이 현재 PuttVision과 다릅니다" }
-          '''
-          new = '''        fun signatureDigests(signatures: List<android.content.pm.Signature>): Set<String> =
+          start_marker = '        fun signerDigests(info: android.content.pm.PackageInfo): Set<String> {'
+          end_marker = '        return if (Build.VERSION.SDK_INT >= 28) candidate.longVersionCode else {'
+          start = s.find(start_marker)
+          end = s.find(end_marker, start)
+          if start < 0 or end < 0 or end <= start:
+              raise SystemExit('expected AppUpdater signer markers not found; refusing blind patch')
+          block = '''        fun signatureDigests(signatures: List<android.content.pm.Signature>): Set<String> =
               signatures.mapTo(linkedSetOf()) { signature ->
                   val md = MessageDigest.getInstance("SHA-256")
                   md.digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -78,10 +64,8 @@ jobs:
           require(V130UpdateSignerPolicy.allows(installedSigners, candidateSigners, candidateCurrentSigners)) {
               "업데이트 APK 서명이 신뢰된 PuttVision 서명 계보와 다릅니다"
           }
-          '''
-          if old not in s:
-              raise SystemExit('expected AppUpdater signer block not found; refusing blind patch')
-          p.write_text(s.replace(old, new, 1))
+'''
+          p.write_text(s[:start] + block + s[end:])
           PY
           git diff --check
           git diff -- app/src/main/java/com/puttvision/screen/AppUpdater.kt
