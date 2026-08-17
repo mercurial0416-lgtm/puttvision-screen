@@ -1,0 +1,139 @@
+name: Recover Android signing lineage v3
+
+on:
+  push:
+    branches: [ 'fix/signing-lineage-recovery' ]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signing-lineage-recovery-v3
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Locate Android signing tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version
+          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -1 || true)
+          test -n "$APKSIGNER"
+          echo "APKSIGNER=$APKSIGNER" >> "$GITHUB_ENV"
+
+      - name: Restore v1 lineage and v2 active signer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          restore_vault() {
+            local tag="$1"
+            local out="$2"
+            local asset_id
+            asset_id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.draft == true and .tag_name == \"$tag\") | .assets[] | select(.name == \"puttvision-signing-bundle.tgz\") | .id" | head -1)
+            test -n "$asset_id"
+            mkdir -p "$out"
+            gh api -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/$tag.tgz"
+            test -s "$RUNNER_TEMP/$tag.tgz"
+            tar -xzf "$RUNNER_TEMP/$tag.tgz" -C "$out"
+            test -s "$out/release.jks"
+            test -s "$out/signing.env"
+          }
+
+          restore_vault puttvision-signing-vault-v1 "$RUNNER_TEMP/v1"
+          restore_vault puttvision-signing-vault-v2 "$RUNNER_TEMP/v2"
+          test -s "$RUNNER_TEMP/v1/signing-lineage"
+          chmod 600 "$RUNNER_TEMP/v1/release.jks" "$RUNNER_TEMP/v1/signing-lineage" "$RUNNER_TEMP/v1/signing.env"
+          chmod 600 "$RUNNER_TEMP/v2/release.jks" "$RUNNER_TEMP/v2/signing.env"
+
+      - name: Verify signer identities and extend lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          set -a
+          source "$RUNNER_TEMP/v1/signing.env"
+          set +a
+          V1_STORE_PASSWORD="$STORE_PASSWORD"
+          V1_KEY_PASSWORD="$KEY_PASSWORD"
+          V1_KEY_ALIAS="$KEY_ALIAS"
+          V1_ROTATION_MIN_SDK="$ROTATION_MIN_SDK"
+          unset STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK
+
+          set -a
+          source "$RUNNER_TEMP/v2/signing.env"
+          set +a
+          V2_STORE_PASSWORD="$STORE_PASSWORD"
+          V2_KEY_PASSWORD="$KEY_PASSWORD"
+          V2_KEY_ALIAS="$KEY_ALIAS"
+          V2_ROTATION_MIN_SDK="$ROTATION_MIN_SDK"
+          unset STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK
+
+          for value in "$V1_STORE_PASSWORD" "$V1_KEY_PASSWORD" "$V2_STORE_PASSWORD" "$V2_KEY_PASSWORD"; do
+            echo "::add-mask::$value"
+          done
+          test -n "$V1_KEY_ALIAS"
+          test -n "$V2_KEY_ALIAS"
+          test "$V1_ROTATION_MIN_SDK" = "28"
+          test "$V2_ROTATION_MIN_SDK" = "28"
+
+          printf '%s' "$V1_STORE_PASSWORD" > "$RUNNER_TEMP/v1-store.pass"
+          printf '%s' "$V1_KEY_PASSWORD" > "$RUNNER_TEMP/v1-key.pass"
+          printf '%s' "$V2_STORE_PASSWORD" > "$RUNNER_TEMP/v2-store.pass"
+          printf '%s' "$V2_KEY_PASSWORD" > "$RUNNER_TEMP/v2-key.pass"
+          chmod 600 "$RUNNER_TEMP"/*-store.pass "$RUNNER_TEMP"/*-key.pass
+
+          V1_CERT=$(keytool -exportcert -keystore "$RUNNER_TEMP/v1/release.jks" -storepass "$V1_STORE_PASSWORD" -alias "$V1_KEY_ALIAS" | sha256sum | cut -d' ' -f1)
+          V2_CERT=$(keytool -exportcert -keystore "$RUNNER_TEMP/v2/release.jks" -storepass "$V2_STORE_PASSWORD" -alias "$V2_KEY_ALIAS" | sha256sum | cut -d' ' -f1)
+          test "$V1_CERT" = "5fe0e687feb855c03fbda9fcc5d15fc8651beef3e30880cda0e9c65af2a421f8"
+          test "$V2_CERT" = "7a5962aee08d9edc655da5f58cb8199b4d41604793ef539bd0111df2ca0900cb"
+
+          mkdir -p "$RUNNER_TEMP/v3"
+          "$APKSIGNER" rotate \
+            --in "$RUNNER_TEMP/v1/signing-lineage" \
+            --out "$RUNNER_TEMP/v3/signing-lineage" \
+            --old-signer \
+              --ks "$RUNNER_TEMP/v1/release.jks" \
+              --ks-key-alias "$V1_KEY_ALIAS" \
+              --ks-pass "file:$RUNNER_TEMP/v1-store.pass" \
+              --key-pass "file:$RUNNER_TEMP/v1-key.pass" \
+            --new-signer \
+              --ks "$RUNNER_TEMP/v2/release.jks" \
+              --ks-key-alias "$V2_KEY_ALIAS" \
+              --ks-pass "file:$RUNNER_TEMP/v2-store.pass" \
+              --key-pass "file:$RUNNER_TEMP/v2-key.pass"
+
+          test -s "$RUNNER_TEMP/v3/signing-lineage"
+          cp "$RUNNER_TEMP/v2/release.jks" "$RUNNER_TEMP/v3/release.jks"
+          cp "$RUNNER_TEMP/v2/signing.env" "$RUNNER_TEMP/v3/signing.env"
+          chmod 600 "$RUNNER_TEMP/v3/release.jks" "$RUNNER_TEMP/v3/signing-lineage" "$RUNNER_TEMP/v3/signing.env"
+          tar -czf "$RUNNER_TEMP/puttvision-signing-bundle-v3.tgz" -C "$RUNNER_TEMP/v3" release.jks signing-lineage signing.env
+          test -s "$RUNNER_TEMP/puttvision-signing-bundle-v3.tgz"
+
+      - name: Persist private v3 signing escrow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=puttvision-signing-vault-v3
+          BUNDLE="$RUNNER_TEMP/puttvision-signing-bundle-v3.tgz"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$BUNDLE#puttvision-signing-bundle.tgz" --clobber
+          else
+            gh release create "$TAG" "$BUNDLE#puttvision-signing-bundle.tgz" \
+              --title "PuttVision signing vault v3" \
+              --notes "Private draft escrow. Extends the original signing lineage through the active 2026 replacement signer. Never publish." \
+              --draft
+          fi
+
+          ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v3") | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
+          test -n "$ASSET_ID"
+          echo "Recovered signing lineage v3 into private draft escrow."
