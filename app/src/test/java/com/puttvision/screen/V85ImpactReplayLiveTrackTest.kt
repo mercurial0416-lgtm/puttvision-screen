@@ -2,6 +2,7 @@ package com.puttvision.screen
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -50,6 +51,33 @@ class V85ImpactReplayLiveTrackTest {
             if (index == 3) frame.copy(timeFromImpactMs = 99.0) else frame
         })
         assertNull(V85ImpactReplayLiveTrack.bind(bad))
+    }
+
+    @Test fun liveRuntimeTrackWithoutPublicationFingerprintIsRejectedByReplay() {
+        V41HfrFeatureTrackRuntime.clear()
+        try {
+            assertTrue(V41HfrFeatureTrackRuntime.publish(fixtureTrack(), nowMs = 10_000L))
+            val snapshot = V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 10_001L, maxAgeMs = 100L)
+            assertNotNull(snapshot)
+            assertNull(snapshot!!.provenanceFingerprint)
+            assertNull(V85ImpactReplayLiveTrack.bind(snapshot.track))
+        } finally {
+            V41HfrFeatureTrackRuntime.clear()
+        }
+    }
+
+    @Test fun publicationBoundRuntimeTrackIsAcceptedByReplay() {
+        V41HfrFeatureTrackRuntime.clear()
+        try {
+            val decision = V98HfrPublicationGate.publish(fixtureTrack(), nowMs = 20_000L)
+            assertTrue(decision.accepted)
+            val snapshot = V41HfrFeatureTrackRuntime.freshSnapshot(nowMs = 20_001L, maxAgeMs = 100L)
+            assertNotNull(snapshot)
+            assertEquals(decision.provenanceFingerprint, snapshot!!.provenanceFingerprint)
+            assertNotNull(V85ImpactReplayLiveTrack.bind(snapshot.track))
+        } finally {
+            V41HfrFeatureTrackRuntime.clear()
+        }
     }
 
     private fun fixtureTrack() = HfrFeatureTrack(
