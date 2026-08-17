@@ -12,10 +12,9 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
 
-        // V128: one coherent commercial-style screen-golf presentation.
-        // V124 remains in source as a safe OpenGL fallback and regression reference.
-        addView(V128ScreenGolfWorldFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V128CommercialScreenGolfHudView(context, engine), FrameLayout.LayoutParams(-1, -1))
+        // V129: one coherent course + atmosphere + commercial HUD presentation.
+        // V128 remains the tested GLES world beneath it and V124 remains its safe fallback.
+        addView(V129ScreenGolfPresentationFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
 
         // Functional training/replay behavior stays independent of presentation.
         addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
