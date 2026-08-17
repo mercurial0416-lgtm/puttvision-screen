@@ -151,9 +151,13 @@ class V118CupPaceWindowView(
         val target = settings.holeDistanceM
         val x = state?.x?.takeIf { it.isFinite() } ?: 0.0
         val y = state?.y?.takeIf { it.isFinite() } ?: 0.0
-        val speed = state?.let { hypot(it.vx, it.vy) }?.takeIf { it.isFinite() } ?: 0.0
+        val speed = state?.let { s ->
+            hypot(s.vx, s.vy).takeIf { it.isFinite() && it >= 0.0 } ?: Double.POSITIVE_INFINITY
+        } ?: 0.0
         val liveDistance = if (target.isFinite()) hypot(x, target - y) else Double.POSITIVE_INFINITY
-        val distance = result?.distanceToCupM?.takeIf { it.isFinite() && it >= 0.0 } ?: liveDistance
+        val distance = if (result != null) {
+            result.distanceToCupM.takeIf { it.isFinite() && it >= 0.0 } ?: Double.POSITIVE_INFINITY
+        } else liveDistance
         val running = state?.running == true || TvInstantRollRuntime.isAnimating()
 
         val plan = V118CupPaceWindowPlanner.plan(
