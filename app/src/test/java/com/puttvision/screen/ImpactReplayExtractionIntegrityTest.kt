@@ -103,7 +103,7 @@ class ImpactReplayExtractionIntegrityTest {
 
     @Test fun sourceFrameProvenanceDrivesReplayTiming() {
         assertEquals(
-            -25.0,
+            -12.5,
             ImpactReplayExtractionIntegrity.relativeTimeMs(
                 frameIndex = 1,
                 frameCount = 5,

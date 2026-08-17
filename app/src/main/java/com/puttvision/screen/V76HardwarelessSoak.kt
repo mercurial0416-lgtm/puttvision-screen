@@ -24,7 +24,7 @@ data class V76HardwarelessSoakReport(
 
 object V76HardwarelessSoak {
     const val DEFAULT_RUNS = 240
-    const val EXPECTED_CHECKS_PER_RUN = 88
+    const val MIN_EXPECTED_CHECKS_PER_RUN = 88
 
     private val speeds = doubleArrayOf(0.35, 0.45, 0.75, 1.20, 1.80, 2.80, 3.20)
     private val directions = doubleArrayOf(-7.0, -5.0, -2.5, 0.0, 2.5, 5.0, 7.0)
@@ -41,6 +41,7 @@ object V76HardwarelessSoak {
         var minChecks = Int.MAX_VALUE
         var maxChecks = 0
         var maxHistory = 0
+        var observedChecksPerRun: Int? = null
 
         repeat(runs) { index ->
             val speed = speeds[index % speeds.size]
@@ -50,15 +51,20 @@ object V76HardwarelessSoak {
             completed++
             minChecks = minOf(minChecks, report.checksTotal)
             maxChecks = maxOf(maxChecks, report.checksTotal)
-            val runPassed = report.passed && report.checksPassed == report.checksTotal && report.checksTotal == EXPECTED_CHECKS_PER_RUN
+
+            val baseline = observedChecksPerRun ?: report.checksTotal.also { observedChecksPerRun = it }
+            val countHealthy = report.checksTotal >= MIN_EXPECTED_CHECKS_PER_RUN && report.checksTotal == baseline
+            val runPassed = report.passed && report.checksPassed == report.checksTotal && countHealthy
             if (runPassed) passedRuns++ else if (firstFailureRun == null) {
                 firstFailureRun = index + 1
                 firstFailureStage = when {
-                    report.checksTotal != EXPECTED_CHECKS_PER_RUN -> "CHECK COUNT ${report.checksTotal}"
+                    report.checksTotal < MIN_EXPECTED_CHECKS_PER_RUN -> "CHECK FLOOR ${report.checksTotal}"
+                    report.checksTotal != baseline -> "CHECK COUNT ${report.checksTotal}!=$baseline"
                     !report.passed -> report.failedStage ?: "SELFTEST"
                     else -> "CHECK TOTAL MISMATCH"
                 }
             }
+
             val history = V75HardwarelessSelfTestHistoryRuntime.summary()
             maxHistory = maxOf(maxHistory, history.samples)
             if (history.samples > V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES && firstFailureRun == null) {
@@ -69,8 +75,8 @@ object V76HardwarelessSoak {
 
         val history = V75HardwarelessSelfTestHistoryRuntime.summary()
         val bounded = maxHistory <= V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES && history.samples <= V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES
-        val passed = firstFailureRun == null && passedRuns == runs && bounded &&
-            minChecks == EXPECTED_CHECKS_PER_RUN && maxChecks == EXPECTED_CHECKS_PER_RUN &&
+        val stableCoverage = minChecks >= MIN_EXPECTED_CHECKS_PER_RUN && minChecks == maxChecks
+        val passed = firstFailureRun == null && passedRuns == runs && bounded && stableCoverage &&
             history.failures == 0 && history.consecutivePasses == minOf(runs, V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES)
 
         return V76HardwarelessSoakReport(

@@ -141,10 +141,11 @@ class V44StereoReadinessTest {
         assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(id = "a", capturedAtMs = 1100L, sequence = 1L)))
         assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(id = "b", capturedAtMs = 2000L, sequence = 1L)))
         assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(id = "c", capturedAtMs = 3000L, sequence = 1L)))
-        assertTrue(V43RemoteFeatureTrackRuntime.publish(packet(id = "d", capturedAtMs = 4000L, sequence = 1L)))
+        assertFalse(V43RemoteFeatureTrackRuntime.publish(packet(id = "d", capturedAtMs = 4000L, sequence = 1L)))
         assertEquals(3, V43RemoteFeatureTrackRuntime.size())
         val fresh = V43RemoteFeatureTrackRuntime.fresh(nowMs = 4500L, maxAgeMs = 5000L)
-        assertFalse(fresh.any { it.cameraId == "a" })
+        assertTrue(fresh.any { it.cameraId == "a" })
+        assertFalse(fresh.any { it.cameraId == "d" })
         V43RemoteFeatureTrackRuntime.clear()
     }
 

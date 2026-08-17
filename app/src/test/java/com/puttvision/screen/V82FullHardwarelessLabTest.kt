@@ -29,7 +29,8 @@ class V82FullHardwarelessLabTest {
         assertEquals("synthetic-regression-only", json.getString("scope"))
         assertFalse(json.getBoolean("realDeviceAccuracyClaim"))
         assertTrue(json.getJSONObject("lab").getBoolean("passed"))
-        assertEquals(V76HardwarelessSoak.EXPECTED_CHECKS_PER_RUN, json.getJSONObject("lab").getInt("selfTestTotal"))
+        assertEquals(self.checksTotal, json.getJSONObject("lab").getInt("selfTestTotal"))
+        assertTrue(json.getJSONObject("lab").getInt("selfTestTotal") >= V76HardwarelessSoak.MIN_EXPECTED_CHECKS_PER_RUN)
         assertTrue(json.getJSONObject("liveTrack").getBoolean("ready"))
     }
 

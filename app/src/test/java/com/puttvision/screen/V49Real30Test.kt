@@ -11,11 +11,13 @@ import org.junit.Test
 
 class V49Real30Test {
 
-    @Test fun publicUpdaterRequiresHttpsAndHash() {
+    @Test fun publicUpdaterRequiresPinnedHttpsAndHash() {
         val goodSha = "a".repeat(64)
+        val publicApk = "https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/releases/puttvision.apk"
         assertFalse(V49UpdatePolicy.validateManifestUrl("http://example.com/update.json").valid)
-        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "https://example.com/app.apk", null), true).valid)
-        assertTrue(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "https://example.com/app.apk", goodSha), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", publicApk, null), true).valid)
+        assertFalse(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", "https://example.com/app.apk", goodSha), true).valid)
+        assertTrue(V49UpdatePolicy.validateInfo(UpdateInfo(2, "2.0", publicApk, goodSha), true).valid)
     }
 
     @Test fun updaterRejectsOversizeStreamsAndNonUpgrade() {
@@ -117,7 +119,6 @@ class V49Real30Test {
         GameEngine()
         V31TrainingSessionRuntime.stop(true)
         assertTrue(V31TrainingSessionRuntime.start(tinyPlan(shots = 1)))
-        // Four blocks, one shot each. The first miss guarantees a weakest block exists.
         V31TrainingSessionRuntime.onRecord(record(1, score = 60, launch = 2.0, finishY = 1.0, distance = 1.5))
         V31TrainingSessionRuntime.onRecord(record(2, score = 85, launch = .1, finishY = 2.0, distance = 2.0))
         V31TrainingSessionRuntime.onRecord(record(3, score = 85, launch = .1, finishY = 3.0, distance = 3.0))
