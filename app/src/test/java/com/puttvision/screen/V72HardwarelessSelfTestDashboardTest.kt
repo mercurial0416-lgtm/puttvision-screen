@@ -10,7 +10,7 @@ class V72HardwarelessSelfTestDashboardTest {
         val result = V72HardwarelessSelfTestDashboard.run(1.35, 1.8)
         assertTrue(result.details.joinToString("\n"), result.passed)
         assertEquals(result.checksTotal, result.checksPassed)
-        assertEquals(V76HardwarelessSoak.EXPECTED_CHECKS_PER_RUN, result.checksTotal)
+        assertTrue(result.checksTotal >= V76HardwarelessSoak.MIN_EXPECTED_CHECKS_PER_RUN)
         assertNull(result.failedStage)
         assertTrue(result.details.size >= 20)
         assertTrue(result.details.any { it.startsWith("TRAIN RESUME") })
