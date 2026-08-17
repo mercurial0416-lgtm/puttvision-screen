@@ -20,6 +20,12 @@ object V85ImpactReplayLiveTrack {
         // detector provenance into apparently valid geometry; share the same fail-closed gate used
         // by the HFR runtime before projecting pixels into display coordinates.
         if (!V93HfrFeatureTrackIntegrity.isValid(source)) return null
+        // ImpactReplayView currently receives the exact track object from freshSnapshot(). If this
+        // object is the live runtime publication, require the publication-bound content fingerprint
+        // as well. This prevents the replay boundary from silently discarding provenance after
+        // freshSnapshot() has already verified it. Standalone tracks remain supported for pure
+        // planner/tests and legacy import paths that never originated from the live runtime.
+        if (!hasVerifiedRuntimePublicationProvenance(source)) return null
         val overlay = V81LiveTrackProjector.from(source)
         if (!overlay.ready) return null
         val playback = V84LiveTrackPlayback.initial(overlay) ?: return null
@@ -28,6 +34,14 @@ object V85ImpactReplayLiveTrack {
             playback = playback,
             fps = source.fps
         )
+    }
+
+    private fun hasVerifiedRuntimePublicationProvenance(source: HfrFeatureTrack): Boolean {
+        // Identity is intentional: freshSnapshot() exposes the exact immutable runtime track.
+        // Structurally equal standalone fixtures/imports must not be mistaken for that publication.
+        if (V41HfrFeatureTrackRuntime.latest !== source) return true
+        val fingerprint = V41HfrFeatureTrackRuntime.latestProvenanceFingerprint ?: return false
+        return V101HfrPublicationProvenance.fingerprint(source) == fingerprint
     }
 
     fun modelAtPlayheadMs(
