@@ -1,0 +1,183 @@
+name: Publish PuttVision 0.7.165 signing bridge
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/release-signing-bridge-165.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: puttvision-signing-bridge-165
+  cancel-in-progress: false
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    env:
+      PV_VERSION_CODE: '100165'
+      PV_VERSION_NAME: '0.7.165'
+      PV_TAG: 'pv-100165'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Refuse stale or conflicting bridge version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          test "$LATEST" = "pv-100164"
+          if gh release view "$PV_TAG" >/dev/null 2>&1; then
+            echo "Bridge tag $PV_TAG already exists; refusing to overwrite an unknown release." >&2
+            exit 1
+          fi
+
+      - name: Regression tests including V130 signer policy
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Real-device measurement regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF=validation/v20_reference.csv
+          MEASURED=validation/v20_measured.csv
+          if [ -f "$REF" ] && [ -f "$MEASURED" ]; then
+            python3 ci/v20_accuracy_gate.py "$REF" "$MEASURED"
+          elif [ -f "$REF" ] || [ -f "$MEASURED" ]; then
+            echo "Accuracy fixture set is incomplete; both $REF and $MEASURED are required" >&2
+            exit 1
+          else
+            echo "No real-device reference dataset committed yet; release accuracy gate is armed but inactive."
+          fi
+
+      - name: Restore audited 2026 rotated signing bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/signing-v1.tgz"
+          DIR="$RUNNER_TEMP/signing-v1"
+          ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v1") | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
+          test -n "$ASSET_ID"
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE"
+          test -s "$BUNDLE"
+          mkdir -p "$DIR"
+          tar -xzf "$BUNDLE" -C "$DIR"
+          test -s "$DIR/release.jks"
+          test -s "$DIR/signing-lineage"
+          test -s "$DIR/signing.env"
+          chmod 600 "$DIR/release.jks" "$DIR/signing-lineage" "$DIR/signing.env"
+          set -a; source "$DIR/signing.env"; set +a
+          for n in STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK; do test -n "${!n:-}"; done
+          test "$ROTATION_MIN_SDK" = 28
+          CERT=$(keytool -exportcert -keystore "$DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sha256sum | cut -d' ' -f1)
+          test "$CERT" = "5fe0e687feb855c03fbda9fcc5d15fc8651beef3e30880cda0e9c65af2a421f8"
+          printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/store.pass"
+          printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/key.pass"
+          chmod 600 "$RUNNER_TEMP/store.pass" "$RUNNER_TEMP/key.pass"
+          echo "PV_SIGNING_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "PV_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "PV_ROTATION_MIN_SDK=$ROTATION_MIN_SDK" >> "$GITHUB_ENV"
+          echo "Restored audited bridge signer 5fe0e687...421f8."
+
+      - name: Build unsigned bridge APKs
+        env:
+          PV_EXTERNAL_SIGNING: 'true'
+          PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
+        run: gradle assembleConsumerRelease assembleDeveloperRelease
+
+      - name: Sign bridge APKs with 2026 rotated signer and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          A=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner | sort -V | tail -1)
+          C=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          D=$(find app/build/outputs/apk/developer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          test -s "$C"; test -s "$D"
+          sign_one() {
+            "$A" sign --ks "$PV_SIGNING_DIR/release.jks" --ks-key-alias "$PV_KEY_ALIAS" --ks-pass "file:$RUNNER_TEMP/store.pass" --key-pass "file:$RUNNER_TEMP/key.pass" --lineage "$PV_SIGNING_DIR/signing-lineage" --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK" --v1-signing-enabled false --v2-signing-enabled false --v3-signing-enabled true --v4-signing-enabled false --out "$2" "$1"
+            "$A" verify --verbose --print-certs --min-sdk-version 28 "$2"
+            S=$("$A" verify --print-certs "$2" 2>&1 | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | tr -d '[:space:]')
+            test "$S" = "5fe0e687feb855c03fbda9fcc5d15fc8651beef3e30880cda0e9c65af2a421f8"
+          }
+          sign_one "$C" puttvision-consumer.apk
+          sign_one "$D" puttvision.apk
+          sha256sum puttvision.apk > puttvision.apk.sha256
+          sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
+          echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
+          echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
+
+      - name: Request one-time Supabase upload token
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
+        run: |
+          set -euo pipefail
+          jq -nc --arg action prepare --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}' > payload.json
+          curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > prepare.json
+          jq -e '.ok == true and .action == "prepare"' prepare.json >/dev/null
+          TOKEN=$(jq -r .uploadToken prepare.json); echo "::add-mask::$TOKEN"
+          echo "PV_UPLOAD_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "PV_OBJECT_PATH=$(jq -r .objectPath prepare.json)" >> "$GITHUB_ENV"
+          echo "PV_APK_URL=$(jq -r .apkUrl prepare.json)" >> "$GITHUB_ENV"
+          echo "PV_MANIFEST_URL=$(jq -r .manifestUrl prepare.json)" >> "$GITHUB_ENV"
+
+      - name: Upload and verify public bridge APK
+        shell: bash
+        env:
+          SUPABASE_URL: https://razejagceyznnajioxgx.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_fjgUBLTNcWG5-f8EDFpLyw_P5wXmmFS
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock @supabase/supabase-js@2.57.4 >/dev/null
+          node <<'NODE'
+          const fs=require('fs'); const {createClient}=require('@supabase/supabase-js');
+          (async()=>{const s=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const b=fs.readFileSync('puttvision-consumer.apk');const {data,error}=await s.storage.from('puttvision-update').uploadToSignedUrl(process.env.PV_OBJECT_PATH,process.env.PV_UPLOAD_TOKEN,b,{contentType:'application/vnd.android.package-archive',cacheControl:'31536000'});if(error)throw error;if(!data?.path)throw Error('upload path missing')})().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          curl --fail-with-body -sSL "$PV_APK_URL" -o uploaded.apk
+          test "$(stat -c%s uploaded.apk)" -eq "$PV_APK_SIZE"
+          echo "$PV_RELEASE_SHA  uploaded.apk" | sha256sum -c -
+
+      - name: Publish bridge GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if gh release create "$PV_TAG" puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256 --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · one-time old-signer bridge carrying audited updater signer-transition policy" --latest; then
+              exit 0
+            fi
+            sleep $((attempt * 4))
+          done
+          exit 1
+
+      - name: Publish verified Supabase bridge manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
+        run: |
+          set -euo pipefail
+          jq -nc --arg action finalize --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}' > payload.json
+          curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > finalize.json
+          jq -e '.ok == true and .action == "finalize"' finalize.json >/dev/null
+          LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
+          echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" '.versionCode == $vc and .sha256 == $sha' >/dev/null
+          echo "$LIVE" | jq .
