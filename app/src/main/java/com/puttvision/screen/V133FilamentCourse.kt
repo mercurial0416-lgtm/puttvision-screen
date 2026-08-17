@@ -585,7 +585,13 @@ private class V133Controller(
         )
 
         ballMesh?.let { mesh ->
-            val z = GreenTerrain.effectiveHeightAt(settings, bx, by).toFloat() + V133CourseSpec.BALL_RADIUS_M + .020f
+            val cupVerticalOffset = state
+                ?.takeIf { it.cupPhase != V134CupPhase.NONE }
+                ?.cupVerticalOffsetM
+                ?.toFloat()
+                ?: 0f
+            val z = GreenTerrain.effectiveHeightAt(settings, bx, by).toFloat() +
+                V133CourseSpec.BALL_RADIUS_M + .020f + cupVerticalOffset
             val transform = floatArrayOf(
                 1f, 0f, 0f, 0f,
                 0f, 1f, 0f, 0f,
