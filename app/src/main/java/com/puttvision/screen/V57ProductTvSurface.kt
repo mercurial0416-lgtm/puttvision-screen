@@ -12,13 +12,12 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
 
-        // V122: the canonical TV now uses an independent 3D course renderer. V18 remains only as
-        // rollback/legacy source; it is not mounted in the normal TV path.
-        addView(V122CourseWorldFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V120TvRendererV2View(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V121RollMonitorOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
+        // V124: one bright screen-golf world and one simulator-style information hierarchy.
+        // Older V120/V121/V122 visuals remain in source only for rollback and regression history.
+        addView(V124ScreenGolfWorldFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        addView(V124ScreenGolfHudView(context, engine), FrameLayout.LayoutParams(-1, -1))
 
-        // Functional overlays remain independent so training/replay behavior is preserved.
+        // Functional training/replay behavior stays independent of presentation.
         addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
         if (includeImpactReplay) addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
     }
