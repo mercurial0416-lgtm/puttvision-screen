@@ -11,6 +11,7 @@ import android.view.View
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * Visual-only projected green treatment. It reads the existing terrain/projection state and never
@@ -29,6 +30,17 @@ data class V107GreenSurfacePlan(
     val distanceTickSpacingM: Double,
     val distanceTickCount: Int,
     val distanceTickAlpha: Int,
+    val majorTickEvery: Int,
+    val majorTickHalfWidthM: Double,
+    val distanceLabelEvery: Int,
+    val distanceLabelCount: Int,
+    val distanceLabelAlpha: Int,
+    val targetGuideAlpha: Int,
+    val cupWindowHalfLengthM: Double,
+    val cupWindowHalfWidthM: Double,
+    val cupWindowAlpha: Int,
+    val laneOffsetM: Double,
+    val laneGuideAlpha: Int,
     val refreshMs: Long
 )
 
@@ -48,10 +60,18 @@ object V107TvGreenSurfacePlanner {
             else -> 3.0
         }
         val ticks = (visible / tickSpacing).toInt().coerceIn(1, 16)
+        val majorEvery = when {
+            ticks <= 6 -> 2
+            ticks <= 12 -> 3
+            else -> 4
+        }
+        val labelEvery = majorEvery
+        val labels = (ticks / labelEvery).coerceIn(0, 6)
+        val halfWidth = 3.4
         return V107GreenSurfacePlan(
             targetDistanceM = target,
             visibleLengthM = visible,
-            halfWidthM = 3.4,
+            halfWidthM = halfWidth,
             stripeWidthM = stripeWidth,
             stripeCount = stripes,
             stripeAlpha = if (running) 6 else 10,
@@ -61,6 +81,17 @@ object V107TvGreenSurfacePlanner {
             distanceTickSpacingM = tickSpacing,
             distanceTickCount = ticks,
             distanceTickAlpha = if (running) 5 else 9,
+            majorTickEvery = majorEvery,
+            majorTickHalfWidthM = min(.90, halfWidth * .28),
+            distanceLabelEvery = labelEvery,
+            distanceLabelCount = labels,
+            distanceLabelAlpha = if (running) 0 else 42,
+            targetGuideAlpha = if (target > 0.0) if (running) 20 else 48 else 0,
+            cupWindowHalfLengthM = .60,
+            cupWindowHalfWidthM = .72,
+            cupWindowAlpha = if (target > 0.0) if (running) 10 else 24 else 0,
+            laneOffsetM = min(1.15, halfWidth * .34),
+            laneGuideAlpha = if (running) 4 else 8,
             refreshMs = if (running) 66L else 240L
         )
     }
@@ -90,8 +121,11 @@ class V107TvGreenSurfaceDepthView(
 
         drawMowingBands(canvas, plan)
         drawGreenEdges(canvas, plan)
+        drawLaneGuides(canvas, plan)
         drawCenterDepthGuide(canvas, plan)
         drawDistanceTicks(canvas, plan)
+        drawCupWindow(canvas, plan)
+        drawTargetGuide(canvas, plan)
         drawHorizonHaze(canvas, plan)
 
         postInvalidateDelayed(plan.refreshMs)
@@ -130,45 +164,40 @@ class V107TvGreenSurfaceDepthView(
     }
 
     private fun drawGreenEdges(canvas: Canvas, plan: V107GreenSurfacePlan) {
-        val settings = engine.settings
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(1f, min(width, height) * .0012f)
-        paint.color = Color.argb(plan.edgeAlpha, 224, 247, 227)
-        paint.shader = null
+        drawDepthGuideAtX(canvas, plan, -plan.halfWidthM, plan.edgeAlpha, .0012f)
+        drawDepthGuideAtX(canvas, plan, plan.halfWidthM, plan.edgeAlpha, .0012f)
+    }
 
-        for (side in listOf(-1.0, 1.0)) {
-            path.reset()
-            var started = false
-            val segments = 24
-            for (i in 0..segments) {
-                val y = plan.visibleLengthM * i / segments.toDouble()
-                val x = side * plan.halfWidthM
-                val z = GreenTerrain.effectiveHeightAt(settings, x, y)
-                if (!z.isFinite()) continue
-                val sp = V25FlagProjectionRuntime.project(x, y, z + .003) ?: continue
-                if (!started) {
-                    path.moveTo(sp.x, sp.y)
-                    started = true
-                } else path.lineTo(sp.x, sp.y)
-            }
-            if (started) canvas.drawPath(path, paint)
-        }
+    private fun drawLaneGuides(canvas: Canvas, plan: V107GreenSurfacePlan) {
+        if (plan.laneGuideAlpha <= 0) return
+        drawDepthGuideAtX(canvas, plan, -plan.laneOffsetM, plan.laneGuideAlpha, .00065f)
+        drawDepthGuideAtX(canvas, plan, plan.laneOffsetM, plan.laneGuideAlpha, .00065f)
     }
 
     private fun drawCenterDepthGuide(canvas: Canvas, plan: V107GreenSurfacePlan) {
+        drawDepthGuideAtX(canvas, plan, 0.0, plan.centerGuideAlpha, .0008f)
+    }
+
+    private fun drawDepthGuideAtX(
+        canvas: Canvas,
+        plan: V107GreenSurfacePlan,
+        x: Double,
+        alpha: Int,
+        strokeScale: Float
+    ) {
         val settings = engine.settings
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = max(1f, min(width, height) * .0008f)
-        paint.color = Color.argb(plan.centerGuideAlpha, 255, 255, 255)
+        paint.strokeWidth = max(1f, min(width, height) * strokeScale)
+        paint.color = Color.argb(alpha.coerceIn(0, 255), 255, 255, 255)
         paint.shader = null
         path.reset()
         var started = false
-        val segments = 28
+        val segments = 24
         for (i in 0..segments) {
             val y = plan.visibleLengthM * i / segments.toDouble()
-            val z = GreenTerrain.effectiveHeightAt(settings, 0.0, y)
+            val z = GreenTerrain.effectiveHeightAt(settings, x, y)
             if (!z.isFinite()) continue
-            val sp = V25FlagProjectionRuntime.project(0.0, y, z + .004) ?: continue
+            val sp = V25FlagProjectionRuntime.project(x, y, z + .004) ?: continue
             if (!started) {
                 path.moveTo(sp.x, sp.y)
                 started = true
@@ -179,22 +208,88 @@ class V107TvGreenSurfaceDepthView(
 
     private fun drawDistanceTicks(canvas: Canvas, plan: V107GreenSurfacePlan) {
         val settings = engine.settings
-        val halfTickWidthM = min(.55, plan.halfWidthM * .18)
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = max(1f, min(width, height) * .0009f)
-        paint.color = Color.argb(plan.distanceTickAlpha, 255, 255, 255)
         paint.shader = null
 
+        var labelsDrawn = 0
         for (i in 1..plan.distanceTickCount) {
             val y = i * plan.distanceTickSpacingM
             if (y <= 0.0 || y > plan.visibleLengthM) continue
+            val major = i % plan.majorTickEvery == 0
+            val halfTickWidthM = if (major) plan.majorTickHalfWidthM else min(.55, plan.halfWidthM * .18)
+            val alpha = if (major) (plan.distanceTickAlpha * 2).coerceAtMost(24) else plan.distanceTickAlpha
             val zl = GreenTerrain.effectiveHeightAt(settings, -halfTickWidthM, y)
             val zr = GreenTerrain.effectiveHeightAt(settings, halfTickWidthM, y)
             if (!zl.isFinite() || !zr.isFinite()) continue
             val left = V25FlagProjectionRuntime.project(-halfTickWidthM, y, zl + .005) ?: continue
             val right = V25FlagProjectionRuntime.project(halfTickWidthM, y, zr + .005) ?: continue
+            paint.color = Color.argb(alpha, 255, 255, 255)
             canvas.drawLine(left.x, left.y, right.x, right.y, paint)
+
+            if (major && plan.distanceLabelAlpha > 0 && labelsDrawn < plan.distanceLabelCount) {
+                drawDistanceLabel(canvas, y, right.x, right.y, plan.distanceLabelAlpha)
+                labelsDrawn++
+            }
         }
+    }
+
+    private fun drawDistanceLabel(canvas: Canvas, distanceM: Double, x: Float, y: Float, alpha: Int) {
+        paint.style = Paint.Style.FILL
+        paint.shader = null
+        paint.color = Color.argb(alpha.coerceIn(0, 255), 255, 255, 255)
+        paint.textSize = max(10f, min(width, height) * .014f)
+        paint.isFakeBoldText = true
+        val text = if (distanceM < 10.0) String.format("%.0fm", distanceM) else "${distanceM.roundToInt()}m"
+        canvas.drawText(text, x + paint.textSize * .38f, y + paint.textSize * .32f, paint)
+        paint.isFakeBoldText = false
+    }
+
+    private fun drawTargetGuide(canvas: Canvas, plan: V107GreenSurfacePlan) {
+        if (plan.targetGuideAlpha <= 0 || plan.targetDistanceM <= 0.0 || plan.targetDistanceM > plan.visibleLengthM) return
+        val settings = engine.settings
+        val halfWidth = min(1.15, plan.halfWidthM * .40)
+        val y = plan.targetDistanceM
+        val zl = GreenTerrain.effectiveHeightAt(settings, -halfWidth, y)
+        val zr = GreenTerrain.effectiveHeightAt(settings, halfWidth, y)
+        if (!zl.isFinite() || !zr.isFinite()) return
+        val left = V25FlagProjectionRuntime.project(-halfWidth, y, zl + .009) ?: return
+        val right = V25FlagProjectionRuntime.project(halfWidth, y, zr + .009) ?: return
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(1.5f, min(width, height) * .0015f)
+        paint.color = Color.argb(plan.targetGuideAlpha, 255, 244, 186)
+        paint.shader = null
+        canvas.drawLine(left.x, left.y, right.x, right.y, paint)
+    }
+
+    private fun drawCupWindow(canvas: Canvas, plan: V107GreenSurfacePlan) {
+        if (plan.cupWindowAlpha <= 0 || plan.targetDistanceM <= 0.0) return
+        val settings = engine.settings
+        val y0 = max(0.0, plan.targetDistanceM - plan.cupWindowHalfLengthM)
+        val y1 = min(plan.visibleLengthM, plan.targetDistanceM + plan.cupWindowHalfLengthM)
+        if (y1 <= y0) return
+        val x0 = -plan.cupWindowHalfWidthM
+        val x1 = plan.cupWindowHalfWidthM
+        val z00 = GreenTerrain.effectiveHeightAt(settings, x0, y0)
+        val z10 = GreenTerrain.effectiveHeightAt(settings, x1, y0)
+        val z11 = GreenTerrain.effectiveHeightAt(settings, x1, y1)
+        val z01 = GreenTerrain.effectiveHeightAt(settings, x0, y1)
+        if (!listOf(z00, z10, z11, z01).all { it.isFinite() }) return
+        val p00 = V25FlagProjectionRuntime.project(x0, y0, z00 + .006) ?: return
+        val p10 = V25FlagProjectionRuntime.project(x1, y0, z10 + .006) ?: return
+        val p11 = V25FlagProjectionRuntime.project(x1, y1, z11 + .006) ?: return
+        val p01 = V25FlagProjectionRuntime.project(x0, y1, z01 + .006) ?: return
+        path.reset()
+        path.moveTo(p00.x, p00.y)
+        path.lineTo(p10.x, p10.y)
+        path.lineTo(p11.x, p11.y)
+        path.lineTo(p01.x, p01.y)
+        path.close()
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(1f, min(width, height) * .001f)
+        paint.color = Color.argb(plan.cupWindowAlpha, 255, 244, 186)
+        paint.shader = null
+        canvas.drawPath(path, paint)
     }
 
     private fun drawHorizonHaze(canvas: Canvas, plan: V107GreenSurfacePlan) {
