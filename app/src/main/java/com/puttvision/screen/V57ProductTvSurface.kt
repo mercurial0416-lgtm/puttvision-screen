@@ -15,6 +15,7 @@ object V57ProductTvSurface {
         addView(V107TvGreenSurfaceDepthView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V89ScreenGolfVisualPhysicsView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V90ScreenGolfCinematicOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
+        addView(V116PremiumTvFinishView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V51TvPolishOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V87TvVisualPolishView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V27PaceLineOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
