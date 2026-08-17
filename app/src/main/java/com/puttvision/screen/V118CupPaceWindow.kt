@@ -23,6 +23,10 @@ data class V118CupPaceWindowPlan(
     val ringRadiiM: List<Double>,
     val segments: Int,
     val ringAlpha: Int,
+    val activeRingIndex: Int,
+    val activeRingAlpha: Int,
+    val activeRingStrokeScale: Float,
+    val zoneLabel: String,
     val labelAlpha: Int,
     val leaveMarkerAlpha: Int,
     val refreshMs: Long
@@ -80,27 +84,69 @@ object V118CupPaceWindowPlanner {
             V118PaceWindowPhase.RESULT_NEAR -> 136
             V118PaceWindowPhase.HIDDEN -> 0
         }
+        val activeRingIndex = when (phase) {
+            V118PaceWindowPhase.APPROACH, V118PaceWindowPhase.RESULT_NEAR -> activeRingIndex(distance)
+            else -> -1
+        }
+        val activeBase = when (phase) {
+            V118PaceWindowPhase.APPROACH -> 218
+            V118PaceWindowPhase.RESULT_NEAR -> 194
+            else -> 0
+        }
+        val zoneLabel = when (phase) {
+            V118PaceWindowPhase.ADDRESS -> "PACE WINDOW  15 · 30 · 60 cm"
+            V118PaceWindowPhase.APPROACH -> activeZoneLabel(activeRingIndex, "CUP SPEED")
+            V118PaceWindowPhase.RESULT_NEAR -> activeZoneLabel(activeRingIndex, "LEAVE")
+            V118PaceWindowPhase.HIDDEN -> ""
+        }
         return V118CupPaceWindowPlan(
             phase = phase,
             targetDistanceM = target,
             ringRadiiM = RINGS,
             segments = segments,
             ringAlpha = (baseAlpha * tierScale).toInt().coerceIn(0, 180),
+            activeRingIndex = activeRingIndex,
+            activeRingAlpha = (activeBase * tierScale).toInt().coerceIn(0, 230),
+            activeRingStrokeScale = if (activeRingIndex >= 0) {
+                when (renderTier) {
+                    V24RenderTier.HIGH -> 1.85f
+                    V24RenderTier.BALANCED -> 1.65f
+                    V24RenderTier.PERFORMANCE -> 1.45f
+                }
+            } else 1f,
+            zoneLabel = zoneLabel,
             labelAlpha = (labelBase * tierScale).toInt().coerceIn(0, 200),
             leaveMarkerAlpha = if (phase == V118PaceWindowPhase.RESULT_NEAR) {
                 (190 * tierScale).toInt().coerceIn(0, 220)
             } else 0,
-            refreshMs = when (phase) {
-                V118PaceWindowPhase.APPROACH -> when (renderTier) {
-                    V24RenderTier.HIGH -> 33L
-                    V24RenderTier.BALANCED -> 50L
-                    V24RenderTier.PERFORMANCE -> 66L
-                }
-                V118PaceWindowPhase.RESULT_NEAR -> 140L
-                V118PaceWindowPhase.ADDRESS -> 260L
-                V118PaceWindowPhase.HIDDEN -> 320L
-            }
+            refreshMs = refreshMs(phase, renderTier, distance)
         )
+    }
+
+    internal fun activeRingIndex(distanceToCupM: Double): Int {
+        if (!distanceToCupM.isFinite() || distanceToCupM < 0.0) return -1
+        return RINGS.indexOfFirst { distanceToCupM <= it }
+    }
+
+    private fun activeZoneLabel(index: Int, prefix: String): String = when (index) {
+        0 -> "$prefix · 15 CM ZONE"
+        1 -> "$prefix · 30 CM ZONE"
+        2 -> "$prefix · 60 CM ZONE"
+        else -> "$prefix ZONE"
+    }
+
+    private fun refreshMs(phase: V118PaceWindowPhase, tier: V24RenderTier, distance: Double): Long = when (phase) {
+        V118PaceWindowPhase.APPROACH -> {
+            val insideOuterRing = distance.isFinite() && distance <= RINGS.last()
+            when (tier) {
+                V24RenderTier.HIGH -> if (insideOuterRing) 33L else 50L
+                V24RenderTier.BALANCED -> if (insideOuterRing) 50L else 66L
+                V24RenderTier.PERFORMANCE -> if (insideOuterRing) 66L else 83L
+            }
+        }
+        V118PaceWindowPhase.RESULT_NEAR -> 140L
+        V118PaceWindowPhase.ADDRESS -> 260L
+        V118PaceWindowPhase.HIDDEN -> 320L
     }
 
     private fun hidden(tier: V24RenderTier) = V118CupPaceWindowPlan(
@@ -113,6 +159,10 @@ object V118CupPaceWindowPlanner {
             V24RenderTier.PERFORMANCE -> 8
         },
         ringAlpha = 0,
+        activeRingIndex = -1,
+        activeRingAlpha = 0,
+        activeRingStrokeScale = 1f,
+        zoneLabel = "",
         labelAlpha = 0,
         leaveMarkerAlpha = 0,
         refreshMs = 320L
@@ -179,7 +229,7 @@ class V118CupPaceWindowView(
 
     private fun drawRings(c: Canvas, settings: GreenSettings, plan: V118CupPaceWindowPlan) {
         p.style = Paint.Style.STROKE
-        p.strokeWidth = max(1.2f, min(width, height) * .00135f)
+        val baseStroke = max(1.2f, min(width, height) * .00135f)
         val accent = when (plan.phase) {
             V118PaceWindowPhase.APPROACH -> Color.rgb(255, 222, 128)
             V118PaceWindowPhase.RESULT_NEAR -> Color.rgb(170, 236, 214)
@@ -200,16 +250,22 @@ class V118CupPaceWindowView(
                 points++
             }
             if (points >= 4) {
+                val active = index == plan.activeRingIndex
                 val alphaScale = 1.0 - index * .18
-                p.color = Color.argb((plan.ringAlpha * alphaScale).toInt().coerceIn(0, 180), Color.red(accent), Color.green(accent), Color.blue(accent))
+                val alpha = if (active) plan.activeRingAlpha else {
+                    (plan.ringAlpha * alphaScale).toInt().coerceIn(0, 180)
+                }
+                p.strokeWidth = if (active) baseStroke * plan.activeRingStrokeScale else baseStroke
+                p.color = Color.argb(alpha, Color.red(accent), Color.green(accent), Color.blue(accent))
                 c.drawPath(path, p)
             }
         }
+        p.strokeWidth = baseStroke
         p.style = Paint.Style.FILL
     }
 
     private fun drawLabel(c: Canvas, settings: GreenSettings, plan: V118CupPaceWindowPlan) {
-        if (plan.labelAlpha <= 0) return
+        if (plan.labelAlpha <= 0 || plan.zoneLabel.isBlank()) return
         val z = GreenTerrain.effectiveHeightAt(settings, 0.0, plan.targetDistanceM)
         if (!z.isFinite()) return
         val cup = V25FlagProjectionRuntime.project(0.0, plan.targetDistanceM, z + .004) ?: return
@@ -217,13 +273,7 @@ class V118CupPaceWindowView(
         p.textAlign = Paint.Align.CENTER
         p.textSize = max(10f, width * .0060f)
         p.color = Color.argb(plan.labelAlpha, 225, 244, 245)
-        val label = when (plan.phase) {
-            V118PaceWindowPhase.ADDRESS -> "PACE WINDOW  15 · 30 · 60 cm"
-            V118PaceWindowPhase.APPROACH -> "CUP SPEED ZONE"
-            V118PaceWindowPhase.RESULT_NEAR -> "LEAVE ZONE"
-            V118PaceWindowPhase.HIDDEN -> ""
-        }
-        c.drawText(label, cup.x, cup.y - max(14f, height * .032f), p)
+        c.drawText(plan.zoneLabel, cup.x, cup.y - max(14f, height * .032f), p)
         p.textAlign = Paint.Align.LEFT
         p.typeface = Typeface.DEFAULT
     }
