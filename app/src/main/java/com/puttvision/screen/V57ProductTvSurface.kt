@@ -12,9 +12,9 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
 
-        // V120: one world + one coherent presentation language. The previous decorative overlay
-        // stack remains in source for rollback, but is intentionally not mounted here.
-        addView(V120WorldOnlyFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        // V122: the canonical TV now uses an independent 3D course renderer. V18 remains only as
+        // rollback/legacy source; it is not mounted in the normal TV path.
+        addView(V122CourseWorldFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V120TvRendererV2View(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V121RollMonitorOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
 
