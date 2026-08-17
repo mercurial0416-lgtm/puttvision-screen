@@ -29,9 +29,15 @@ jobs:
 
       - name: Allocate monotonic app version
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="0.7.${GITHUB_RUN_NUMBER}"
+          set -euo pipefail
+          TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || echo pv-100163)
+          LAST=${TAG#pv-}
+          [[ "$LAST" =~ ^[0-9]+$ ]] || LAST=100163
+          VERSION_CODE=$((LAST + 1))
+          VERSION_NAME="0.7.$((VERSION_CODE - 100000))"
           echo "PV_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
@@ -46,7 +52,6 @@ jobs:
           REF=validation/v20_reference.csv
           MEASURED=validation/v20_measured.csv
           if [ -f "$REF" ] && [ -f "$MEASURED" ]; then
-            echo "Running BALL / START / FACE / PATH real-device accuracy gate"
             python3 ci/v20_accuracy_gate.py "$REF" "$MEASURED"
           elif [ -f "$REF" ] || [ -f "$MEASURED" ]; then
             echo "Accuracy fixture set is incomplete; both $REF and $MEASURED are required" >&2
@@ -58,71 +63,36 @@ jobs:
       - name: Restore release signing bundle
         shell: bash
         env:
-          SIGNING_BUNDLE_B64: ${{ secrets.PUTTVISION_SIGNING_BUNDLE_B64 }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          BUNDLE_FILE="$RUNNER_TEMP/puttvision-signing-bundle.tgz"
-          VAULT_TAG="puttvision-signing-vault-v2"
-          VAULT_ASSET="puttvision-signing-bundle.tgz"
-          SIGNING_DIR="$RUNNER_TEMP/puttvision-signing"
-
-          if [ -n "$SIGNING_BUNDLE_B64" ]; then
-            printf '%s' "$SIGNING_BUNDLE_B64" | base64 -d > "$BUNDLE_FILE"
-            echo "Restored release signing bundle from Actions secret."
-          else
-            ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq '.[] | select(.draft == true and (.tag_name == "puttvision-signing-vault-v1" or .tag_name == "puttvision-signing-vault-v2")) | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
-            if [ -z "$ASSET_ID" ]; then
-              echo "Missing required release signing secret: PUTTVISION_SIGNING_BUNDLE_B64; private signing escrow is also unavailable" >&2
-              exit 1
-            fi
-            gh api -H "Accept: application/octet-stream" \
-              "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE_FILE"
-            echo "Restored release signing bundle from private draft escrow."
+          BUNDLE="$RUNNER_TEMP/signing-v3.tgz"
+          DIR="$RUNNER_TEMP/signing-v3"
+          ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v3") | .assets[] | select(.name == "puttvision-signing-bundle-v3.tgz" or .label == "puttvision-signing-bundle.tgz") | .id' | head -1)
+          if [ -z "$ASSET_ID" ]; then
+            echo "Missing required release signing secret: private signing lineage v3 escrow is unavailable" >&2
+            exit 1
           fi
-
-          test -s "$BUNDLE_FILE"
-          mkdir -p "$SIGNING_DIR"
-          tar -xzf "$BUNDLE_FILE" -C "$SIGNING_DIR"
-          test -s "$SIGNING_DIR/release.jks"
-          test -s "$SIGNING_DIR/signing.env"
-          chmod 600 "$SIGNING_DIR/release.jks" "$SIGNING_DIR/signing.env"
-          if [ -s "$SIGNING_DIR/signing-lineage" ]; then
-            chmod 600 "$SIGNING_DIR/signing-lineage"
-            echo "PV_HAS_LINEAGE=true" >> "$GITHUB_ENV"
-          else
-            echo "PV_HAS_LINEAGE=false" >> "$GITHUB_ENV"
-          fi
-
-          set -a
-          source "$SIGNING_DIR/signing.env"
-          set +a
-          for name in STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK; do
-            if [ -z "${!name:-}" ]; then
-              echo "Signing bundle is missing $name" >&2
-              exit 1
-            fi
-          done
-          keytool -list -keystore "$SIGNING_DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
-
-          # Re-escrow only a signer that was actually restored. Never generate a replacement signer here:
-          # Android updates must preserve certificate continuity with already-installed builds.
-          if gh release view "$VAULT_TAG" >/dev/null 2>&1; then
-            gh release upload "$VAULT_TAG" "$BUNDLE_FILE#$VAULT_ASSET" --clobber
-          else
-            gh release create "$VAULT_TAG" "$BUNDLE_FILE#$VAULT_ASSET" \
-              --title "PuttVision signing vault v2" \
-              --notes "Private draft escrow for the active Android release signing bundle. Do not publish." \
-              --draft
-          fi
-
-          printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/puttvision-store.pass"
-          printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/puttvision-key.pass"
-          chmod 600 "$RUNNER_TEMP/puttvision-store.pass" "$RUNNER_TEMP/puttvision-key.pass"
-          echo "PV_SIGNING_DIR=$SIGNING_DIR" >> "$GITHUB_ENV"
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE"
+          echo "df2c8250649d01017bf39de65c228f4f48f99e71221c16964027c15f9db8276c  $BUNDLE" | sha256sum -c -
+          mkdir -p "$DIR"
+          tar -xzf "$BUNDLE" -C "$DIR"
+          test -s "$DIR/release.jks"
+          test -s "$DIR/signing-lineage"
+          test -s "$DIR/signing.env"
+          chmod 600 "$DIR/release.jks" "$DIR/signing-lineage" "$DIR/signing.env"
+          set -a; source "$DIR/signing.env"; set +a
+          for n in STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK; do test -n "${!n:-}"; done
+          test "$ROTATION_MIN_SDK" = 28
+          CERT=$(keytool -exportcert -keystore "$DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sha256sum | cut -d' ' -f1)
+          test "$CERT" = "7a5962aee08d9edc655da5f58cb8199b4d41604793ef539bd0111df2ca0900cb"
+          printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/store.pass"
+          printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/key.pass"
+          chmod 600 "$RUNNER_TEMP/store.pass" "$RUNNER_TEMP/key.pass"
+          echo "PV_SIGNING_DIR=$DIR" >> "$GITHUB_ENV"
           echo "PV_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
           echo "PV_ROTATION_MIN_SDK=$ROTATION_MIN_SDK" >> "$GITHUB_ENV"
+          echo "Restored full Android signing lineage v3."
 
       - name: Build unsigned consumer and developer APKs
         env:
@@ -134,194 +104,74 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner 2>/dev/null | sort -V | tail -1 || true)
-          if [ -z "$APKSIGNER" ]; then
-            echo "Android apksigner not available" >&2
-            exit 1
-          fi
-
-          CONSUMER_UNSIGNED=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
-          DEVELOPER_UNSIGNED=$(find app/build/outputs/apk/developer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
-          test -s "$CONSUMER_UNSIGNED"
-          test -s "$DEVELOPER_UNSIGNED"
-
+          A=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner | sort -V | tail -1)
+          C=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          D=$(find app/build/outputs/apk/developer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          test -s "$C"; test -s "$D"; test -s "$PV_SIGNING_DIR/signing-lineage"
           sign_one() {
-            local input="$1"
-            local output="$2"
-            local args=(
-              --ks "$PV_SIGNING_DIR/release.jks"
-              --ks-key-alias "$PV_KEY_ALIAS"
-              --ks-pass "file:$RUNNER_TEMP/puttvision-store.pass"
-              --key-pass "file:$RUNNER_TEMP/puttvision-key.pass"
-              --v1-signing-enabled false
-              --v4-signing-enabled false
-            )
-            if [ "$PV_HAS_LINEAGE" = "true" ]; then
-              args+=(
-                --lineage "$PV_SIGNING_DIR/signing-lineage"
-                --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK"
-                --v2-signing-enabled false
-                --v3-signing-enabled true
-              )
-            else
-              args+=(
-                --v2-signing-enabled true
-                --v3-signing-enabled true
-              )
-            fi
-            "$APKSIGNER" sign "${args[@]}" --out "$output" "$input"
-            "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 28 "$output"
+            "$A" sign --ks "$PV_SIGNING_DIR/release.jks" --ks-key-alias "$PV_KEY_ALIAS" --ks-pass "file:$RUNNER_TEMP/store.pass" --key-pass "file:$RUNNER_TEMP/key.pass" --lineage "$PV_SIGNING_DIR/signing-lineage" --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK" --v1-signing-enabled false --v2-signing-enabled false --v3-signing-enabled true --v4-signing-enabled false --out "$2" "$1"
+            "$A" verify --verbose --print-certs --min-sdk-version 28 "$2"
           }
-
-          sign_one "$CONSUMER_UNSIGNED" puttvision-consumer.apk
-          sign_one "$DEVELOPER_UNSIGNED" puttvision.apk
+          sign_one "$C" puttvision-consumer.apk
+          sign_one "$D" puttvision.apk
+          for f in puttvision-consumer.apk puttvision.apk; do
+            S=$("$A" verify --print-certs "$f" 2>&1 | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | tr -d '[:space:]')
+            test "$S" = "7a5962aee08d9edc655da5f58cb8199b4d41604793ef539bd0111df2ca0900cb"
+          done
           sha256sum puttvision.apk > puttvision.apk.sha256
           sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
-
-          SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)
-          SIZE=$(stat -c%s puttvision-consumer.apk)
-          echo "PV_RELEASE_SHA=$SHA" >> "$GITHUB_ENV"
-          echo "PV_APK_SIZE=$SIZE" >> "$GITHUB_ENV"
+          echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
+          echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
 
       - name: Request one-time Supabase upload token
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
-        shell: bash
         run: |
           set -euo pipefail
-          PAYLOAD=$(jq -nc \
-            --arg action prepare \
-            --argjson vc "$PV_VERSION_CODE" \
-            --arg vn "$PV_VERSION_NAME" \
-            --arg sha "$PV_RELEASE_SHA" \
-            --argjson size "$PV_APK_SIZE" \
-            '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}')
-          curl --fail-with-body --silent --show-error \
-            -X POST "$PUBLISH_URL" \
-            -H 'content-type: application/json' \
-            -H "x-github-token: $GH_TOKEN" \
-            --data-binary "$PAYLOAD" > prepare.json
+          jq -nc --arg action prepare --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}' > payload.json
+          curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > prepare.json
           jq -e '.ok == true and .action == "prepare"' prepare.json >/dev/null
-          TOKEN=$(jq -r '.uploadToken' prepare.json)
-          echo "::add-mask::$TOKEN"
+          TOKEN=$(jq -r .uploadToken prepare.json); echo "::add-mask::$TOKEN"
           echo "PV_UPLOAD_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-          echo "PV_OBJECT_PATH=$(jq -r '.objectPath' prepare.json)" >> "$GITHUB_ENV"
-          echo "PV_APK_URL=$(jq -r '.apkUrl' prepare.json)" >> "$GITHUB_ENV"
-          echo "PV_MANIFEST_URL=$(jq -r '.manifestUrl' prepare.json)" >> "$GITHUB_ENV"
+          echo "PV_OBJECT_PATH=$(jq -r .objectPath prepare.json)" >> "$GITHUB_ENV"
+          echo "PV_APK_URL=$(jq -r .apkUrl prepare.json)" >> "$GITHUB_ENV"
+          echo "PV_MANIFEST_URL=$(jq -r .manifestUrl prepare.json)" >> "$GITHUB_ENV"
 
       - name: Upload consumer APK to public Supabase Storage
+        shell: bash
         env:
           SUPABASE_URL: https://razejagceyznnajioxgx.supabase.co
           SUPABASE_PUBLISHABLE_KEY: sb_publishable_fjgUBLTNcWG5-f8EDFpLyw_P5wXmmFS
-        shell: bash
         run: |
           set -euo pipefail
           npm install --no-save --no-package-lock @supabase/supabase-js@2.57.4 >/dev/null
           node <<'NODE'
-          const fs = require('fs');
-          const { createClient } = require('@supabase/supabase-js');
-          (async () => {
-            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
-              auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-            });
-            const apk = fs.readFileSync('puttvision-consumer.apk');
-            const { data, error } = await supabase.storage
-              .from('puttvision-update')
-              .uploadToSignedUrl(process.env.PV_OBJECT_PATH, process.env.PV_UPLOAD_TOKEN, apk, {
-                contentType: 'application/vnd.android.package-archive',
-                cacheControl: '31536000',
-              });
-            if (error) throw error;
-            if (!data?.path) throw new Error('signed upload completed without object path');
-            console.log(`Signed upload complete: ${data.path}`);
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
+          const fs=require('fs'); const {createClient}=require('@supabase/supabase-js');
+          (async()=>{const s=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const b=fs.readFileSync('puttvision-consumer.apk');const {data,error}=await s.storage.from('puttvision-update').uploadToSignedUrl(process.env.PV_OBJECT_PATH,process.env.PV_UPLOAD_TOKEN,b,{contentType:'application/vnd.android.package-archive',cacheControl:'31536000'});if(error)throw error;if(!data?.path)throw Error('upload path missing')})().catch(e=>{console.error(e);process.exit(1)});
           NODE
-
-      - name: Verify public consumer APK SHA before release
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail-with-body --silent --show-error --location "$PV_APK_URL" -o uploaded-public.apk
-          test "$(stat -c%s uploaded-public.apk)" -eq "$PV_APK_SIZE"
-          echo "$PV_RELEASE_SHA  uploaded-public.apk" | sha256sum -c -
+          curl --fail-with-body -sSL "$PV_APK_URL" -o uploaded.apk
+          test "$(stat -c%s uploaded.apk)" -eq "$PV_APK_SIZE"
+          echo "$PV_RELEASE_SHA  uploaded.apk" | sha256sum -c -
 
       - name: Publish GitHub Release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
           set -euo pipefail
-          ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
-          if gh release view "$PV_TAG" >/dev/null 2>&1; then
-            gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber
-            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified consumer/developer release" --latest
-          else
-            gh release create "$PV_TAG" "${ASSETS[@]}" \
-              --title "PuttVision $PV_VERSION_NAME" \
-              --notes "PuttVision $PV_VERSION_NAME · verified consumer/developer release" \
-              --latest
-          fi
+          gh release create "$PV_TAG" puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256 --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified full-lineage consumer/developer release" --latest
 
       - name: Publish verified Supabase update manifest
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
-        shell: bash
         run: |
           set -euo pipefail
-          PAYLOAD=$(jq -nc \
-            --arg action finalize \
-            --argjson vc "$PV_VERSION_CODE" \
-            --arg vn "$PV_VERSION_NAME" \
-            --arg sha "$PV_RELEASE_SHA" \
-            --argjson size "$PV_APK_SIZE" \
-            '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}')
-          curl --fail-with-body --silent --show-error \
-            -X POST "$PUBLISH_URL" \
-            -H 'content-type: application/json' \
-            -H "x-github-token: $GH_TOKEN" \
-            --data-binary "$PAYLOAD" > finalize.json
+          jq -nc --arg action finalize --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}' > payload.json
+          curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > finalize.json
           jq -e '.ok == true and .action == "finalize"' finalize.json >/dev/null
-
-          LIVE=$(curl --fail-with-body --silent --show-error -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
-          echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" \
-            '.versionCode == $vc and .sha256 == $sha' >/dev/null
-          echo "$LIVE" | jq .
-
-      - name: Prepare public update artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p public-update
-          cp puttvision-consumer.apk public-update/puttvision.apk
-          cat > public-update/update.json <<EOF
-          {
-            "versionCode": $PV_VERSION_CODE,
-            "versionName": "$PV_VERSION_NAME",
-            "apkUrl": "$PV_APK_URL",
-            "sha256": "$PV_RELEASE_SHA"
-          }
-          EOF
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: PuttVision-Public-Update-${{ env.PV_VERSION_NAME }}
-          path: public-update/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: PuttVision-Developer-${{ env.PV_VERSION_NAME }}
-          path: |
-            puttvision.apk
-            puttvision.apk.sha256
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: PuttVision-Consumer-${{ env.PV_VERSION_NAME }}
-          path: |
-            puttvision-consumer.apk
-            puttvision-consumer.apk.sha256
+          LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
+          echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" '.versionCode == $vc and .sha256 == $sha' >/dev/null
