@@ -17,6 +17,8 @@ class V95SoloBroadcastDebriefTest {
         assertEquals(-0.8, plan.longSlopePct, 0.0001)
         assertEquals(5.0, plan.targetDistanceM, 0.0001)
         assertEquals(0f, plan.progress01, 0.0001f)
+        assertEquals(0, plan.resultQualityScore)
+        assertEquals("D", plan.resultQualityGrade)
     }
 
     @Test fun rollingReportsLiveSpeedDistanceAndFastRefresh() {
@@ -46,6 +48,8 @@ class V95SoloBroadcastDebriefTest {
         assertEquals("HOLED", plan.headline)
         assertEquals(1f, plan.progress01, 0.0001f)
         assertEquals(1, plan.cupContacts)
+        assertEquals(100, plan.resultQualityScore)
+        assertEquals("S", plan.resultQualityGrade)
         assertEquals(120L, plan.refreshMs)
     }
 
@@ -54,6 +58,8 @@ class V95SoloBroadcastDebriefTest {
         val plan = V95SoloDebriefPlanner.plan(settings, null, result)
         assertEquals("LIP OUT", plan.headline)
         assertEquals(2, plan.cupContacts)
+        assertEquals(83, plan.resultQualityScore)
+        assertEquals("A", plan.resultQualityGrade)
     }
 
     @Test fun resultClassifiesShortLongLeftRightByDominantLeaveAxis() {
@@ -69,7 +75,36 @@ class V95SoloBroadcastDebriefTest {
 
     @Test fun nearMissGetsTapInLabelBeforeAxisClassification() {
         val result = SimResult(false, .05, 4.93, .09, 2.0)
-        assertEquals("TAP-IN", V95SoloDebriefPlanner.plan(settings, null, result).headline)
+        val plan = V95SoloDebriefPlanner.plan(settings, null, result)
+        assertEquals("TAP-IN", plan.headline)
+        assertEquals(92, plan.resultQualityScore)
+        assertEquals("A+", plan.resultQualityGrade)
+    }
+
+    @Test fun resultQualityIsOutcomeOnlyBoundedAndMonotonicByLeave() {
+        val close = V114SoloResultQuality.score(SimResult(false, 0.0, 5.0, .08, 2.0), .08)
+        val medium = V114SoloResultQuality.score(SimResult(false, 0.0, 5.0, .50, 2.0), .50)
+        val far = V114SoloResultQuality.score(SimResult(false, 0.0, 5.0, 2.0, 2.0), 2.0)
+        assertTrue(close > medium)
+        assertTrue(medium > far)
+        assertTrue(close in 0..99)
+        assertTrue(far in 0..99)
+        assertEquals(100, V114SoloResultQuality.score(SimResult(true, 0.0, 5.0, 0.0, 2.0), 0.0))
+        assertEquals(0, V114SoloResultQuality.score(SimResult(false, 0.0, 5.0, Double.NaN, 2.0), Double.NaN))
+    }
+
+    @Test fun presentationCountersAndEnvironmentValuesStayBounded() {
+        val state = SimState(running = true, cupContacts = 999, trail = MutableList(900) { it.toDouble() to 0.0 })
+        val plan = V95SoloDebriefPlanner.plan(
+            GreenSettings(stimpMeters = 1000.0, holeDistanceM = 5.0, sideSlopePct = 500.0, longSlopePct = -500.0),
+            state,
+            null
+        )
+        assertEquals(99, plan.cupContacts)
+        assertEquals(500, plan.trailSamples)
+        assertEquals(9.9, plan.stimpM, 0.0001)
+        assertEquals(99.0, plan.sideSlopePct, 0.0001)
+        assertEquals(-99.0, plan.longSlopePct, 0.0001)
     }
 
     @Test fun nonFiniteRuntimeValuesFailSafeToFiniteNeutralPlan() {
@@ -97,6 +132,7 @@ class V95SoloBroadcastDebriefTest {
         assertTrue(plan.stimpM.isFinite())
         assertTrue(plan.sideSlopePct.isFinite())
         assertTrue(plan.longSlopePct.isFinite())
+        assertTrue(plan.resultQualityScore in 0..100)
     }
 
     @Test fun zeroTargetNeverProducesInvalidProgressGeometry() {
