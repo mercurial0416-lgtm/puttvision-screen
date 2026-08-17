@@ -55,7 +55,7 @@ jobs:
             echo "No real-device reference dataset committed yet; release accuracy gate is armed but inactive."
           fi
 
-      - name: Restore rotated release signing bundle
+      - name: Restore or bootstrap release signing bundle
         shell: bash
         env:
           SIGNING_BUNDLE_B64: ${{ secrets.PUTTVISION_SIGNING_BUNDLE_B64 }}
@@ -63,28 +63,62 @@ jobs:
         run: |
           set -euo pipefail
           BUNDLE_FILE="$RUNNER_TEMP/puttvision-signing-bundle.tgz"
+          VAULT_TAG="puttvision-signing-vault-v2"
+          VAULT_ASSET="puttvision-signing-bundle.tgz"
+          SIGNING_DIR="$RUNNER_TEMP/puttvision-signing"
+          mkdir -p "$SIGNING_DIR"
 
           if [ -n "$SIGNING_BUNDLE_B64" ]; then
             printf '%s' "$SIGNING_BUNDLE_B64" | base64 -d > "$BUNDLE_FILE"
+            echo "Restored release signing bundle from Actions secret."
           else
             ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v1") | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
-            if [ -z "$ASSET_ID" ]; then
-              echo "Missing required release signing secret: PUTTVISION_SIGNING_BUNDLE_B64; private signing escrow is also unavailable" >&2
-              exit 1
+              --jq '.[] | select(.draft == true and (.tag_name == "puttvision-signing-vault-v1" or .tag_name == "puttvision-signing-vault-v2")) | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
+            if [ -n "$ASSET_ID" ]; then
+              gh api -H "Accept: application/octet-stream" \
+                "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE_FILE"
+              echo "Restored release signing bundle from private draft escrow."
+            else
+              echo "No signing backup exists; bootstrapping a persistent replacement release key."
+              STORE_PASSWORD=$(openssl rand -hex 32)
+              KEY_PASSWORD="$STORE_PASSWORD"
+              KEY_ALIAS="puttvision-release"
+              ROTATION_MIN_SDK=28
+              keytool -genkeypair \
+                -keystore "$SIGNING_DIR/release.jks" \
+                -storetype JKS \
+                -storepass "$STORE_PASSWORD" \
+                -keypass "$KEY_PASSWORD" \
+                -alias "$KEY_ALIAS" \
+                -keyalg RSA \
+                -keysize 4096 \
+                -validity 36500 \
+                -dname "CN=PuttVision Release,O=PuttVision,C=KR" \
+                -noprompt
+              cat > "$SIGNING_DIR/signing.env" <<EOF
+          STORE_PASSWORD=$STORE_PASSWORD
+          KEY_PASSWORD=$KEY_PASSWORD
+          KEY_ALIAS=$KEY_ALIAS
+          ROTATION_MIN_SDK=$ROTATION_MIN_SDK
+          EOF
+              chmod 600 "$SIGNING_DIR/release.jks" "$SIGNING_DIR/signing.env"
+              tar -czf "$BUNDLE_FILE" -C "$SIGNING_DIR" release.jks signing.env
             fi
-            gh api -H "Accept: application/octet-stream" \
-              "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE_FILE"
           fi
 
           test -s "$BUNDLE_FILE"
-          SIGNING_DIR="$RUNNER_TEMP/puttvision-signing"
+          rm -rf "$SIGNING_DIR"
           mkdir -p "$SIGNING_DIR"
           tar -xzf "$BUNDLE_FILE" -C "$SIGNING_DIR"
           test -s "$SIGNING_DIR/release.jks"
-          test -s "$SIGNING_DIR/signing-lineage"
           test -s "$SIGNING_DIR/signing.env"
-          chmod 600 "$SIGNING_DIR/release.jks" "$SIGNING_DIR/signing-lineage" "$SIGNING_DIR/signing.env"
+          chmod 600 "$SIGNING_DIR/release.jks" "$SIGNING_DIR/signing.env"
+          if [ -s "$SIGNING_DIR/signing-lineage" ]; then
+            chmod 600 "$SIGNING_DIR/signing-lineage"
+            echo "PV_HAS_LINEAGE=true" >> "$GITHUB_ENV"
+          else
+            echo "PV_HAS_LINEAGE=false" >> "$GITHUB_ENV"
+          fi
 
           set -a
           source "$SIGNING_DIR/signing.env"
@@ -96,6 +130,17 @@ jobs:
             fi
           done
           keytool -list -keystore "$SIGNING_DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+
+          # Re-escrow every successfully restored/generated bundle so future releases do not depend on one source.
+          if gh release view "$VAULT_TAG" >/dev/null 2>&1; then
+            gh release upload "$VAULT_TAG" "$BUNDLE_FILE#$VAULT_ASSET" --clobber
+          else
+            gh release create "$VAULT_TAG" "$BUNDLE_FILE#$VAULT_ASSET" \
+              --title "PuttVision signing vault v2" \
+              --notes "Private draft escrow for the active Android release signing bundle. Do not publish." \
+              --draft
+          fi
+
           printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/puttvision-store.pass"
           printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/puttvision-key.pass"
           chmod 600 "$RUNNER_TEMP/puttvision-store.pass" "$RUNNER_TEMP/puttvision-key.pass"
@@ -109,7 +154,7 @@ jobs:
           PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
         run: gradle assembleConsumerRelease assembleDeveloperRelease
 
-      - name: Sign with rotated key lineage and verify APKs
+      - name: Sign release APKs and verify certificates
         shell: bash
         run: |
           set -euo pipefail
@@ -127,19 +172,28 @@ jobs:
           sign_one() {
             local input="$1"
             local output="$2"
-            "$APKSIGNER" sign \
-              --ks "$PV_SIGNING_DIR/release.jks" \
-              --ks-key-alias "$PV_KEY_ALIAS" \
-              --ks-pass "file:$RUNNER_TEMP/puttvision-store.pass" \
-              --key-pass "file:$RUNNER_TEMP/puttvision-key.pass" \
-              --lineage "$PV_SIGNING_DIR/signing-lineage" \
-              --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK" \
-              --v1-signing-enabled false \
-              --v2-signing-enabled false \
-              --v3-signing-enabled true \
-              --v4-signing-enabled false \
-              --out "$output" \
-              "$input"
+            local args=(
+              --ks "$PV_SIGNING_DIR/release.jks"
+              --ks-key-alias "$PV_KEY_ALIAS"
+              --ks-pass "file:$RUNNER_TEMP/puttvision-store.pass"
+              --key-pass "file:$RUNNER_TEMP/puttvision-key.pass"
+              --v1-signing-enabled false
+              --v4-signing-enabled false
+            )
+            if [ "$PV_HAS_LINEAGE" = "true" ]; then
+              args+=(
+                --lineage "$PV_SIGNING_DIR/signing-lineage"
+                --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK"
+                --v2-signing-enabled false
+                --v3-signing-enabled true
+              )
+            else
+              args+=(
+                --v2-signing-enabled true
+                --v3-signing-enabled true
+              )
+            fi
+            "$APKSIGNER" sign "${args[@]}" --out "$output" "$input"
             "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 28 "$output"
           }
 
@@ -219,7 +273,7 @@ jobs:
           test "$(stat -c%s uploaded-public.apk)" -eq "$PV_APK_SIZE"
           echo "$PV_RELEASE_SHA  uploaded-public.apk" | sha256sum -c -
 
-      - name: Publish private GitHub Release
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -228,11 +282,11 @@ jobs:
           ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
           if gh release view "$PV_TAG" >/dev/null 2>&1; then
             gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber
-            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · rotated-key verified consumer/developer release" --latest
+            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified consumer/developer release" --latest
           else
             gh release create "$PV_TAG" "${ASSETS[@]}" \
               --title "PuttVision $PV_VERSION_NAME" \
-              --notes "PuttVision $PV_VERSION_NAME · rotated-key verified consumer/developer release" \
+              --notes "PuttVision $PV_VERSION_NAME · verified consumer/developer release" \
               --latest
           fi
 
