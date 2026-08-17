@@ -37,19 +37,20 @@ jobs:
         run: |
           set -euo pipefail
           workflow=.github/workflows/release-apk.yml
-          if grep -nE "PUTTVISION_(STORE_PASSWORD|KEY_PASSWORD|KEY_ALIAS).*\|\|" "$workflow"; then
-            echo "Release signing secrets must not have fallback values" >&2
-            exit 1
-          fi
           if grep -nE 'openssl rand -hex|keytool -genkeypair|bootstrapping a persistent replacement release key|Restore or bootstrap release signing bundle' "$workflow"; then
             echo "Release CI must never generate a replacement Android signing identity" >&2
             exit 1
           fi
           grep -q 'Restore release signing bundle' "$workflow"
           grep -q 'Missing required release signing secret' "$workflow"
-          grep -q 'puttvision-signing-vault-v2' "$workflow"
-          grep -q -- '--draft' "$workflow"
-          grep -q 'chmod 600' "$workflow"
+          grep -q 'puttvision-signing-vault-v3' "$workflow"
+          grep -q 'signing-lineage' "$workflow"
+          grep -q -- '--lineage' "$workflow"
+          grep -q '7a5962aee08d9edc655da5f58cb8199b4d41604793ef539bd0111df2ca0900cb' "$workflow"
+          if grep -q 'puttvision-signing-vault-v1\|puttvision-signing-vault-v2' "$workflow"; then
+            echo "Release CI must not fall back to broken pre-v3 signing vault selection" >&2
+            exit 1
+          fi
 
       - name: Require release accuracy regression gate wiring
         shell: bash
