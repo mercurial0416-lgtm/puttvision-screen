@@ -21,6 +21,13 @@ android {
         versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 105
         versionName = System.getenv("PV_VERSION_NAME") ?: "1.2.0-v16"
         buildConfigField("String", "LICENSE_PUBLIC_KEY_B64", "\"$licensePublicKey\"")
+
+        // V131: Filament/Filamat ship universal native AARs. PuttVision's supported
+        // physical Android target is ARM64; filtering the unused x86/32-bit binaries
+        // keeps the self-update APK below the storage release ceiling.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildFeatures {
