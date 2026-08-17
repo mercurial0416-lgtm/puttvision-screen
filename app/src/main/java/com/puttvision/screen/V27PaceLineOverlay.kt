@@ -8,7 +8,10 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.view.View
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 /** Pure presentation plan for the pre-shot SOLO green-read HUD. */
 data class V111GreenReadHudPlan(
@@ -115,6 +118,43 @@ object V111GreenReadHudPlanner {
     }
 }
 
+/**
+ * Keeps the broadcast trail bounded without chopping off its cup-side endpoint.
+ * Invalid world coordinates are rejected before projection so a malformed solver trail
+ * cannot waste projection work or spray graphics outside the useful green envelope.
+ */
+object V113BroadcastTrailPlanner {
+    private const val MIN_POINT_SEPARATION_M = .002
+
+    fun sample(
+        raw: List<Pair<Double, Double>>,
+        holeDistanceM: Double,
+        cap: Int
+    ): List<Pair<Double, Double>> {
+        if (!holeDistanceM.isFinite() || holeDistanceM !in 0.1..40.0 || cap < 2 || raw.isEmpty()) return emptyList()
+
+        val maxY = max(8.0, min(45.0, holeDistanceM + 5.0))
+        val maxX = max(6.0, min(30.0, holeDistanceM * 1.25 + 2.0))
+        val filtered = ArrayList<Pair<Double, Double>>(min(raw.size, cap * 2))
+        raw.forEach { point ->
+            val x = point.first
+            val y = point.second
+            if (!x.isFinite() || !y.isFinite()) return@forEach
+            if (abs(x) > maxX || y !in -1.0..maxY) return@forEach
+            val last = filtered.lastOrNull()
+            if (last != null && hypot(x - last.first, y - last.second) < MIN_POINT_SEPARATION_M) return@forEach
+            filtered += x to y
+        }
+
+        if (filtered.size <= cap) return filtered
+        val lastIndex = filtered.lastIndex
+        return List(cap) { i ->
+            val index = (i.toDouble() * lastIndex.toDouble() / (cap - 1).toDouble()).roundToInt().coerceIn(0, lastIndex)
+            filtered[index]
+        }
+    }
+}
+
 /** Lightweight TV overlay for pace-aware ideal line. Training status is rendered by V31TrainingTvOverlay. */
 class V27PaceLineOverlay(context: Context, private val engine: GameEngine) : View(context) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -134,25 +174,47 @@ class V27PaceLineOverlay(context: Context, private val engine: GameEngine) : Vie
 
     private fun drawPaceLine(c: Canvas, read: GreenRead?, plan: V111GreenReadHudPlan) {
         if (!plan.show || read == null || !read.solverReliable || plan.trailSampleCap <= 0) return
-        val pts = read.predictedTrail.asSequence().mapNotNull { (x, y) ->
-            if (!x.isFinite() || !y.isFinite()) null else V25FlagProjectionRuntime.project(
-                x,
-                y,
-                GreenTerrain.effectiveHeightAt(engine.settings, x, y) + .018
-            )
-        }.take(plan.trailSampleCap).toList()
-        if (pts.size > 1) {
-            val ideal = Path().apply {
-                moveTo(pts.first().x, pts.first().y)
-                pts.drop(1).forEach { lineTo(it.x, it.y) }
-            }
-            p.style = Paint.Style.STROKE
-            p.strokeWidth = max(3f, width * .0017f)
-            p.strokeCap = Paint.Cap.ROUND
-            p.color = Color.argb(plan.trailAlpha, 255, 202, 61)
-            c.drawPath(ideal, p)
-            p.style = Paint.Style.FILL
+        val world = V113BroadcastTrailPlanner.sample(
+            raw = read.predictedTrail,
+            holeDistanceM = engine.settings.holeDistanceM,
+            cap = plan.trailSampleCap
+        )
+        val pts = world.mapNotNull { (x, y) ->
+            val z = GreenTerrain.effectiveHeightAt(engine.settings, x, y)
+            if (!z.isFinite()) null else V25FlagProjectionRuntime.project(x, y, z + .018)
         }
+        if (pts.size <= 1) return
+
+        val ideal = Path().apply {
+            moveTo(pts.first().x, pts.first().y)
+            pts.drop(1).forEach { lineTo(it.x, it.y) }
+        }
+        val mainStroke = max(3f, width * .0017f)
+
+        // Dark under-stroke keeps the read line visible on both bright and shadowed green textures.
+        p.style = Paint.Style.STROKE
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        p.strokeWidth = mainStroke * 2.25f
+        p.color = Color.argb((plan.trailAlpha * .44f).toInt().coerceIn(38, 112), 2, 8, 10)
+        c.drawPath(ideal, p)
+
+        p.strokeWidth = mainStroke
+        p.color = Color.argb(plan.trailAlpha, 255, 202, 61)
+        c.drawPath(ideal, p)
+
+        // Broadcast-style origin/terminal beads make direction obvious without adding another HUD label.
+        p.style = Paint.Style.FILL
+        val beadR = max(3.5f, width * .0024f)
+        p.color = Color.argb((plan.trailAlpha * .72f).toInt().coerceIn(80, 220), 255, 245, 214)
+        c.drawCircle(pts.first().x, pts.first().y, beadR * .70f, p)
+        p.color = Color.argb(plan.trailAlpha, 255, 202, 61)
+        c.drawCircle(pts.last().x, pts.last().y, beadR, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = max(1.5f, mainStroke * .65f)
+        p.color = Color.argb((plan.trailAlpha * .78f).toInt().coerceIn(88, 220), 10, 18, 20)
+        c.drawCircle(pts.last().x, pts.last().y, beadR * 1.55f, p)
+        p.style = Paint.Style.FILL
     }
 
     private fun drawBroadcastRead(c: Canvas, plan: V111GreenReadHudPlan) {
