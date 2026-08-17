@@ -34,7 +34,7 @@ android {
             buildConfigField("boolean", "DEVELOPER_BUILD", "false")
         }
         create("developer") {
-            dimension = "distribution"")
+            dimension = "distribution"
             buildConfigField("boolean", "DEVELOPER_BUILD", "true")
         }
     }
