@@ -1,6 +1,8 @@
 package com.puttvision.screen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class V24AdaptiveTvQualityTest {
@@ -80,5 +82,79 @@ class V24AdaptiveTvQualityTest {
             thermalSevere = severe
         )
         assertEquals(V24RenderTier.PERFORMANCE, d.tier)
+    }
+
+    @Test fun autoSafetyDowngradeIsImmediate() {
+        assertFalse(V24TvTierStabilityPlanner.isUpgrade(V24RenderTier.HIGH, V24RenderTier.PERFORMANCE))
+        assertEquals(
+            V24RenderTier.PERFORMANCE,
+            V24TvTierStabilityPlanner.resolve(
+                V24TvQualityMode.AUTO,
+                currentTier = V24RenderTier.HIGH,
+                candidateTier = V24RenderTier.PERFORMANCE,
+                candidateStableMs = 0L
+            )
+        )
+    }
+
+    @Test fun autoCosmeticUpgradeWaitsForStableWindow() {
+        assertTrue(V24TvTierStabilityPlanner.isUpgrade(V24RenderTier.PERFORMANCE, V24RenderTier.HIGH))
+        assertEquals(
+            V24RenderTier.PERFORMANCE,
+            V24TvTierStabilityPlanner.resolve(
+                V24TvQualityMode.AUTO,
+                currentTier = V24RenderTier.PERFORMANCE,
+                candidateTier = V24RenderTier.HIGH,
+                candidateStableMs = V24TvTierStabilityPlanner.AUTO_UPGRADE_HOLD_MS - 1L
+            )
+        )
+    }
+
+    @Test fun autoCosmeticUpgradeAppliesAfterStableWindow() {
+        assertEquals(
+            V24RenderTier.HIGH,
+            V24TvTierStabilityPlanner.resolve(
+                V24TvQualityMode.AUTO,
+                currentTier = V24RenderTier.PERFORMANCE,
+                candidateTier = V24RenderTier.HIGH,
+                candidateStableMs = V24TvTierStabilityPlanner.AUTO_UPGRADE_HOLD_MS
+            )
+        )
+    }
+
+    @Test fun autoIntermediateUpgradeIsAlsoHeld() {
+        assertEquals(
+            V24RenderTier.PERFORMANCE,
+            V24TvTierStabilityPlanner.resolve(
+                V24TvQualityMode.AUTO,
+                currentTier = V24RenderTier.PERFORMANCE,
+                candidateTier = V24RenderTier.BALANCED,
+                candidateStableMs = 400L
+            )
+        )
+    }
+
+    @Test fun forcedModesDoNotWaitForCosmeticHysteresis() {
+        assertEquals(
+            V24RenderTier.HIGH,
+            V24TvTierStabilityPlanner.resolve(
+                V24TvQualityMode.HIGH,
+                currentTier = V24RenderTier.PERFORMANCE,
+                candidateTier = V24RenderTier.HIGH,
+                candidateStableMs = 0L
+            )
+        )
+    }
+
+    @Test fun negativeStableDurationCannotBypassHold() {
+        assertEquals(
+            V24RenderTier.BALANCED,
+            V24TvTierStabilityPlanner.resolve(
+                V24TvQualityMode.AUTO,
+                currentTier = V24RenderTier.BALANCED,
+                candidateTier = V24RenderTier.HIGH,
+                candidateStableMs = -1L
+            )
+        )
     }
 }
