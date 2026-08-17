@@ -322,6 +322,12 @@ class AppUpdater(
             ?: error("다운로드 APK 패키지 정보를 읽을 수 없습니다")
         require(candidate.packageName == activity.packageName) { "업데이트 APK 패키지명이 PuttVision과 다릅니다" }
 
+        fun signatureDigests(signatures: List<android.content.pm.Signature>): Set<String> =
+            signatures.mapTo(linkedSetOf()) { signature ->
+                val md = MessageDigest.getInstance("SHA-256")
+                md.digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
+            }
+
         fun signerDigests(info: android.content.pm.PackageInfo): Set<String> {
             val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val signing = info.signingInfo ?: return emptySet()
@@ -331,16 +337,27 @@ class AppUpdater(
             } else {
                 @Suppress("DEPRECATION") info.signatures?.toList().orEmpty()
             }
-            return signatures.mapTo(linkedSetOf()) { signature ->
-                val md = MessageDigest.getInstance("SHA-256")
-                md.digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
+            return signatureDigests(signatures)
+        }
+
+        fun currentSignerDigests(info: android.content.pm.PackageInfo): Set<String> {
+            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.signingInfo?.apkContentsSigners?.toList().orEmpty()
+            } else {
+                @Suppress("DEPRECATION") info.signatures?.toList().orEmpty()
             }
+            return signatureDigests(signatures)
         }
 
         val installedSigners = signerDigests(installed)
         val candidateSigners = signerDigests(candidate)
-        require(installedSigners.isNotEmpty() && candidateSigners.isNotEmpty()) { "APK 서명 정보를 읽을 수 없습니다" }
-        require(installedSigners.any { it in candidateSigners }) { "업데이트 APK 서명이 현재 PuttVision과 다릅니다" }
+        val candidateCurrentSigners = currentSignerDigests(candidate)
+        require(installedSigners.isNotEmpty() && candidateSigners.isNotEmpty() && candidateCurrentSigners.isNotEmpty()) {
+            "APK 서명 정보를 읽을 수 없습니다"
+        }
+        require(V130UpdateSignerPolicy.allows(installedSigners, candidateSigners, candidateCurrentSigners)) {
+            "업데이트 APK 서명이 신뢰된 PuttVision 서명 계보와 다릅니다"
+        }
         return if (Build.VERSION.SDK_INT >= 28) candidate.longVersionCode else {
             @Suppress("DEPRECATION") candidate.versionCode.toLong()
         }
