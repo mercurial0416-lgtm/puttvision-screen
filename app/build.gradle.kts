@@ -34,7 +34,7 @@ android {
             buildConfigField("boolean", "DEVELOPER_BUILD", "false")
         }
         create("developer") {
-            dimension = "distribution"
+            dimension = "distribution"")
             buildConfigField("boolean", "DEVELOPER_BUILD", "true")
         }
     }
@@ -95,6 +95,12 @@ dependencies {
     implementation("androidx.room:room-runtime:$room")
     implementation("androidx.room:room-ktx:$room")
     kapt("androidx.room:room-compiler:$room")
+
+    // V131: physically based TV renderer. Filamat is used only to compile the tiny
+    // original PuttVision material package once when the Filament surface is created.
+    val filament = "1.75.0"
+    implementation("com.google.android.filament:filament-android:$filament")
+    implementation("com.google.android.filament:filamat-android:$filament")
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")
