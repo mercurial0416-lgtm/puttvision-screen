@@ -1,0 +1,96 @@
+name: Apply V130 updater signer-policy patch
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/v130-updater-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace archive-overlap-only signer check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/puttvision/screen/AppUpdater.kt')
+          s = p.read_text()
+          old = '''        fun signerDigests(info: android.content.pm.PackageInfo): Set<String> {
+              val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                  val signing = info.signingInfo ?: return emptySet()
+                  val current = signing.apkContentsSigners?.toList().orEmpty()
+                  val history = if (signing.hasMultipleSigners()) emptyList() else signing.signingCertificateHistory?.toList().orEmpty()
+                  (current + history).distinctBy { it.toCharsString() }
+              } else {
+                  @Suppress("DEPRECATION") info.signatures?.toList().orEmpty()
+              }
+              return signatures.mapTo(linkedSetOf()) { signature ->
+                  val md = MessageDigest.getInstance("SHA-256")
+                  md.digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
+              }
+          }
+
+          val installedSigners = signerDigests(installed)
+          val candidateSigners = signerDigests(candidate)
+          require(installedSigners.isNotEmpty() && candidateSigners.isNotEmpty()) { "APK 서명 정보를 읽을 수 없습니다" }
+          require(installedSigners.any { it in candidateSigners }) { "업데이트 APK 서명이 현재 PuttVision과 다릅니다" }
+          '''
+          new = '''        fun signatureDigests(signatures: List<android.content.pm.Signature>): Set<String> =
+              signatures.mapTo(linkedSetOf()) { signature ->
+                  val md = MessageDigest.getInstance("SHA-256")
+                  md.digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
+              }
+
+          fun signerDigests(info: android.content.pm.PackageInfo): Set<String> {
+              val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                  val signing = info.signingInfo ?: return emptySet()
+                  val current = signing.apkContentsSigners?.toList().orEmpty()
+                  val history = if (signing.hasMultipleSigners()) emptyList() else signing.signingCertificateHistory?.toList().orEmpty()
+                  (current + history).distinctBy { it.toCharsString() }
+              } else {
+                  @Suppress("DEPRECATION") info.signatures?.toList().orEmpty()
+              }
+              return signatureDigests(signatures)
+          }
+
+          fun currentSignerDigests(info: android.content.pm.PackageInfo): Set<String> {
+              val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                  info.signingInfo?.apkContentsSigners?.toList().orEmpty()
+              } else {
+                  @Suppress("DEPRECATION") info.signatures?.toList().orEmpty()
+              }
+              return signatureDigests(signatures)
+          }
+
+          val installedSigners = signerDigests(installed)
+          val candidateSigners = signerDigests(candidate)
+          val candidateCurrentSigners = currentSignerDigests(candidate)
+          require(installedSigners.isNotEmpty() && candidateSigners.isNotEmpty() && candidateCurrentSigners.isNotEmpty()) {
+              "APK 서명 정보를 읽을 수 없습니다"
+          }
+          require(V130UpdateSignerPolicy.allows(installedSigners, candidateSigners, candidateCurrentSigners)) {
+              "업데이트 APK 서명이 신뢰된 PuttVision 서명 계보와 다릅니다"
+          }
+          '''
+          if old not in s:
+              raise SystemExit('expected AppUpdater signer block not found; refusing blind patch')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          git diff -- app/src/main/java/com/puttvision/screen/AppUpdater.kt
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/java/com/puttvision/screen/AppUpdater.kt
+          git commit -m '[no-release] V130: accept only audited signing-lineage rotations'
+          git push origin HEAD:main
