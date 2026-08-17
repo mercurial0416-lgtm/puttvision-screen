@@ -156,12 +156,33 @@ jobs:
           echo "$PV_RELEASE_SHA  uploaded.apk" | sha256sum -c -
 
       - name: Publish GitHub Release
+        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          gh release create "$PV_TAG" puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256 --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified full-lineage consumer/developer release" --latest
+          set -u
+          ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            echo "GitHub Release attempt $attempt/6"
+            if gh release view "$PV_TAG" >/dev/null 2>&1; then
+              if gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber && gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified full-lineage consumer/developer release" --latest; then
+                ok=1
+                break
+              fi
+            else
+              if gh release create "$PV_TAG" "${ASSETS[@]}" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified full-lineage consumer/developer release" --latest; then
+                ok=1
+                break
+              fi
+            fi
+            sleep $((attempt * 4))
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::warning::GitHub Release API remained unavailable; Supabase update publication will continue."
+            exit 1
+          fi
 
       - name: Publish verified Supabase update manifest
         shell: bash
@@ -175,3 +196,4 @@ jobs:
           jq -e '.ok == true and .action == "finalize"' finalize.json >/dev/null
           LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
           echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" '.versionCode == $vc and .sha256 == $sha' >/dev/null
+          echo "$LIVE" | jq .
