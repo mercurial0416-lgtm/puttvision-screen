@@ -10,6 +10,8 @@ data class GreenSettings(
     var terrainProfileId: Int = -1    // -1 = uniform plane, 0..23 = practice terrain profile
 )
 
+enum class V134CupPhase { NONE, RIM, DROP, SETTLED }
+
 data class SimState(
     var x: Double = 0.0,
     var y: Double = 0.0,
@@ -21,7 +23,18 @@ data class SimState(
     val trail: MutableList<Pair<Double, Double>> = mutableListOf(),
     var cupContacts: Int = 0,
     var lipOut: Boolean = false,
-    var lastCupContactSec: Double = -10.0
+    var lastCupContactSec: Double = -10.0,
+    var cupPhase: V134CupPhase = V134CupPhase.NONE,
+    var cupPhaseElapsedSec: Double = 0.0,
+    var cupVerticalOffsetM: Double = 0.0,
+    var cupEntrySpeedMps: Double = 0.0,
+    var cupRimAngleRad: Double = 0.0,
+    var cupRimRadiusM: Double = 0.0,
+    var cupRimAngularVelocityRadS: Double = 0.0,
+    var cupRimWillDrop: Boolean = false,
+    var cupRimDurationSec: Double = 0.0,
+    var cupRimReleaseSpeedMps: Double = 0.0,
+    var cupDropDurationSec: Double = 0.0
 )
 
 data class SimResult(
@@ -41,9 +54,20 @@ class GreenPhysics {
         private const val ROLLING_GRAVITY_FACTOR = 5.0 / 7.0
         private const val CUP_RADIUS_M = 0.054
         private const val BALL_RADIUS_M = 0.02135
-        // Center-path radius that lets the ball fall rather than ride the rim.
+
+        // Center-path radius that lets the ball lose support over the opening.
         private const val CAPTURE_CENTER_RADIUS_M = CUP_RADIUS_M - BALL_RADIUS_M * 0.24
         private const val RIM_CONTACT_RADIUS_M = CUP_RADIUS_M + BALL_RADIUS_M * 0.80
+
+        // V134 cup interaction is deliberately time-resolved. The old engine snapped a captured
+        // ball to the center and ended the shot in one physics tick, which could never look like a
+        // real screen-golf cup. These values keep the rolling model 2D while exposing a physical
+        // vertical presentation coordinate for the Filament renderer.
+        private const val RIM_TRACK_RADIUS_M = 0.0575
+        private const val DROP_ENTRY_RADIUS_M = 0.0305
+        private const val CUP_DROP_DEPTH_M = 0.108
+        private const val MIN_DROP_SEC = 0.32
+        private const val MAX_DROP_SEC = 0.50
     }
 
     fun launch(
@@ -73,6 +97,19 @@ class GreenPhysics {
         if (!state.running) return result(state, settings)
 
         val dt = dtRaw.coerceIn(0.001, 0.025)
+        if (cupEnabled) {
+            when (state.cupPhase) {
+                V134CupPhase.RIM -> return stepRim(state, settings, dt)
+                V134CupPhase.DROP -> return stepDrop(state, settings, dt)
+                V134CupPhase.SETTLED -> {
+                    state.running = false
+                    state.holed = true
+                    return result(state, settings)
+                }
+                V134CupPhase.NONE -> Unit
+            }
+        }
+
         val stimp = settings.stimpMeters.coerceIn(1.5, 5.0)
 
         // A Stimpmeter launches at a fixed speed; if it stops after S meters under
@@ -114,16 +151,9 @@ class GreenPhysics {
         state.x += state.vx * dt
         state.y += state.vy * dt
         state.elapsed += dt
+        state.cupVerticalOffsetM = 0.0
 
-        if (state.trail.isEmpty() ||
-            hypot(
-                state.x - state.trail.last().first,
-                state.y - state.trail.last().second
-            ) > 0.035
-        ) {
-            state.trail += state.x to state.y
-            if (state.trail.size > 500) state.trail.removeAt(0)
-        }
+        appendTrail(state)
 
         val cupX = 0.0
         val cupY = settings.holeDistanceM
@@ -133,21 +163,29 @@ class GreenPhysics {
         val closestDy = closest.second - cupY
         val closestDist = hypot(closestDx, closestDy)
         val normalizedOffset = (closestDist / CAPTURE_CENTER_RADIUS_M).coerceIn(0.0, 1.4)
-        // Off-centre balls need a slower lip speed to fall. A dead-centre ball
-        // can carry more speed, while a fast skim is explicitly a lip-out.
+
+        // Off-centre balls need a slower lip speed to fall. A dead-centre ball can carry more
+        // pace, while a fast skim is explicitly allowed to bridge the opening.
         val captureSpeed = (1.20 - normalizedOffset * 0.48).coerceIn(0.52, 1.20)
 
-        // Capture is evaluated while the ball is still approaching the opening.
-        // Do this before rim contact so a centered, properly paced putt is not
-        // incorrectly bounced off an imaginary vertical wall in front of the cup.
         if (cupEnabled && closestDist <= CAPTURE_CENTER_RADIUS_M && nowSpeed <= captureSpeed) {
-            state.x = cupX
-            state.y = cupY
-            state.vx = 0.0
-            state.vy = 0.0
-            state.running = false
-            state.holed = true
-            return result(state, settings)
+            state.x = closest.first
+            state.y = closest.second
+            val centered = normalizedOffset <= 0.30 && nowSpeed <= captureSpeed * 0.94
+            if (centered) {
+                beginDrop(state, nowSpeed)
+            } else {
+                beginRim(
+                    state = state,
+                    cupX = cupX,
+                    cupY = cupY,
+                    contactX = closest.first,
+                    contactY = closest.second,
+                    entrySpeed = nowSpeed,
+                    willDrop = true
+                )
+            }
+            return null
         }
 
         val oldCupDistance = hypot(oldX - cupX, oldY - cupY)
@@ -156,37 +194,30 @@ class GreenPhysics {
             (oldY - cupY) * (state.y - cupY) <= 0.0 && abs(state.y - oldY) > 1e-9
         val reachedClosestApproach = newCupDistance >= oldCupDistance || crossedCupPlane
 
-        // A rim collision is only possible once the trajectory has reached/passed
-        // its closest approach. Entering the outer rim radius while still moving
-        // toward the hole is not itself a collision.
         if (
             cupEnabled &&
             closestDist <= RIM_CONTACT_RADIUS_M &&
             reachedClosestApproach &&
             state.elapsed - state.lastCupContactSec > 0.075
         ) {
-            state.lipOut = true
-            state.cupContacts++
-            state.lastCupContactSec = state.elapsed
-
-            // A true edge contact gets a damped radial rebound. A very fast
-            // centre-line pass is allowed to bridge the cup rather than receiving
-            // an artificial sideways kick.
-            if (closestDist > CAPTURE_CENTER_RADIUS_M * 0.56 && closestDist > 1e-5 && nowSpeed <= 1.85) {
-                val nx = closestDx / closestDist
-                val ny = closestDy / closestDist
-                val vn = state.vx * nx + state.vy * ny
-                if (vn < 0.0) {
-                    val tx = state.vx - vn * nx
-                    val ty = state.vy - vn * ny
-                    val rebound = -vn * 0.34
-                    state.vx = tx * 0.78 + rebound * nx
-                    state.vy = ty * 0.78 + rebound * ny
-                    // Keep the ball just outside the effective rim after contact.
-                    val push = RIM_CONTACT_RADIUS_M + 0.002
-                    state.x = cupX + nx * push
-                    state.y = cupY + ny * push
-                }
+            // Very fast near-centre putts can bridge the cup. Edge contact below this speed gets
+            // a real time-resolved rim phase instead of an instantaneous velocity reflection.
+            val edgeContact = closestDist > CAPTURE_CENTER_RADIUS_M * 0.48
+            if (edgeContact && closestDist > 1e-5 && nowSpeed <= 1.90) {
+                val edgeNorm = ((closestDist - CAPTURE_CENTER_RADIUS_M) /
+                    (RIM_CONTACT_RADIUS_M - CAPTURE_CENTER_RADIUS_M)).coerceIn(0.0, 1.0)
+                val rimCaptureSpeed = (0.96 - edgeNorm * 0.30).coerceIn(0.58, 0.96)
+                val willDrop = nowSpeed <= rimCaptureSpeed && closestDist <= CUP_RADIUS_M + BALL_RADIUS_M * 0.42
+                beginRim(
+                    state = state,
+                    cupX = cupX,
+                    cupY = cupY,
+                    contactX = closest.first,
+                    contactY = closest.second,
+                    entrySpeed = nowSpeed,
+                    willDrop = willDrop
+                )
+                return null
             }
         }
 
@@ -194,9 +225,7 @@ class GreenPhysics {
         val dy = state.y - cupY
         val toCup = hypot(dx, dy)
 
-        if (state.elapsed > 20.0 || state.y > settings.holeDistanceM + 8.0 ||
-            abs(state.x) > 8.0
-        ) {
+        if (state.elapsed > 20.0 || state.y > settings.holeDistanceM + 8.0 || abs(state.x) > 8.0) {
             state.running = false
             return result(state, settings)
         }
@@ -214,6 +243,179 @@ class GreenPhysics {
         return null
     }
 
+    private fun beginRim(
+        state: SimState,
+        cupX: Double,
+        cupY: Double,
+        contactX: Double,
+        contactY: Double,
+        entrySpeed: Double,
+        willDrop: Boolean
+    ) {
+        val dx = contactX - cupX
+        val dy = contactY - cupY
+        val distance = hypot(dx, dy).coerceAtLeast(1e-6)
+        val nx = dx / distance
+        val ny = dy / distance
+        val tx = -ny
+        val ty = nx
+        val tangentSpeed = state.vx * tx + state.vy * ty
+        val cross = nx * state.vy - ny * state.vx
+        val direction = when {
+            abs(tangentSpeed) > 0.015 -> sign(tangentSpeed)
+            abs(cross) > 0.015 -> sign(cross)
+            state.vx < 0.0 -> -1.0
+            else -> 1.0
+        }
+        var omega = tangentSpeed / RIM_TRACK_RADIUS_M
+        if (abs(omega) < 1.55) omega = direction * 1.55
+        omega = omega.coerceIn(-15.0, 15.0)
+
+        state.cupContacts++
+        state.lastCupContactSec = state.elapsed
+        state.cupPhase = V134CupPhase.RIM
+        state.cupPhaseElapsedSec = 0.0
+        state.cupVerticalOffsetM = 0.0
+        state.cupEntrySpeedMps = entrySpeed.coerceAtLeast(0.0)
+        state.cupRimAngleRad = atan2(dy, dx)
+        state.cupRimRadiusM = RIM_TRACK_RADIUS_M
+        state.cupRimAngularVelocityRadS = omega
+        state.cupRimWillDrop = willDrop
+        state.cupRimDurationSec = if (willDrop) {
+            (0.62 - entrySpeed * 0.19 + min(0.09, abs(omega) * 0.006)).coerceIn(0.34, 0.68)
+        } else {
+            (0.18 + (1.35 - entrySpeed).coerceIn(0.0, 1.0) * 0.12).coerceIn(0.18, 0.31)
+        }
+        state.cupRimReleaseSpeedMps = (entrySpeed * 0.62).coerceIn(0.16, 1.12)
+        state.x = cupX + cos(state.cupRimAngleRad) * RIM_TRACK_RADIUS_M
+        state.y = cupY + sin(state.cupRimAngleRad) * RIM_TRACK_RADIUS_M
+        state.vx = -sin(state.cupRimAngleRad) * omega * RIM_TRACK_RADIUS_M
+        state.vy = cos(state.cupRimAngleRad) * omega * RIM_TRACK_RADIUS_M
+        // We mark contact now. If the ball ultimately falls, SimResult suppresses lipOut.
+        state.lipOut = true
+        appendTrail(state)
+    }
+
+    private fun stepRim(state: SimState, settings: GreenSettings, dt: Double): SimResult? {
+        val cupX = 0.0
+        val cupY = settings.holeDistanceM
+        state.elapsed += dt
+        state.cupPhaseElapsedSec += dt
+
+        val duration = state.cupRimDurationSec.coerceAtLeast(0.16)
+        val raw = (state.cupPhaseElapsedSec / duration).coerceIn(0.0, 1.0)
+        val p = smoothStep(raw)
+        val oldX = state.x
+        val oldY = state.y
+
+        val damping = if (state.cupRimWillDrop) 2.15 else 0.82
+        state.cupRimAngularVelocityRadS *= exp(-damping * dt)
+        state.cupRimAngleRad += state.cupRimAngularVelocityRadS * dt
+
+        state.cupRimRadiusM = if (state.cupRimWillDrop) {
+            lerp(RIM_TRACK_RADIUS_M, DROP_ENTRY_RADIUS_M, p)
+        } else {
+            lerp(RIM_TRACK_RADIUS_M, RIM_CONTACT_RADIUS_M + 0.004, p)
+        }
+        state.x = cupX + cos(state.cupRimAngleRad) * state.cupRimRadiusM
+        state.y = cupY + sin(state.cupRimAngleRad) * state.cupRimRadiusM
+        state.vx = (state.x - oldX) / dt
+        state.vy = (state.y - oldY) / dt
+
+        // A tiny vertical dip makes the ball visibly ride the edge instead of sliding on a flat
+        // decal. It is intentionally only millimetres until support is genuinely lost.
+        state.cupVerticalOffsetM = if (state.cupRimWillDrop) {
+            -0.0025 * p - 0.0030 * sin(PI * p)
+        } else {
+            -0.0015 * sin(PI * p)
+        }
+        appendTrail(state)
+
+        if (raw < 1.0) return null
+
+        if (state.cupRimWillDrop) {
+            beginDrop(state, state.cupEntrySpeedMps)
+            return null
+        }
+
+        // Lip-out release: preserve the orbit direction, add a modest outward component and put
+        // the ball beyond the contact shell so it cannot instantly collide with the same lip again.
+        val angle = state.cupRimAngleRad
+        val nx = cos(angle)
+        val ny = sin(angle)
+        val tx = -ny
+        val ty = nx
+        val tangentSign = if (state.cupRimAngularVelocityRadS < 0.0) -1.0 else 1.0
+        val release = state.cupRimReleaseSpeedMps.coerceAtLeast(0.14)
+        state.x = cupX + nx * (RIM_CONTACT_RADIUS_M + 0.007)
+        state.y = cupY + ny * (RIM_CONTACT_RADIUS_M + 0.007)
+        state.vx = tx * tangentSign * release * 0.78 + nx * release * 0.46
+        state.vy = ty * tangentSign * release * 0.78 + ny * release * 0.46
+        state.cupPhase = V134CupPhase.NONE
+        state.cupPhaseElapsedSec = 0.0
+        state.cupVerticalOffsetM = 0.0
+        state.lastCupContactSec = state.elapsed
+        appendTrail(state)
+        return null
+    }
+
+    private fun beginDrop(state: SimState, entrySpeed: Double) {
+        state.cupPhase = V134CupPhase.DROP
+        state.cupPhaseElapsedSec = 0.0
+        state.cupEntrySpeedMps = entrySpeed.coerceAtLeast(0.0)
+        state.cupDropDurationSec = (0.46 - entrySpeed * 0.08).coerceIn(MIN_DROP_SEC, MAX_DROP_SEC)
+        state.cupVerticalOffsetM = min(state.cupVerticalOffsetM, -0.001)
+        state.running = true
+        state.holed = false
+    }
+
+    private fun stepDrop(state: SimState, settings: GreenSettings, dt: Double): SimResult? {
+        val cupX = 0.0
+        val cupY = settings.holeDistanceM
+        val oldX = state.x
+        val oldY = state.y
+        state.elapsed += dt
+        state.cupPhaseElapsedSec += dt
+
+        val duration = state.cupDropDurationSec.coerceIn(MIN_DROP_SEC, MAX_DROP_SEC)
+        val raw = (state.cupPhaseElapsedSec / duration).coerceIn(0.0, 1.0)
+        val horizontal = 1.0 - exp(-7.5 * dt)
+        state.x += (cupX - state.x) * horizontal
+        state.y += (cupY - state.y) * horizontal
+        state.vx = (state.x - oldX) / dt
+        state.vy = (state.y - oldY) / dt
+
+        // Hold the ball on the lip for a few tens of milliseconds, then accelerate downward. This
+        // is a presentation coordinate only; x/y outcome physics remains deterministic.
+        val dropRaw = ((state.cupPhaseElapsedSec - 0.035) / (duration - 0.035)).coerceIn(0.0, 1.0)
+        val dropP = smoothStep(dropRaw).pow(1.18)
+        state.cupVerticalOffsetM = -CUP_DROP_DEPTH_M * dropP
+
+        if (raw < 1.0) return null
+
+        state.x = cupX
+        state.y = cupY
+        state.vx = 0.0
+        state.vy = 0.0
+        state.cupVerticalOffsetM = -CUP_DROP_DEPTH_M
+        state.cupPhase = V134CupPhase.SETTLED
+        state.running = false
+        state.holed = true
+        return result(state, settings)
+    }
+
+    private fun appendTrail(state: SimState) {
+        if (state.trail.isEmpty() ||
+            hypot(
+                state.x - state.trail.last().first,
+                state.y - state.trail.last().second
+            ) > 0.035
+        ) {
+            state.trail += state.x to state.y
+            if (state.trail.size > 500) state.trail.removeAt(0)
+        }
+    }
+
     private fun closestPointOnSegment(
         ax: Double,
         ay: Double,
@@ -229,6 +431,13 @@ class GreenPhysics {
         val t = (((px - ax) * dx + (py - ay) * dy) / denom).coerceIn(0.0, 1.0)
         return (ax + dx * t) to (ay + dy * t)
     }
+
+    private fun smoothStep(x: Double): Double {
+        val t = x.coerceIn(0.0, 1.0)
+        return t * t * (3.0 - 2.0 * t)
+    }
+
+    private fun lerp(a: Double, b: Double, t: Double): Double = a + (b - a) * t.coerceIn(0.0, 1.0)
 
     private fun result(state: SimState, settings: GreenSettings): SimResult {
         val dx = state.x
