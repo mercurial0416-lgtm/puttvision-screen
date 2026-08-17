@@ -138,20 +138,21 @@ object V24TvQualityRuntime {
     }
 
     fun snapshot(context: Context? = appContext): V24TvQualitySnapshot {
+        val selectedMode = mode
         val capture = V21CaptureConsistencyRuntime.latest
         val frameMs = capture?.frameDurationMs
         val hfr = frameMs != null && frameMs <= 10.5
         val thermal = thermalStatus(context)
         val raw = V24TvQualityPlanner.decide(
-            mode = mode,
+            mode = selectedMode,
             thermalStatus = thermal,
             highFrameRateActive = hfr,
             cameraQuality = capture?.score,
             thermalLight = thermalLight(),
             thermalSevere = thermalSevere()
         )
-        val stabilized = stabilize(raw, SystemClock.elapsedRealtime())
-        return V24TvQualitySnapshot(mode, stabilized.tier, thermal, hfr, capture?.score, stabilized.reason)
+        val stabilized = stabilize(selectedMode, raw, SystemClock.elapsedRealtime())
+        return V24TvQualitySnapshot(selectedMode, stabilized.tier, thermal, hfr, capture?.score, stabilized.reason)
     }
 
     fun label(): String {
@@ -159,8 +160,17 @@ object V24TvQualityRuntime {
         return "${s.mode.label} · ${s.tier.label} · ${s.reason}"
     }
 
-    private fun stabilize(raw: V24TvQualityDecision, nowMs: Long): V24TvQualityDecision = synchronized(stabilityLock) {
-        val selectedMode = mode
+    private fun stabilize(
+        selectedMode: V24TvQualityMode,
+        raw: V24TvQualityDecision,
+        nowMs: Long
+    ): V24TvQualityDecision = synchronized(stabilityLock) {
+        // If mode changed after snapshot captured its inputs, return the fresh caller on the next tick
+        // instead of mixing a decision computed under one mode with stability state from another.
+        if (selectedMode != mode) {
+            clearPendingUpgradeLocked()
+            return@synchronized V24TvQualityDecision(stableTier, "화질 모드 전환 중")
+        }
         if (selectedMode != V24TvQualityMode.AUTO) {
             stableTier = raw.tier
             clearPendingUpgradeLocked()
