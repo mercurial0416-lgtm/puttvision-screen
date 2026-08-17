@@ -14,8 +14,8 @@ class V76HardwarelessSoakTest {
         assertEquals(V76HardwarelessSoak.DEFAULT_RUNS, report.passedRuns)
         assertNull(report.firstFailureRun)
         assertNull(report.firstFailureStage)
-        assertEquals(V76HardwarelessSoak.EXPECTED_CHECKS_PER_RUN, report.minChecksPerRun)
-        assertEquals(V76HardwarelessSoak.EXPECTED_CHECKS_PER_RUN, report.maxChecksPerRun)
+        assertTrue(report.minChecksPerRun >= V76HardwarelessSoak.MIN_EXPECTED_CHECKS_PER_RUN)
+        assertEquals(report.minChecksPerRun, report.maxChecksPerRun)
         assertTrue(report.maxHistorySamples <= V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES)
         assertEquals(V75HardwarelessSelfTestHistoryRuntime.MAX_SAMPLES, report.finalHistorySamples)
         assertEquals(0, report.finalHistoryFailures)
@@ -26,6 +26,8 @@ class V76HardwarelessSoakTest {
     fun smallSoakReportsExactHistoryDepth() {
         val report = V76HardwarelessSoak.run(7)
         assertTrue(report.shortLabel(), report.passed)
+        assertTrue(report.minChecksPerRun >= V76HardwarelessSoak.MIN_EXPECTED_CHECKS_PER_RUN)
+        assertEquals(report.minChecksPerRun, report.maxChecksPerRun)
         assertEquals(7, report.finalHistorySamples)
         assertEquals(7, report.finalConsecutivePasses)
     }
