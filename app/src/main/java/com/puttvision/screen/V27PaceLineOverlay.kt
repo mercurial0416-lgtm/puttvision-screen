@@ -23,15 +23,21 @@ data class V111GreenReadHudPlan(
 )
 
 object V111GreenReadHudPlanner {
-    fun plan(read: GreenRead?, moving: Boolean, training: Boolean): V111GreenReadHudPlan {
+    fun plan(
+        read: GreenRead?,
+        moving: Boolean,
+        training: Boolean,
+        targetCupSpeedMps: Double = V27CupPaceRuntime.targetCupSpeedMps
+    ): V111GreenReadHudPlan {
+        val validCupSpeed = targetCupSpeedMps.takeIf { it.isFinite() && it in 0.0..5.0 }
         val valid = read?.takeIf {
-            it.solverReliable &&
+            it.solverReliable && validCupSpeed != null &&
                 it.recommendedBallSpeedMps.isFinite() && it.recommendedBallSpeedMps in 0.0..5.0 &&
                 it.aimOffsetCm.isFinite() && abs(it.aimOffsetCm) <= 500.0 &&
                 it.cupCount.isFinite() && it.cupCount in 0.0..50.0 &&
                 it.solverMissCm.isFinite() && it.solverMissCm >= 0.0
         }
-        if (moving || valid == null) {
+        if (moving || valid == null || validCupSpeed == null) {
             return V111GreenReadHudPlan(
                 show = false,
                 aimText = "",
@@ -61,10 +67,7 @@ object V111GreenReadHudPlanner {
             aimText = aimText,
             paceText = valid.paceHint.take(24).ifBlank { "기준 페이스" },
             confidenceText = "$confidence · SOLVER %.1fcm".format(miss),
-            speedText = "BALL %.2f m/s · CUP %.2f m/s".format(
-                valid.recommendedBallSpeedMps,
-                V27CupPaceRuntime.targetCupSpeedMps.coerceIn(0.0, 5.0)
-            ),
+            speedText = "BALL %.2f m/s · CUP %.2f m/s".format(valid.recommendedBallSpeedMps, validCupSpeed),
             aimAlpha = 235,
             secondaryAlpha = 188,
             refreshMs = if (training) 180L else 120L
@@ -83,9 +86,10 @@ class V27PaceLineOverlay(context: Context, private val engine: GameEngine) : Vie
         val moving = engine.state?.running == true || TvInstantRollRuntime.isAnimating()
         val read = if (!moving && engine.lastResult == null) GreenReadRuntime.peekOrSchedule(engine.settings) else null
         val training = V31TrainingSessionRuntime.progress().running
+        val hudPlan = V111GreenReadHudPlanner.plan(read, moving, training)
         drawPaceLine(c, read)
-        drawBroadcastRead(c, V111GreenReadHudPlanner.plan(read, moving, training))
-        postInvalidateDelayed(V111GreenReadHudPlanner.plan(read, moving, training).refreshMs)
+        drawBroadcastRead(c, hudPlan)
+        postInvalidateDelayed(hudPlan.refreshMs)
     }
 
     private fun drawPaceLine(c: Canvas, read: GreenRead?) {
