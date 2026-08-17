@@ -55,7 +55,7 @@ jobs:
             echo "No real-device reference dataset committed yet; release accuracy gate is armed but inactive."
           fi
 
-      - name: Restore or bootstrap release signing bundle
+      - name: Restore release signing bundle
         shell: bash
         env:
           SIGNING_BUNDLE_B64: ${{ secrets.PUTTVISION_SIGNING_BUNDLE_B64 }}
@@ -66,7 +66,6 @@ jobs:
           VAULT_TAG="puttvision-signing-vault-v2"
           VAULT_ASSET="puttvision-signing-bundle.tgz"
           SIGNING_DIR="$RUNNER_TEMP/puttvision-signing"
-          mkdir -p "$SIGNING_DIR"
 
           if [ -n "$SIGNING_BUNDLE_B64" ]; then
             printf '%s' "$SIGNING_BUNDLE_B64" | base64 -d > "$BUNDLE_FILE"
@@ -74,40 +73,16 @@ jobs:
           else
             ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
               --jq '.[] | select(.draft == true and (.tag_name == "puttvision-signing-vault-v1" or .tag_name == "puttvision-signing-vault-v2")) | .assets[] | select(.name == "puttvision-signing-bundle.tgz") | .id' | head -1)
-            if [ -n "$ASSET_ID" ]; then
-              gh api -H "Accept: application/octet-stream" \
-                "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE_FILE"
-              echo "Restored release signing bundle from private draft escrow."
-            else
-              echo "No signing backup exists; bootstrapping a persistent replacement release key."
-              STORE_PASSWORD=$(openssl rand -hex 32)
-              KEY_PASSWORD="$STORE_PASSWORD"
-              KEY_ALIAS="puttvision-release"
-              ROTATION_MIN_SDK=28
-              keytool -genkeypair \
-                -keystore "$SIGNING_DIR/release.jks" \
-                -storetype JKS \
-                -storepass "$STORE_PASSWORD" \
-                -keypass "$KEY_PASSWORD" \
-                -alias "$KEY_ALIAS" \
-                -keyalg RSA \
-                -keysize 4096 \
-                -validity 36500 \
-                -dname "CN=PuttVision Release,O=PuttVision,C=KR" \
-                -noprompt
-              cat > "$SIGNING_DIR/signing.env" <<EOF
-          STORE_PASSWORD=$STORE_PASSWORD
-          KEY_PASSWORD=$KEY_PASSWORD
-          KEY_ALIAS=$KEY_ALIAS
-          ROTATION_MIN_SDK=$ROTATION_MIN_SDK
-          EOF
-              chmod 600 "$SIGNING_DIR/release.jks" "$SIGNING_DIR/signing.env"
-              tar -czf "$BUNDLE_FILE" -C "$SIGNING_DIR" release.jks signing.env
+            if [ -z "$ASSET_ID" ]; then
+              echo "Missing required release signing secret: PUTTVISION_SIGNING_BUNDLE_B64; private signing escrow is also unavailable" >&2
+              exit 1
             fi
+            gh api -H "Accept: application/octet-stream" \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE_FILE"
+            echo "Restored release signing bundle from private draft escrow."
           fi
 
           test -s "$BUNDLE_FILE"
-          rm -rf "$SIGNING_DIR"
           mkdir -p "$SIGNING_DIR"
           tar -xzf "$BUNDLE_FILE" -C "$SIGNING_DIR"
           test -s "$SIGNING_DIR/release.jks"
@@ -131,7 +106,8 @@ jobs:
           done
           keytool -list -keystore "$SIGNING_DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
 
-          # Re-escrow every successfully restored/generated bundle so future releases do not depend on one source.
+          # Re-escrow only a signer that was actually restored. Never generate a replacement signer here:
+          # Android updates must preserve certificate continuity with already-installed builds.
           if gh release view "$VAULT_TAG" >/dev/null 2>&1; then
             gh release upload "$VAULT_TAG" "$BUNDLE_FILE#$VAULT_ASSET" --clobber
           else
