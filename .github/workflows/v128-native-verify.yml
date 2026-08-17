@@ -26,16 +26,20 @@ jobs:
           git fetch --depth=1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
 
-      - name: Show native toolchain
+      - name: Install exact Gradle 8.13 toolchain
         shell: bash
         run: |
           set -euo pipefail
           java -version
-          gradle --version
           test -n "${ANDROID_HOME:-}"
+          curl --fail --location --retry 5 --retry-delay 3 \
+            https://downloads.gradle.org/distributions/gradle-8.13-bin.zip \
+            --output "$RUNNER_TEMP/gradle-8.13-bin.zip"
+          unzip -q "$RUNNER_TEMP/gradle-8.13-bin.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/gradle-8.13/bin/gradle" --version
 
       - name: V128 consumer and developer regression tests
         shell: bash
         run: |
           set -euo pipefail
-          gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+          "$RUNNER_TEMP/gradle-8.13/bin/gradle" testConsumerDebugUnitTest testDeveloperDebugUnitTest
