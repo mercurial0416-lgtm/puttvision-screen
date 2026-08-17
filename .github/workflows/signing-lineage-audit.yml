@@ -23,7 +23,7 @@ jobs:
           echo "APKSIGNER=$A" >> "$GITHUB_ENV"
           "$A" version
 
-      - name: Print public certificate history from signing vaults
+      - name: Print public certificate history and keystore aliases
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,8 +41,15 @@ jobs:
             mkdir -p "$dir"
             tar -xzf "$out" -C "$dir"
             test -s "$dir/signing-lineage"
-            echo "===== $tag ====="
+            test -s "$dir/release.jks"
+            test -s "$dir/signing.env"
+            echo "===== $tag lineage ====="
             "$APKSIGNER" lineage --in "$dir/signing-lineage" --print-certs
+            set -a; source "$dir/signing.env"; set +a
+            test -n "${STORE_PASSWORD:-}"
+            echo "===== $tag keystore aliases ====="
+            keytool -list -v -keystore "$dir/release.jks" -storepass "$STORE_PASSWORD" | grep -E 'Alias name:|Entry type:|SHA256:' || true
+            unset STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK || true
           }
 
           audit_vault puttvision-signing-vault-v1 puttvision-signing-bundle.tgz
