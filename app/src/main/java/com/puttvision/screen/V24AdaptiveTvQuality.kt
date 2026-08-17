@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 
 enum class V24TvQualityMode(val label: String) {
     AUTO("자동"),
@@ -68,6 +69,37 @@ object V24TvQualityPlanner {
 }
 
 /**
+ * AUTO may receive noisy thermal/camera observations around a threshold. V122 rebuilds its whole
+ * course mesh when the render tier changes, so an upgrade is intentionally slower than a safety
+ * downgrade. HFR/heat protection still takes effect immediately; cosmetics return only after the
+ * candidate tier has stayed healthy for a bounded hold window.
+ */
+object V24TvTierStabilityPlanner {
+    const val AUTO_UPGRADE_HOLD_MS = 2_200L
+
+    fun resolve(
+        mode: V24TvQualityMode,
+        currentTier: V24RenderTier,
+        candidateTier: V24RenderTier,
+        candidateStableMs: Long
+    ): V24RenderTier {
+        if (mode != V24TvQualityMode.AUTO) return candidateTier
+        if (candidateTier == currentTier) return currentTier
+        if (!isUpgrade(currentTier, candidateTier)) return candidateTier
+        return if (candidateStableMs.coerceAtLeast(0L) >= AUTO_UPGRADE_HOLD_MS) candidateTier else currentTier
+    }
+
+    fun isUpgrade(currentTier: V24RenderTier, candidateTier: V24RenderTier): Boolean =
+        rank(candidateTier) > rank(currentTier)
+
+    private fun rank(tier: V24RenderTier): Int = when (tier) {
+        V24RenderTier.PERFORMANCE -> 0
+        V24RenderTier.BALANCED -> 1
+        V24RenderTier.HIGH -> 2
+    }
+}
+
+/**
  * Protects camera/HFR thermal budget before TV cosmetics. AUTO may reduce graphics load when
  * the phone is hot or a high-frame-rate camera session is observed; severe heat overrides every
  * cosmetic mode because measurement/camera stability has priority over TV rendering quality.
@@ -80,6 +112,10 @@ object V24TvQualityRuntime {
         private set
 
     private var appContext: Context? = null
+    private val stabilityLock = Any()
+    private var stableTier: V24RenderTier = V24RenderTier.HIGH
+    private var pendingUpgradeTier: V24RenderTier? = null
+    private var pendingUpgradeSinceMs: Long = 0L
 
     fun install(context: Context) {
         appContext = context.applicationContext
@@ -87,34 +123,89 @@ object V24TvQualityRuntime {
             .getString(KEY_MODE, V24TvQualityMode.AUTO.name)
         mode = runCatching { V24TvQualityMode.valueOf(saved ?: V24TvQualityMode.AUTO.name) }
             .getOrDefault(V24TvQualityMode.AUTO)
+        synchronized(stabilityLock) {
+            stableTier = V24RenderTier.HIGH
+            clearPendingUpgradeLocked()
+        }
     }
 
     fun setMode(context: Context, value: V24TvQualityMode) {
         appContext = context.applicationContext
         mode = value
+        synchronized(stabilityLock) { clearPendingUpgradeLocked() }
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
             .edit().putString(KEY_MODE, value.name).apply()
     }
 
     fun snapshot(context: Context? = appContext): V24TvQualitySnapshot {
+        val selectedMode = mode
         val capture = V21CaptureConsistencyRuntime.latest
         val frameMs = capture?.frameDurationMs
         val hfr = frameMs != null && frameMs <= 10.5
         val thermal = thermalStatus(context)
-        val decision = V24TvQualityPlanner.decide(
-            mode = mode,
+        val raw = V24TvQualityPlanner.decide(
+            mode = selectedMode,
             thermalStatus = thermal,
             highFrameRateActive = hfr,
             cameraQuality = capture?.score,
             thermalLight = thermalLight(),
             thermalSevere = thermalSevere()
         )
-        return V24TvQualitySnapshot(mode, decision.tier, thermal, hfr, capture?.score, decision.reason)
+        val stabilized = stabilize(selectedMode, raw, SystemClock.elapsedRealtime())
+        return V24TvQualitySnapshot(selectedMode, stabilized.tier, thermal, hfr, capture?.score, stabilized.reason)
     }
 
     fun label(): String {
         val s = snapshot()
         return "${s.mode.label} · ${s.tier.label} · ${s.reason}"
+    }
+
+    private fun stabilize(
+        selectedMode: V24TvQualityMode,
+        raw: V24TvQualityDecision,
+        nowMs: Long
+    ): V24TvQualityDecision = synchronized(stabilityLock) {
+        // If mode changed after snapshot captured its inputs, return the fresh caller on the next tick
+        // instead of mixing a decision computed under one mode with stability state from another.
+        if (selectedMode != mode) {
+            clearPendingUpgradeLocked()
+            return@synchronized V24TvQualityDecision(stableTier, "화질 모드 전환 중")
+        }
+        if (selectedMode != V24TvQualityMode.AUTO) {
+            stableTier = raw.tier
+            clearPendingUpgradeLocked()
+            return@synchronized raw
+        }
+
+        if (raw.tier == stableTier) {
+            clearPendingUpgradeLocked()
+            return@synchronized raw
+        }
+
+        if (!V24TvTierStabilityPlanner.isUpgrade(stableTier, raw.tier)) {
+            stableTier = raw.tier
+            clearPendingUpgradeLocked()
+            return@synchronized raw
+        }
+
+        if (pendingUpgradeTier != raw.tier) {
+            pendingUpgradeTier = raw.tier
+            pendingUpgradeSinceMs = nowMs
+        }
+        val stableForMs = (nowMs - pendingUpgradeSinceMs).coerceAtLeast(0L)
+        val resolved = V24TvTierStabilityPlanner.resolve(selectedMode, stableTier, raw.tier, stableForMs)
+        if (resolved == raw.tier) {
+            stableTier = resolved
+            clearPendingUpgradeLocked()
+            raw
+        } else {
+            V24TvQualityDecision(stableTier, "${raw.reason} · 안정화 대기")
+        }
+    }
+
+    private fun clearPendingUpgradeLocked() {
+        pendingUpgradeTier = null
+        pendingUpgradeSinceMs = 0L
     }
 
     private fun thermalStatus(context: Context?): Int? {
