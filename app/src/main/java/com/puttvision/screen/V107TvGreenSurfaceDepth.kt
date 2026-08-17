@@ -26,6 +26,9 @@ data class V107GreenSurfacePlan(
     val edgeAlpha: Int,
     val centerGuideAlpha: Int,
     val horizonAlpha: Int,
+    val distanceTickSpacingM: Double,
+    val distanceTickCount: Int,
+    val distanceTickAlpha: Int,
     val refreshMs: Long
 )
 
@@ -39,6 +42,12 @@ object V107TvGreenSurfacePlanner {
             else -> 1.05
         }
         val stripes = ceil(visible / stripeWidth).toInt().coerceIn(5, 32)
+        val tickSpacing = when {
+            visible <= 8.0 -> 1.0
+            visible <= 18.0 -> 2.0
+            else -> 3.0
+        }
+        val ticks = (visible / tickSpacing).toInt().coerceIn(1, 16)
         return V107GreenSurfacePlan(
             targetDistanceM = target,
             visibleLengthM = visible,
@@ -49,6 +58,9 @@ object V107TvGreenSurfacePlanner {
             edgeAlpha = if (running) 12 else 18,
             centerGuideAlpha = if (running) 7 else 12,
             horizonAlpha = if (running) 16 else 24,
+            distanceTickSpacingM = tickSpacing,
+            distanceTickCount = ticks,
+            distanceTickAlpha = if (running) 5 else 9,
             refreshMs = if (running) 66L else 240L
         )
     }
@@ -79,6 +91,7 @@ class V107TvGreenSurfaceDepthView(
         drawMowingBands(canvas, plan)
         drawGreenEdges(canvas, plan)
         drawCenterDepthGuide(canvas, plan)
+        drawDistanceTicks(canvas, plan)
         drawHorizonHaze(canvas, plan)
 
         postInvalidateDelayed(plan.refreshMs)
@@ -162,6 +175,26 @@ class V107TvGreenSurfaceDepthView(
             } else path.lineTo(sp.x, sp.y)
         }
         if (started) canvas.drawPath(path, paint)
+    }
+
+    private fun drawDistanceTicks(canvas: Canvas, plan: V107GreenSurfacePlan) {
+        val settings = engine.settings
+        val halfTickWidthM = min(.55, plan.halfWidthM * .18)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = max(1f, min(width, height) * .0009f)
+        paint.color = Color.argb(plan.distanceTickAlpha, 255, 255, 255)
+        paint.shader = null
+
+        for (i in 1..plan.distanceTickCount) {
+            val y = i * plan.distanceTickSpacingM
+            if (y <= 0.0 || y > plan.visibleLengthM) continue
+            val zl = GreenTerrain.effectiveHeightAt(settings, -halfTickWidthM, y)
+            val zr = GreenTerrain.effectiveHeightAt(settings, halfTickWidthM, y)
+            if (!zl.isFinite() || !zr.isFinite()) continue
+            val left = V25FlagProjectionRuntime.project(-halfTickWidthM, y, zl + .005) ?: continue
+            val right = V25FlagProjectionRuntime.project(halfTickWidthM, y, zr + .005) ?: continue
+            canvas.drawLine(left.x, left.y, right.x, right.y, paint)
+        }
     }
 
     private fun drawHorizonHaze(canvas: Canvas, plan: V107GreenSurfacePlan) {
