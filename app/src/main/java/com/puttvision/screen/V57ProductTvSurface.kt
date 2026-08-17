@@ -12,9 +12,10 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
 
-        // V129: one coherent course + atmosphere + commercial HUD presentation.
-        // V128 remains the tested GLES world beneath it and V124 remains its safe fallback.
-        addView(V129ScreenGolfPresentationFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        // V131: Filament PBR is now the preferred presentation renderer.
+        // It preserves the entire measurement/physics stack and falls back to the tested V129/V128
+        // path automatically if Filament cannot initialize on a particular Android device.
+        addView(V131FilamentScreenGolfPresentationFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
 
         // Functional training/replay behavior stays independent of presentation.
         addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
