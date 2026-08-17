@@ -28,8 +28,40 @@ data class V95SoloDebriefPlan(
     val stimpM: Double,
     val sideSlopePct: Double,
     val longSlopePct: Double,
+    val resultQualityScore: Int,
+    val resultQualityGrade: String,
     val refreshMs: Long
 )
+
+object V114SoloResultQuality {
+    fun score(result: SimResult?, distanceToCupM: Double): Int {
+        if (result == null) return 0
+        if (result.holed) return 100
+        val leave = distanceToCupM.takeIf { it.isFinite() && it >= 0.0 } ?: return 0
+        val base = when {
+            leave <= 0.10 -> 92
+            leave <= 0.20 -> 84
+            leave <= 0.35 -> 74
+            leave <= 0.60 -> 62
+            leave <= 1.00 -> 48
+            leave <= 1.50 -> 34
+            else -> 20
+        }
+        val lipBonus = if (result.lipOut) 5 else 0
+        val touchBonus = result.cupContacts.coerceIn(0, 2) * 2
+        return (base + lipBonus + touchBonus).coerceIn(0, 99)
+    }
+
+    fun grade(score: Int): String = when (score.coerceIn(0, 100)) {
+        98..100 -> "S"
+        in 90..97 -> "A+"
+        in 80..89 -> "A"
+        in 70..79 -> "B+"
+        in 60..69 -> "B"
+        in 45..59 -> "C"
+        else -> "D"
+    }
+}
 
 object V95SoloDebriefPlanner {
     fun plan(settings: GreenSettings, state: SimState?, result: SimResult?): V95SoloDebriefPlan {
@@ -76,6 +108,7 @@ object V95SoloDebriefPlanner {
             V95ShotPhase.RESULT -> 120L
             V95ShotPhase.ADDRESS -> 240L
         }
+        val qualityScore = V114SoloResultQuality.score(result, distance)
 
         return V95SoloDebriefPlan(
             phase = phase,
@@ -86,11 +119,13 @@ object V95SoloDebriefPlanner {
             progress01 = progress,
             lateralCm = lateral,
             longitudinalCm = longitudinal,
-            cupContacts = (result?.cupContacts ?: state?.cupContacts ?: 0).coerceAtLeast(0),
-            trailSamples = state?.trail?.size?.coerceAtLeast(0) ?: 0,
-            stimpM = settings.stimpMeters.takeIf { it.isFinite() } ?: 0.0,
-            sideSlopePct = settings.sideSlopePct.takeIf { it.isFinite() } ?: 0.0,
-            longSlopePct = settings.longSlopePct.takeIf { it.isFinite() } ?: 0.0,
+            cupContacts = (result?.cupContacts ?: state?.cupContacts ?: 0).coerceIn(0, 99),
+            trailSamples = state?.trail?.size?.coerceIn(0, 500) ?: 0,
+            stimpM = settings.stimpMeters.takeIf { it.isFinite() }?.coerceIn(0.0, 9.9) ?: 0.0,
+            sideSlopePct = settings.sideSlopePct.takeIf { it.isFinite() }?.coerceIn(-99.0, 99.0) ?: 0.0,
+            longSlopePct = settings.longSlopePct.takeIf { it.isFinite() }?.coerceIn(-99.0, 99.0) ?: 0.0,
+            resultQualityScore = qualityScore,
+            resultQualityGrade = V114SoloResultQuality.grade(qualityScore),
             refreshMs = refresh
         )
     }
@@ -169,7 +204,7 @@ class V95SoloBroadcastDebriefView(
         val fourth = when (plan.phase) {
             V95ShotPhase.ADDRESS -> "SOLO READY"
             V95ShotPhase.ROLL, V95ShotPhase.CUP_APPROACH -> "TRAIL ${plan.trailSamples}  CUP ${plan.cupContacts}"
-            V95ShotPhase.RESULT -> "CUP TOUCHES ${plan.cupContacts}"
+            V95ShotPhase.RESULT -> "QUALITY ${plan.resultQualityGrade} ${plan.resultQualityScore}  CUP ${plan.cupContacts}"
         }
 
         p.typeface = Typeface.DEFAULT_BOLD
