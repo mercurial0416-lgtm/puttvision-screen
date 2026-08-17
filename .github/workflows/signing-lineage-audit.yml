@@ -1,0 +1,49 @@
+name: Audit PuttVision signing lineage
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/signing-lineage-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Locate apksigner
+        shell: bash
+        run: |
+          set -euo pipefail
+          A=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner | sort -V | tail -1)
+          test -x "$A"
+          echo "APKSIGNER=$A" >> "$GITHUB_ENV"
+          "$A" version
+
+      - name: Print public certificate history from signing vaults
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          audit_vault() {
+            local tag="$1"
+            local asset_match="$2"
+            local out="$RUNNER_TEMP/${tag}.tgz"
+            local dir="$RUNNER_TEMP/${tag}"
+            local id
+            id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.draft == true and .tag_name == \"$tag\") | .assets[] | select(.name == \"$asset_match\" or .label == \"$asset_match\") | .id" | head -1)
+            test -n "$id"
+            gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$id" > "$out"
+            mkdir -p "$dir"
+            tar -xzf "$out" -C "$dir"
+            test -s "$dir/signing-lineage"
+            echo "===== $tag ====="
+            "$APKSIGNER" lineage --in "$dir/signing-lineage" --print-certs
+          }
+
+          audit_vault puttvision-signing-vault-v1 puttvision-signing-bundle.tgz
+          audit_vault puttvision-signing-vault-v3 puttvision-signing-bundle-v3.tgz
