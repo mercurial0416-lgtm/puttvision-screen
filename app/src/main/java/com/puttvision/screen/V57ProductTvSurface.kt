@@ -12,6 +12,7 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
         addView(V18SimulatorFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        addView(V107TvGreenSurfaceDepthView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V89ScreenGolfVisualPhysicsView(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V90ScreenGolfCinematicOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
         addView(V51TvPolishOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
