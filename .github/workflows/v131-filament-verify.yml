@@ -35,3 +35,16 @@ jobs:
 
       - name: Compile both debug APK flavors
         run: gradle assembleConsumerDebug assembleDeveloperDebug
+
+      - name: Enforce self-update release size ceiling
+        shell: bash
+        env:
+          PV_EXTERNAL_SIGNING: 'true'
+        run: |
+          set -euo pipefail
+          gradle assembleConsumerRelease
+          APK=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          test -s "$APK"
+          BYTES=$(stat -c%s "$APK")
+          echo "consumer release bytes=$BYTES"
+          test "$BYTES" -lt $((48 * 1024 * 1024))
