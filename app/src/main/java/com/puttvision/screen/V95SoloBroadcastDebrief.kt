@@ -53,7 +53,7 @@ object V114SoloResultQuality {
     }
 
     fun grade(score: Int): String = when (score.coerceIn(0, 100)) {
-        98..100 -> "S"
+        in 98..100 -> "S"
         in 90..97 -> "A+"
         in 80..89 -> "A"
         in 70..79 -> "B+"
