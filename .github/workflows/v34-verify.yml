@@ -32,21 +32,24 @@ jobs:
             exit 1
           fi
 
-      - name: Reject release-signing fallback credentials
+      - name: Enforce release signer continuity
         shell: bash
         run: |
           set -euo pipefail
-          if grep -nE "PUTTVISION_(STORE_PASSWORD|KEY_PASSWORD|KEY_ALIAS).*\|\|" .github/workflows/release-apk.yml; then
+          workflow=.github/workflows/release-apk.yml
+          if grep -nE "PUTTVISION_(STORE_PASSWORD|KEY_PASSWORD|KEY_ALIAS).*\|\|" "$workflow"; then
             echo "Release signing secrets must not have fallback values" >&2
             exit 1
           fi
-          # The release workflow may recover a lost key by generating random credentials inside the
-          # ephemeral runner, but it must persist them only in a private draft signing escrow.
-          grep -q 'Restore or bootstrap release signing bundle' .github/workflows/release-apk.yml
-          grep -q 'puttvision-signing-vault-v2' .github/workflows/release-apk.yml
-          grep -q 'openssl rand -hex 32' .github/workflows/release-apk.yml
-          grep -q -- '--draft' .github/workflows/release-apk.yml
-          grep -q 'chmod 600' .github/workflows/release-apk.yml
+          if grep -nE 'openssl rand -hex|keytool -genkeypair|bootstrapping a persistent replacement release key|Restore or bootstrap release signing bundle' "$workflow"; then
+            echo "Release CI must never generate a replacement Android signing identity" >&2
+            exit 1
+          fi
+          grep -q 'Restore release signing bundle' "$workflow"
+          grep -q 'Missing required release signing secret' "$workflow"
+          grep -q 'puttvision-signing-vault-v2' "$workflow"
+          grep -q -- '--draft' "$workflow"
+          grep -q 'chmod 600' "$workflow"
 
       - name: Require release accuracy regression gate wiring
         shell: bash
