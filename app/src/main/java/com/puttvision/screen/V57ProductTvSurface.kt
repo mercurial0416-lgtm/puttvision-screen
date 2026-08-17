@@ -11,17 +11,13 @@ object V57ProductTvSurface {
         includeImpactReplay: Boolean = true
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
-        addView(V18SimulatorFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V107TvGreenSurfaceDepthView(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V118CupPaceWindowView(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V89ScreenGolfVisualPhysicsView(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V90ScreenGolfCinematicOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V116PremiumTvFinishView(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V51TvPolishOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V87TvVisualPolishView(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V27PaceLineOverlay(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V86ScreenGolfReticleView(context, engine), FrameLayout.LayoutParams(-1, -1))
-        addView(V95SoloBroadcastDebriefView(context, engine), FrameLayout.LayoutParams(-1, -1))
+
+        // V120: one world + one coherent presentation language. The previous decorative overlay
+        // stack remains in source for rollback, but is intentionally not mounted here.
+        addView(V120WorldOnlyFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        addView(V120TvRendererV2View(context, engine), FrameLayout.LayoutParams(-1, -1))
+
+        // Functional overlays remain independent so training/replay behavior is preserved.
         addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
         if (includeImpactReplay) addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
     }
