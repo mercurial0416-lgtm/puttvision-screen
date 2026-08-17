@@ -11,6 +11,10 @@ class GameEngine {
 
     private val physics = GreenPhysics()
 
+    // GreenPhysics owns and mutates this object only while GameEngine is synchronized. Presentation
+    // threads never receive it directly; they consume the deep snapshot published through state.
+    private var physicsState: SimState? = null
+
     @Volatile var currentShot: ShotMetrics? = null
         private set
     @Volatile var state: SimState? = null
@@ -121,15 +125,32 @@ class GameEngine {
         V15AutoFlowRuntime.rolling()
         V22AudioRuntime.launch(effectiveMetrics.ballSpeedMps)
         virtualStartAtShot = V26BallStartRuntime.current(settings)
-        state = physics.launch(effectiveMetrics, settings, virtualStartAtShot.first, virtualStartAtShot.second)
+        val launched = physics.launch(effectiveMetrics, settings, virtualStartAtShot.first, virtualStartAtShot.second)
+        physicsState = launched
+        publishPhysicsFrame(launched)
     }
 
     @Synchronized
     fun step(dt: Double): SimResult? {
-        val s = state ?: return null
-        if (!s.running) return lastResult
+        val s = physicsState ?: return null
+        if (!s.running) {
+            publishPhysicsFrame(s)
+            return lastResult
+        }
 
-        val r = physics.step(s, settings, dt)
+        // Normal 60 Hz frames remain exactly one GreenPhysics step. If the main thread stalls, split
+        // the missed wall-clock interval into the physics engine's supported <=25 ms slices instead
+        // of silently discarding time through GreenPhysics' per-step dt clamp.
+        var remaining = dt.takeIf { it.isFinite() && it > 0.0 }?.coerceAtMost(0.20) ?: 0.016
+        if (remaining < 0.001) remaining = 0.001
+        var r: SimResult? = null
+        while (remaining >= 0.001 && r == null) {
+            val slice = minOf(0.025, remaining)
+            r = physics.step(s, settings, slice)
+            publishPhysicsFrame(s)
+            remaining -= slice
+        }
+
         if (r != null && lastResult == null) {
             lastResult = r
             V22AudioRuntime.result(r)
@@ -198,6 +219,7 @@ class GameEngine {
 
     @Synchronized
     fun resetSimulation() {
+        physicsState = null
         state = null
         currentShot = null
         lastResult = null
@@ -217,6 +239,7 @@ class GameEngine {
 
     private fun rejectShot(report: V47ShotGuardReport) {
         V47SoloIntegrityRuntime.recordShot(report)
+        physicsState = null
         state = null
         currentShot = null
         lastResult = null
@@ -227,5 +250,11 @@ class GameEngine {
         ghostComparison = null
         latestRecord = null
         V15AutoFlowRuntime.rearm()
+    }
+
+    private fun publishPhysicsFrame(source: SimState?) {
+        // Volatile publication of a NEW object gives the GL/UI thread a happens-before edge for every
+        // scalar and the copied trail, while GreenPhysics keeps mutating its private authoritative state.
+        state = V126PhysicsFrameBridge.snapshot(source)
     }
 }
