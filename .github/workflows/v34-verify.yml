@@ -40,7 +40,13 @@ jobs:
             echo "Release signing secrets must not have fallback values" >&2
             exit 1
           fi
-          grep -q 'Missing required release signing secret' .github/workflows/release-apk.yml
+          # The release workflow may recover a lost key by generating random credentials inside the
+          # ephemeral runner, but it must persist them only in a private draft signing escrow.
+          grep -q 'Restore or bootstrap release signing bundle' .github/workflows/release-apk.yml
+          grep -q 'puttvision-signing-vault-v2' .github/workflows/release-apk.yml
+          grep -q 'openssl rand -hex 32' .github/workflows/release-apk.yml
+          grep -q -- '--draft' .github/workflows/release-apk.yml
+          grep -q 'chmod 600' .github/workflows/release-apk.yml
 
       - name: Require release accuracy regression gate wiring
         shell: bash
