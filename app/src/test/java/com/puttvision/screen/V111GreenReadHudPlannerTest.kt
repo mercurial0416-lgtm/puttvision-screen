@@ -7,7 +7,7 @@ import org.junit.Test
 
 class V111GreenReadHudPlannerTest {
     @Test fun reliableReadProducesBoundedBroadcastPlan() {
-        val plan = V111GreenReadHudPlanner.plan(read(), moving = false, training = false)
+        val plan = V111GreenReadHudPlanner.plan(read(), moving = false, training = false, targetCupSpeedMps = .45)
         assertTrue(plan.show)
         assertTrue(plan.aimText.startsWith("AIM"))
         assertTrue(plan.speedText.contains("BALL"))
@@ -18,28 +18,30 @@ class V111GreenReadHudPlannerTest {
     }
 
     @Test fun movingBallSuppressesReadPanel() {
-        val plan = V111GreenReadHudPlanner.plan(read(), moving = true, training = false)
+        val plan = V111GreenReadHudPlanner.plan(read(), moving = true, training = false, targetCupSpeedMps = .45)
         assertFalse(plan.show)
         assertEquals(0, plan.aimAlpha)
         assertEquals(90L, plan.refreshMs)
     }
 
     @Test fun unreliableOrMalformedReadFailsClosed() {
-        assertFalse(V111GreenReadHudPlanner.plan(read(solverReliable = false), false, false).show)
-        assertFalse(V111GreenReadHudPlanner.plan(read(ballSpeed = Double.NaN), false, false).show)
-        assertFalse(V111GreenReadHudPlanner.plan(read(aimOffsetCm = Double.POSITIVE_INFINITY), false, false).show)
-        assertFalse(V111GreenReadHudPlanner.plan(read(cupCount = 999.0), false, false).show)
+        assertFalse(V111GreenReadHudPlanner.plan(read(solverReliable = false), false, false, .45).show)
+        assertFalse(V111GreenReadHudPlanner.plan(read(ballSpeed = Double.NaN), false, false, .45).show)
+        assertFalse(V111GreenReadHudPlanner.plan(read(aimOffsetCm = Double.POSITIVE_INFINITY), false, false, .45).show)
+        assertFalse(V111GreenReadHudPlanner.plan(read(cupCount = 999.0), false, false, .45).show)
+        assertFalse(V111GreenReadHudPlanner.plan(read(), false, false, Double.NaN).show)
+        assertFalse(V111GreenReadHudPlanner.plan(read(), false, false, 9.0).show)
     }
 
     @Test fun centerAimAvoidsNoisyTinyOffset() {
-        val plan = V111GreenReadHudPlanner.plan(read(aimOffsetCm = .4, cupCount = .03), false, false)
+        val plan = V111GreenReadHudPlanner.plan(read(aimOffsetCm = .4, cupCount = .03), false, false, .45)
         assertTrue(plan.show)
         assertEquals("AIM  CENTER", plan.aimText)
     }
 
     @Test fun trainingUsesLowerCadenceWithoutChangingRead() {
-        val normal = V111GreenReadHudPlanner.plan(read(), moving = false, training = false)
-        val training = V111GreenReadHudPlanner.plan(read(), moving = false, training = true)
+        val normal = V111GreenReadHudPlanner.plan(read(), moving = false, training = false, targetCupSpeedMps = .45)
+        val training = V111GreenReadHudPlanner.plan(read(), moving = false, training = true, targetCupSpeedMps = .45)
         assertTrue(training.show)
         assertEquals(normal.aimText, training.aimText)
         assertEquals(180L, training.refreshMs)
@@ -47,7 +49,7 @@ class V111GreenReadHudPlannerTest {
 
     @Test fun paceTextIsBoundedForTvLayout() {
         val longHint = "x".repeat(100)
-        val plan = V111GreenReadHudPlanner.plan(read(paceHint = longHint), false, false)
+        val plan = V111GreenReadHudPlanner.plan(read(paceHint = longHint), false, false, .45)
         assertTrue(plan.paceText.length <= 24)
     }
 
