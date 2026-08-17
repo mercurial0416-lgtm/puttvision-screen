@@ -84,6 +84,15 @@ object V72HardwarelessSelfTestDashboard {
             updateIntegrity.reason
         )
 
+        val updateStatus = V115HardwarelessUpdateStatusRuntime.run()
+        recordSuite(
+            "UPDATE STATUS",
+            updateStatus.passed,
+            updateStatus.checksPassed,
+            updateStatus.checksTotal,
+            updateStatus.reason
+        )
+
         return V72HardwarelessSelfTestReport(passed == total, passed, total, firstFailure, details.toList())
     }
 }
@@ -107,5 +116,6 @@ object V72HardwarelessSelfTestRuntime {
         V83HardwarelessLiveTrackVisualRuntime.clear()
         V84HardwarelessPlaybackRuntime.clear()
         V97HardwarelessUpdateIntegrityRuntime.clear()
+        V115HardwarelessUpdateStatusRuntime.clear()
     }
 }
