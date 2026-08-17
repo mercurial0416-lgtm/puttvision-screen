@@ -116,6 +116,37 @@ object V116PremiumTvPlanner {
             refreshMs = if (running || resultPulse > .01f) 16L else 240L
         )
     }
+
+    /**
+     * V117: the final premium layer follows the same thermal/HFR render tier as the base TV renderer.
+     * Camera stability wins over cosmetics: PERFORMANCE lowers animation cadence and celebration work,
+     * while HIGH remains pixel-for-pixel equivalent to the original V116 plan.
+     */
+    fun adaptForRenderTier(plan: V116PremiumTvPlan, tier: V24RenderTier): V116PremiumTvPlan {
+        if (tier == V24RenderTier.HIGH) return plan
+        val scale = when (tier) {
+            V24RenderTier.HIGH -> 1f
+            V24RenderTier.BALANCED -> .86f
+            V24RenderTier.PERFORMANCE -> .68f
+        }
+        val particleCap = when (tier) {
+            V24RenderTier.HIGH -> 22
+            V24RenderTier.BALANCED -> 12
+            V24RenderTier.PERFORMANCE -> 6
+        }
+        fun scaled(value: Int, maxValue: Int): Int =
+            (value.coerceAtLeast(0) * scale).roundToInt().coerceIn(0, maxValue)
+
+        return plan.copy(
+            ambientAlpha = scaled(plan.ambientAlpha, 255),
+            horizonAlpha = scaled(plan.horizonAlpha, 255),
+            ballHaloAlpha = scaled(plan.ballHaloAlpha, 78),
+            cupHaloAlpha = scaled(plan.cupHaloAlpha, 170),
+            resultBloomAlpha = scaled(plan.resultBloomAlpha, 100),
+            particleCount = plan.particleCount.coerceIn(0, particleCap),
+            refreshMs = maxOf(plan.refreshMs.coerceAtLeast(16L), tier.movingFrameMs)
+        )
+    }
 }
 
 class V116PremiumTvFinishView(
@@ -126,6 +157,8 @@ class V116PremiumTvFinishView(
     private val ribbon = RectF()
     private var seenResult: SimResult? = null
     private var resultSeenAtMs = 0L
+    private var renderTier = V24TvQualityRuntime.snapshot(context).tier
+    private var renderTierCheckedAtMs = SystemClock.uptimeMillis()
 
     init {
         isClickable = false
@@ -141,9 +174,14 @@ class V116PremiumTvFinishView(
         val settings = engine.settings
         val state = engine.state
         val result = engine.lastResult
+        val now = SystemClock.uptimeMillis()
         if (result !== seenResult) {
             seenResult = result
-            resultSeenAtMs = if (result == null) 0L else SystemClock.uptimeMillis()
+            resultSeenAtMs = if (result == null) 0L else now
+        }
+        if (now - renderTierCheckedAtMs >= 750L) {
+            renderTier = V24TvQualityRuntime.snapshot(context).tier
+            renderTierCheckedAtMs = now
         }
         val animated = TvInstantRollRuntime.displayPosition(state)
         val y = animated?.second ?: state?.y ?: 0.0
@@ -151,9 +189,10 @@ class V116PremiumTvFinishView(
             (y / settings.holeDistanceM).coerceIn(0.0, 1.0)
         } else 0.0
         val speed = state?.let { hypot(it.vx, it.vy) }?.takeIf { it.isFinite() } ?: 0.0
-        val age = if (resultSeenAtMs == 0L) 0L else SystemClock.uptimeMillis() - resultSeenAtMs
+        val age = if (resultSeenAtMs == 0L) 0L else now - resultSeenAtMs
         val running = state?.running == true || TvInstantRollRuntime.isAnimating()
-        val plan = V116PremiumTvPlanner.plan(running, progress, speed, result, age)
+        val basePlan = V116PremiumTvPlanner.plan(running, progress, speed, result, age)
+        val plan = V116PremiumTvPlanner.adaptForRenderTier(basePlan, renderTier)
 
         drawFilmicGrade(c, plan)
         drawHorizonLight(c, plan)
