@@ -12,9 +12,7 @@ import android.graphics.Typeface
 import android.os.SystemClock
 import android.view.View
 import kotlin.math.abs
-import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Original PuttVision HUD using the familiar information hierarchy of Korean screen-golf systems:
@@ -59,6 +57,8 @@ class V124ScreenGolfHudView(
     private val rect = RectF()
     private var seenResult: SimResult? = null
     private var resultAtMs = 0L
+    private var qualityLabel = "--"
+    private var qualitySampleAtMs = 0L
 
     init {
         isClickable = false
@@ -115,7 +115,7 @@ class V124ScreenGolfHudView(
 
         p.textSize = max(12f, w * .008f)
         p.color = Color.rgb(238, 240, 236)
-        val target = safe(engine.settings.holeDistanceM)
+        val target = V125ScreenGolfHudSafety.targetM(engine.settings.holeDistanceM)
         c.drawText("HOLE 01   PAR 2", left + pw * .070f, top + ph * .60f, p)
 
         p.typeface = Typeface.DEFAULT
@@ -155,8 +155,10 @@ class V124ScreenGolfHudView(
         path.cubicTo(cx + mapW * .16f, mapTop - mapH * .03f, cx + mapW * .43f, mapTop + mapH * .31f, cx + mapW * .34f, mapBottom)
         path.close()
 
-        p.shader = LinearGradient(mapLeft, mapTop, mapRight, mapBottom,
-            Color.rgb(81, 166, 63), Color.rgb(46, 126, 45), Shader.TileMode.CLAMP)
+        p.shader = LinearGradient(
+            mapLeft, mapTop, mapRight, mapBottom,
+            Color.rgb(81, 166, 63), Color.rgb(46, 126, 45), Shader.TileMode.CLAMP
+        )
         c.drawPath(path, p)
         p.shader = null
 
@@ -167,13 +169,13 @@ class V124ScreenGolfHudView(
         p.style = Paint.Style.FILL
 
         val settings = engine.settings
-        val target = safe(settings.holeDistanceM).coerceAtLeast(.5)
+        val target = V125ScreenGolfHudSafety.targetM(settings.holeDistanceM)
         val state = engine.state
         val display = TvInstantRollRuntime.displayPosition(state)
         val bx = display?.first ?: state?.x ?: V26BallStartRuntime.current(settings).first
         val by = display?.second ?: state?.y ?: V26BallStartRuntime.current(settings).second
-        val progress = (by / target).takeIf { it.isFinite() }?.coerceIn(0.0, 1.0) ?: 0.0
-        val lateral = (bx / 2.5).takeIf { it.isFinite() }?.coerceIn(-1.0, 1.0) ?: 0.0
+        val progress = V125ScreenGolfHudSafety.normalizedProgress(by, target)
+        val lateral = V125ScreenGolfHudSafety.normalizedLateral(bx)
 
         val ballX = cx + (lateral * mapW * .30).toFloat()
         val ballY = mapBottom - (progress * mapH).toFloat()
@@ -192,20 +194,16 @@ class V124ScreenGolfHudView(
         if (read?.solverReliable == true && read.predictedTrail.size >= 2) {
             val hide = V20GreenReadTrainingRuntime.shouldHideSolution(engine.gameModes.status.mode, settings) && !engine.readFeedback.revealed
             if (!hide) {
-                path.reset()
-                var started = false
-                val every = max(1, read.predictedTrail.size / 24)
-                var i = 0
-                while (i < read.predictedTrail.size) {
-                    val pt = read.predictedTrail[i]
-                    val py = (pt.second / target).coerceIn(0.0, 1.0)
-                    val px = (pt.first / 2.5).coerceIn(-1.0, 1.0)
-                    val sx = cx + (px * mapW * .30).toFloat()
-                    val sy = mapBottom - (py * mapH).toFloat()
-                    if (!started) { path.moveTo(sx, sy); started = true } else path.lineTo(sx, sy)
-                    i += every
-                }
-                if (started) {
+                val samples = V125ScreenGolfHudSafety.trailSamples(read.predictedTrail)
+                if (samples.size >= 2) {
+                    path.reset()
+                    samples.forEachIndexed { index, pt ->
+                        val py = V125ScreenGolfHudSafety.normalizedProgress(pt.second, target)
+                        val px = V125ScreenGolfHudSafety.normalizedLateral(pt.first)
+                        val sx = cx + (px * mapW * .30).toFloat()
+                        val sy = mapBottom - (py * mapH).toFloat()
+                        if (index == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                    }
                     p.style = Paint.Style.STROKE
                     p.strokeWidth = max(1.8f, w * .0013f)
                     p.color = Color.rgb(255, 225, 66)
@@ -226,10 +224,10 @@ class V124ScreenGolfHudView(
         val settings = engine.settings
 
         val rows = listOf(
-            "거리" to "${fmt(safe(settings.holeDistanceM), 1)} m",
+            "거리" to "${fmt(V125ScreenGolfHudSafety.targetM(settings.holeDistanceM), 1)} m",
             "경사" to slopeLabel(settings.sideSlopePct, settings.longSlopePct),
-            "그린" to "STIMP ${fmt(safe(settings.stimpMeters), 1)}",
-            "품질" to V24TvQualityRuntime.snapshot(context.applicationContext).tier.label
+            "그린" to "STIMP ${fmt(V125ScreenGolfHudSafety.stimpM(settings.stimpMeters), 1)}",
+            "품질" to currentQualityLabel()
         )
 
         rows.forEachIndexed { index, pair ->
@@ -245,6 +243,17 @@ class V124ScreenGolfHudView(
             p.color = Color.WHITE
             c.drawText(pair.second, left + panelW * .09f, y + rowH * .72f, p)
         }
+    }
+
+    private fun currentQualityLabel(): String {
+        val now = SystemClock.uptimeMillis()
+        if (V125ScreenGolfHudSafety.qualityCacheRefreshDue(now, qualitySampleAtMs)) {
+            qualityLabel = runCatching {
+                V24TvQualityRuntime.snapshot(context.applicationContext).tier.label
+            }.getOrDefault("--")
+            qualitySampleAtMs = now
+        }
+        return qualityLabel
     }
 
     private fun drawReady(c: Canvas) {
@@ -272,8 +281,8 @@ class V124ScreenGolfHudView(
         val display = TvInstantRollRuntime.displayPosition(state)
         val bx = display?.first ?: state.x
         val by = display?.second ?: state.y
-        val remain = hypot(bx, safe(settings.holeDistanceM) - by).takeIf { it.isFinite() } ?: 0.0
-        val speed = hypot(state.vx, state.vy).takeIf { it.isFinite() } ?: 0.0
+        val remain = V125ScreenGolfHudSafety.liveRemainingM(bx, by, settings.holeDistanceM)
+        val speed = V125ScreenGolfHudSafety.ballSpeedMps(state.vx, state.vy)
 
         val left = w * .655f
         val top = h * .215f
@@ -307,12 +316,12 @@ class V124ScreenGolfHudView(
         c.drawRoundRect(left, top, right, bottom, h * .010f, h * .010f, p)
 
         val cells = listOf(
-            "볼스피드" to "${fmt(metrics.ballSpeedMps, 2)} m/s",
-            "출발각" to "${signed(metrics.launchAngleDeg, 1)}°",
-            "헤드" to metrics.headSpeedMps?.takeIf { it.isFinite() }?.let { "${fmt(it, 2)} m/s" }.orEmpty().ifBlank { "--" },
-            "FACE" to metrics.faceAngleDeg?.takeIf { it.isFinite() }?.let { "${signed(it, 1)}°" }.orEmpty().ifBlank { "--" },
-            "PATH" to metrics.pathAngleDeg?.takeIf { it.isFinite() }?.let { "${signed(it, 1)}°" }.orEmpty().ifBlank { "--" },
-            "IMPACT" to metrics.impactOffsetMm?.takeIf { it.isFinite() }?.let { "${signed(it, 1)} mm" }.orEmpty().ifBlank { "--" }
+            "볼스피드" to metrics.ballSpeedMps.takeIf { it.isFinite() }?.let { "${fmt(it.coerceIn(0.0, 8.0), 2)} m/s" }.orEmpty().ifBlank { "--" },
+            "출발각" to metrics.launchAngleDeg.takeIf { it.isFinite() }?.let { "${signed(it.coerceIn(-45.0, 45.0), 1)}°" }.orEmpty().ifBlank { "--" },
+            "헤드" to metrics.headSpeedMps?.takeIf { it.isFinite() }?.let { "${fmt(it.coerceIn(0.0, 12.0), 2)} m/s" }.orEmpty().ifBlank { "--" },
+            "FACE" to metrics.faceAngleDeg?.takeIf { it.isFinite() }?.let { "${signed(it.coerceIn(-45.0, 45.0), 1)}°" }.orEmpty().ifBlank { "--" },
+            "PATH" to metrics.pathAngleDeg?.takeIf { it.isFinite() }?.let { "${signed(it.coerceIn(-45.0, 45.0), 1)}°" }.orEmpty().ifBlank { "--" },
+            "IMPACT" to metrics.impactOffsetMm?.takeIf { it.isFinite() }?.let { "${signed(it.coerceIn(-50.0, 50.0), 1)} mm" }.orEmpty().ifBlank { "--" }
         )
         val cellW = (right - left) / cells.size
         cells.forEachIndexed { i, pair ->
@@ -336,12 +345,14 @@ class V124ScreenGolfHudView(
         result ?: return
         val w = width.toFloat()
         val h = height.toFloat()
-        val live = ageMs < 3000L
+        val live = ageMs.coerceAtLeast(0L) < 3000L
+        val distanceCm = V125ScreenGolfHudSafety.resultDistanceCm(result.distanceToCupM)
+        val distanceM = distanceCm / 100.0
         val headline = when {
             result.holed -> "HOLE IN"
             result.lipOut -> "LIP OUT"
-            result.distanceToCupM <= .15 -> "GREAT"
-            result.distanceToCupM <= .45 -> "GOOD"
+            distanceM <= .15 -> "GREAT"
+            distanceM <= .45 -> "GOOD"
             else -> "FINISH"
         }
         val accent = when {
@@ -366,11 +377,11 @@ class V124ScreenGolfHudView(
         c.drawText(headline, left + cw * .5f, top + ch * .37f, p)
         p.textSize = max(12f, w * .0076f)
         p.color = accent
-        c.drawText("남은거리 ${fmt(result.distanceToCupM * 100.0, 1)} cm", left + cw * .5f, top + ch * .64f, p)
+        c.drawText("남은거리 ${fmt(distanceCm, 1)} cm", left + cw * .5f, top + ch * .64f, p)
         p.typeface = Typeface.DEFAULT
         p.textSize = max(9f, w * .0055f)
         p.color = Color.rgb(210, 217, 207)
-        c.drawText("${if (result.holed) "정확한 페이스와 스피드" else "다음 퍼트 라인을 확인하세요"}", left + cw * .5f, top + ch * .84f, p)
+        c.drawText(if (result.holed) "정확한 페이스와 스피드" else "다음 퍼트 라인을 확인하세요", left + cw * .5f, top + ch * .84f, p)
         p.textAlign = Paint.Align.LEFT
     }
 
@@ -384,8 +395,8 @@ class V124ScreenGolfHudView(
     }
 
     private fun slopeLabel(side: Double, long: Double): String {
-        val s = side.takeIf { it.isFinite() } ?: 0.0
-        val l = long.takeIf { it.isFinite() } ?: 0.0
+        val s = V125ScreenGolfHudSafety.slopePct(side)
+        val l = V125ScreenGolfHudSafety.slopePct(long)
         if (abs(s) < .05 && abs(l) < .05) return "FLAT"
         val sideText = when {
             s > .05 -> "R ${fmt(abs(s), 1)}%"
@@ -400,7 +411,6 @@ class V124ScreenGolfHudView(
         return listOf(sideText, longText).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
-    private fun safe(v: Double): Double = v.takeIf { it.isFinite() } ?: 0.0
     private fun fmt(v: Double, n: Int): String = "% .${n}f".format(v).trim()
     private fun signed(v: Double, n: Int): String = if (v >= 0.0) "+${fmt(v, n)}" else fmt(v, n)
 }
