@@ -1,0 +1,45 @@
+name: V128 native runner verify
+
+on:
+  push:
+    branches: [ 'agent/v128-*' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v128-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout without marketplace actions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Install exact Gradle 8.13 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version
+          test -n "${ANDROID_HOME:-}"
+          curl --fail --location --retry 5 --retry-delay 3 \
+            https://downloads.gradle.org/distributions/gradle-8.13-bin.zip \
+            --output "$RUNNER_TEMP/gradle-8.13-bin.zip"
+          unzip -q "$RUNNER_TEMP/gradle-8.13-bin.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/gradle-8.13/bin/gradle" --version
+
+      - name: V128 consumer and developer regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/gradle-8.13/bin/gradle" testConsumerDebugUnitTest testDeveloperDebugUnitTest
