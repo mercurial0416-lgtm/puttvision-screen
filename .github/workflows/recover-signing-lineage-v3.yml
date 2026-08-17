@@ -124,13 +124,14 @@ jobs:
           set -euo pipefail
           TAG=puttvision-signing-vault-v3
           BUNDLE="$RUNNER_TEMP/puttvision-signing-bundle-v3.tgz"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$BUNDLE#puttvision-signing-bundle.tgz" --clobber
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$BUNDLE#puttvision-signing-bundle.tgz" --clobber -R "$GITHUB_REPOSITORY"
           else
             gh release create "$TAG" "$BUNDLE#puttvision-signing-bundle.tgz" \
               --title "PuttVision signing vault v3" \
               --notes "Private draft escrow. Extends the original signing lineage through the active 2026 replacement signer. Never publish." \
-              --draft
+              --draft \
+              -R "$GITHUB_REPOSITORY"
           fi
 
           ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
