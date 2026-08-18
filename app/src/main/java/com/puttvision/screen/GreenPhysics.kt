@@ -9,7 +9,16 @@ data class GreenSettings(
     var holeDistanceM: Double = 5.0,
     var sideSlopePct: Double = 0.0,   // + = right side is lower, ball breaks right
     var longSlopePct: Double = 0.0,   // + = downhill toward the hole
-    var terrainProfileId: Int = -1    // -1 = uniform plane, 0..23 = practice terrain profile
+    var terrainProfileId: Int = -1,   // -1 = uniform plane, 0..23 = practice terrain profile
+
+    // V136 surface/obstacle realism. Neutral defaults preserve existing Stimp calibration while
+    // allowing real-green anisotropy and imperfections to be enabled without a second physics path.
+    var flagstickIn: Boolean = false,
+    var grainDirectionDeg: Double = 0.0,
+    var grainStrength01: Double = 0.0,
+    var moisture01: Double = 0.5,
+    var firmness01: Double = 0.5,
+    var trueness01: Double = 1.0
 )
 
 enum class V134CupPhase { NONE, RIM, DROP, SETTLED }
@@ -63,7 +72,10 @@ data class SimState(
     var v135CaptureForbidden: Boolean = false,
     var cupWallContacts: Int = 0,
     var cupBottomContacts: Int = 0,
-    var bridgeCount: Int = 0
+    var bridgeCount: Int = 0,
+
+    // V136 obstacle telemetry.
+    var flagstickContacts: Int = 0
 )
 
 data class SimResult(
@@ -74,17 +86,19 @@ data class SimResult(
     val elapsedSec: Double,
     val lipOut: Boolean = false,
     val cupContacts: Int = 0,
-    val bridgeCount: Int = 0
+    val bridgeCount: Int = 0,
+    val flagstickContacts: Int = 0
 )
 
 /**
  * Stable facade retained for all existing callers.
  *
  * V135 delegates every ordinary physical step to [V135RigidBallPhysics], which runs fixed
- * microsteps at up to 480 Hz and owns translational, rotational and cup-contact dynamics. For the
- * analytically uncatchable region above the published regulation-cup capture limit, the facade
- * switches only the unsupported cup crossing to [V135CupEscapeModel] so numerical contact friction
- * cannot create a physically impossible high-speed hole-out.
+ * microsteps at up to 480 Hz and owns translational, rotational and cup-contact dynamics. V136
+ * layers anisotropic surface conditions and swept flagstick contact around that core. For a cup
+ * without the flagstick, the analytically uncatchable region above the published regulation-cup
+ * capture limit is still forced through [V135CupEscapeModel] so numerical contact damping cannot
+ * create a physically impossible high-speed hole-out.
  */
 class GreenPhysics {
     fun launch(
@@ -113,25 +127,45 @@ class GreenPhysics {
     ): SimResult? {
         if (!state.running) return result(state, settings)
 
-        if (cupEnabled && state.v135CaptureForbidden && state.v135Airborne) {
+        // The 1.626 m/s bare-cup capture limit does not apply when a physical flagstick can absorb
+        // or redirect the ball, so only use the guaranteed-escape integrator with the stick out.
+        if (cupEnabled && !settings.flagstickIn && state.v135CaptureForbidden && state.v135Airborne) {
             V135CupEscapeModel.stepEscape(state, settings, dtRaw)
             return if (!state.running) result(state, settings) else null
         }
 
-        val finished = V135RigidBallPhysics.step(state, settings, dtRaw, cupEnabled)
+        val beforeX = state.x
+        val beforeY = state.y
+        val beforeZ = state.ballCenterZM
+        val physicalSettings = V136PhysicalRealism.effectiveSettings(settings, state)
+        val finished = V135RigidBallPhysics.step(state, physicalSettings, dtRaw, cupEnabled)
 
-        // Detect entry into the rigorously uncatchable part of rim phase space before later frames
-        // can dissipate it into a false positive. The physical escape model continues from the exact
-        // current 3D state on the next microstep; there is no teleport or result-level rewrite.
+        // Sub-grid green trueness is intentionally applied after the deterministic 6DOF core so
+        // macro terrain normals and Stimp calibration remain authoritative and reproducible.
+        V136PhysicalRealism.applyTrueness(state, settings, dtRaw)
+
+        if (cupEnabled && settings.flagstickIn && state.running) {
+            V136PhysicalRealism.resolveFlagstickSweep(
+                state = state,
+                settings = settings,
+                fromX = beforeX,
+                fromY = beforeY,
+                fromZ = beforeZ
+            )
+        }
+
+        // Detect entry into the rigorously uncatchable part of bare-cup rim phase space before later
+        // frames can dissipate it into a false positive. With the stick in, the stick itself remains
+        // free to change the outcome, so this mechanical bound is intentionally bypassed.
         if (
-            cupEnabled && state.v135Airborne && !state.holed &&
+            cupEnabled && !settings.flagstickIn && state.v135Airborne && !state.holed &&
             V135CupEscapeModel.isUncatchable(state)
         ) {
             state.v135CaptureForbidden = true
             return null
         }
 
-        return if (finished) result(state, settings) else null
+        return if (finished || !state.running) result(state, settings) else null
     }
 
     private fun result(state: SimState, settings: GreenSettings): SimResult {
@@ -146,7 +180,8 @@ class GreenPhysics {
             elapsedSec = state.elapsed,
             lipOut = (state.lipOut || state.bridgeCount > 0) && !state.holed,
             cupContacts = state.cupContacts + if (bridgeBoundaryContact) 1 else 0,
-            bridgeCount = state.bridgeCount
+            bridgeCount = state.bridgeCount,
+            flagstickContacts = state.flagstickContacts
         )
     }
 }
