@@ -18,23 +18,23 @@ object V136PhysicalRealism {
     private const val SLOW_FLAGSTICK_CAPTURE_MPS = 1.15
 
     /**
-     * Converts user surface-condition controls into the effective Stimp seen by the six-DOF core.
-     * Neutral controls are exactly 1.0 so existing calibrated greens remain bit-for-bit compatible.
+     * Converts rolling-speed and user surface-condition controls into the instantaneous effective
+     * Stimp seen by the six-DOF core.
      *
-     * Grain is anisotropic: with-grain increases effective roll distance and against-grain reduces it.
-     * Moisture and firmness are deliberately bounded because Stimp remains the primary calibration.
+     * V137 first applies a Stimp-preserving speed-dependent rolling resistance. Directional grain,
+     * moisture and firmness then modify that baseline. With neutral environmental controls the
+     * selected Stimp still represents the calibrated total roll distance at the standard Stimp
+     * launch speed even though instantaneous deceleration now changes during the putt.
      */
     fun effectiveSettings(settings: GreenSettings, state: SimState): GreenSettings {
         if (state.v135Airborne || !state.running) return settings
         val speed = hypot(state.vx, state.vy)
         if (speed < 1e-5) return settings
 
+        val speedDependentStimp = V137RollingResistance.effectiveStimp(settings.stimpMeters, speed)
         val grainStrength = settings.grainStrength01.coerceIn(0.0, 1.0)
         val moisture = settings.moisture01.coerceIn(0.0, 1.0)
         val firmness = settings.firmness01.coerceIn(0.0, 1.0)
-        if (grainStrength <= 1e-6 && abs(moisture - 0.5) <= 1e-6 && abs(firmness - 0.5) <= 1e-6) {
-            return settings
-        }
 
         val travel = atan2(state.vy, state.vx)
         val grain = Math.toRadians(settings.grainDirectionDeg)
@@ -42,8 +42,8 @@ object V136PhysicalRealism {
         val grainFactor = 1.0 + 0.115 * grainStrength * along
         val moistureFactor = 1.0 - 0.16 * (moisture - 0.5)
         val firmnessFactor = 1.0 + 0.07 * (firmness - 0.5)
-        val factor = (grainFactor * moistureFactor * firmnessFactor).coerceIn(0.74, 1.28)
-        return settings.copy(stimpMeters = (settings.stimpMeters * factor).coerceIn(1.2, 5.6))
+        val environmentFactor = (grainFactor * moistureFactor * firmnessFactor).coerceIn(0.74, 1.28)
+        return settings.copy(stimpMeters = (speedDependentStimp * environmentFactor).coerceIn(1.0, 6.2))
     }
 
     /**

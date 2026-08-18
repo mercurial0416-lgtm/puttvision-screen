@@ -171,8 +171,14 @@ object V135RigidBallPhysics {
         }
 
         var accel = drive
+        var rollingResistanceAccel = V3(0.0, 0.0, 0.0)
         if (speed > 0.003) {
-            accel += V3(-state.vx / speed * rollingDecel, -state.vy / speed * rollingDecel, 0.0)
+            rollingResistanceAccel = V3(
+                -state.vx / speed * rollingDecel,
+                -state.vy / speed * rollingDecel,
+                0.0
+            )
+            accel += rollingResistanceAccel
         } else if (driveMag > rollingDecel) {
             accel = drive * ((driveMag - rollingDecel) / driveMag)
         }
@@ -180,6 +186,20 @@ object V135RigidBallPhysics {
         val tangentVz = surface.dzdx * state.vx + surface.dzdy * state.vy
         val velocity = V3(state.vx, state.vy, tangentVz)
         var omega = V3(state.omegaXRadS, state.omegaYRadS, state.omegaZRadS)
+
+        // Rolling resistance is a generalized dissipative load, not a skid impulse. Couple its
+        // translational deceleration to matching angular deceleration so an already pure-rolling
+        // ball keeps zero contact-point slip instead of being spuriously re-accelerated by the
+        // Coulomb skid solver on the next 480 Hz microstep.
+        if (rollingResistanceAccel.mag2() > 0.0) {
+            val tangentResistance = V3(
+                rollingResistanceAccel.x,
+                rollingResistanceAccel.y,
+                surface.dzdx * rollingResistanceAccel.x + surface.dzdy * rollingResistanceAccel.y
+            )
+            omega += normal.cross(tangentResistance) * (dt / BALL_RADIUS_M)
+        }
+
         val contactArm = normal * -BALL_RADIUS_M
         val contactVelocity = velocity + omega.cross(contactArm)
         val slip = contactVelocity - normal * contactVelocity.dot(normal)
