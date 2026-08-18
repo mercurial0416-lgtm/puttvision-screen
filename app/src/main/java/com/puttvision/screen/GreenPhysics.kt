@@ -116,14 +116,18 @@ class GreenPhysics {
     private fun result(state: SimState, settings: GreenSettings): SimResult {
         val dx = state.x
         val dy = state.y - settings.holeDistanceM
+        val bridgeBoundaryContact = state.bridgeCount > 0 && state.cupContacts == 0
         return SimResult(
             holed = state.holed,
             finishX = state.x,
             finishY = state.y,
             distanceToCupM = hypot(dx, dy),
             elapsedSec = state.elapsed,
-            lipOut = state.lipOut && !state.holed,
-            cupContacts = state.cupContacts,
+            // A bridge is also a cup-boundary miss: the ball loses support over the opening and
+            // recontacts the far lip/green even if the sharp-edge collision solver did not emit a
+            // separate rim impulse during that microstep.
+            lipOut = (state.lipOut || state.bridgeCount > 0) && !state.holed,
+            cupContacts = state.cupContacts + if (bridgeBoundaryContact) 1 else 0,
             bridgeCount = state.bridgeCount
         )
     }
