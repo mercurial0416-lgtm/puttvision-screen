@@ -17,7 +17,7 @@ class V136PhysicalRealismTest {
     )
 
     @Test
-    fun neutralSurfaceConditionsPreserveBaseStimp() {
+    fun neutralEnvironmentalConditionsAddNoBiasBeyondV137SpeedResistance() {
         val settings = GreenSettings(
             stimpMeters = 3.1,
             flagstickIn = false,
@@ -26,8 +26,10 @@ class V136PhysicalRealismTest {
             firmness01 = 0.5,
             trueness01 = 1.0
         )
-        val effective = V136PhysicalRealism.effectiveSettings(settings, rollingState(0.0, 1.0))
-        assertTrue(abs(effective.stimpMeters - 3.1) < 1e-12)
+        val state = rollingState(0.0, 1.0)
+        val effective = V136PhysicalRealism.effectiveSettings(settings, state)
+        val expected = V137RollingResistance.effectiveStimp(3.1, 1.0)
+        assertTrue(abs(effective.stimpMeters - expected) < 1e-12)
     }
 
     @Test
