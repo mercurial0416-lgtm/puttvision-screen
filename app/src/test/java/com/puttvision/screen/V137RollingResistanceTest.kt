@@ -70,6 +70,35 @@ class V137RollingResistanceTest {
     }
 
     @Test
+    fun rollingResistanceDoesNotCreateArtificialContactSlip() {
+        val settings = GreenSettings(
+            stimpMeters = 3.0,
+            holeDistanceM = 20.0,
+            flagstickIn = false,
+            grainStrength01 = 0.0,
+            moisture01 = 0.5,
+            firmness01 = 0.5,
+            trueness01 = 1.0
+        )
+        val state = SimState(
+            vx = 0.0,
+            vy = 1.2,
+            running = true,
+            trail = mutableListOf(0.0 to 0.0)
+        )
+        V135RigidBallPhysics.initialize(state, settings)
+        state.omegaXRadS = -state.vy / V135RigidBallPhysics.BALL_RADIUS_M
+        state.omegaYRadS = 0.0
+        state.omegaZRadS = 0.0
+        state.v135SlipSpeedMps = 0.0
+
+        val physics = GreenPhysics()
+        repeat(20) { physics.step(state, settings, 0.005, cupEnabled = false) }
+
+        assertTrue("rolling resistance must preserve the no-slip constraint", state.v135SlipSpeedMps < 0.002)
+    }
+
+    @Test
     fun highSpeedRollingFeelsMoreResistiveThanDyingRoll() {
         val settings = GreenSettings(stimpMeters = 3.0)
         val fastState = SimState(vy = 1.8, running = true, ballCenterZM = V135RigidBallPhysics.BALL_RADIUS_M, v135Initialized = true)
