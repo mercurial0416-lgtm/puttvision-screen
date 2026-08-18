@@ -175,6 +175,7 @@ private data class V133SceneKey(
     val side100: Int,
     val long100: Int,
     val customHash: Int,
+    val flagstickIn: Boolean,
     val tier: V24RenderTier
 )
 
@@ -212,6 +213,7 @@ private class V133Controller(
     private val materialInstances = mutableListOf<MaterialInstance>()
     private val sceneMeshes = mutableListOf<V133Mesh>()
     private var ballMesh: V133Mesh? = null
+    private var ballMarkerMesh: V133Mesh? = null
     private var sceneKey: V133SceneKey? = null
     private var skybox: Skybox? = null
     private var sun = 0
@@ -370,6 +372,26 @@ private class V133Controller(
             castShadow = true,
             contactShadow = true
         )
+
+        // Local-space alignment dot. It shares the authoritative V135 quaternion transform with
+        // the sphere, making skid, roll and spin visually observable instead of hiding rotation on
+        // a featureless white ball.
+        val marker = V133Geometry.ellipsoid(
+            0f,
+            0f,
+            V133CourseSpec.BALL_RADIUS_M * .94f,
+            .0048f,
+            .0048f,
+            .0018f,
+            6,
+            10
+        )
+        ballMarkerMesh = createRenderable(
+            marker,
+            materialInstance(propMaterial, .045f, .050f, .047f),
+            castShadow = false,
+            contactShadow = false
+        )
     }
 
     private fun syncScene() {
@@ -382,6 +404,7 @@ private class V133Controller(
             ((settings.sideSlopePct.takeIf { it.isFinite() } ?: 0.0) * 100).toInt(),
             ((settings.longSlopePct.takeIf { it.isFinite() } ?: 0.0) * 100).toInt(),
             V28CustomGreenCodec.signature(V22CustomGreenRuntime.profile),
+            settings.flagstickIn,
             tier
         )
         if (key == sceneKey) return
@@ -503,28 +526,30 @@ private class V133Controller(
             contactShadow = false
         )
 
-        val pole = V133Geometry.cylinder(
-            0f,
-            d.toFloat(),
-            base + .004f,
-            .0065f,
-            V133CourseSpec.FLAG_HEIGHT_M,
-            12
-        )
-        sceneMeshes += createRenderable(
-            pole,
-            materialInstance(propMaterial, .83f, .84f, .80f),
-            castShadow = true,
-            contactShadow = true
-        )
+        if (settings.flagstickIn) {
+            val pole = V133Geometry.cylinder(
+                0f,
+                d.toFloat(),
+                base + .004f,
+                .0065f,
+                V133CourseSpec.FLAG_HEIGHT_M,
+                12
+            )
+            sceneMeshes += createRenderable(
+                pole,
+                materialInstance(propMaterial, .83f, .84f, .80f),
+                castShadow = true,
+                contactShadow = true
+            )
 
-        val flag = V133Geometry.flag(0f, d.toFloat(), base + V133CourseSpec.FLAG_HEIGHT_M)
-        sceneMeshes += createRenderable(
-            flag,
-            materialInstance(propMaterial, .64f, .075f, .055f),
-            castShadow = true,
-            contactShadow = false
-        )
+            val flag = V133Geometry.flag(0f, d.toFloat(), base + V133CourseSpec.FLAG_HEIGHT_M)
+            sceneMeshes += createRenderable(
+                flag,
+                materialInstance(propMaterial, .64f, .075f, .055f),
+                castShadow = true,
+                contactShadow = false
+            )
+        }
     }
 
     private fun createRenderable(
@@ -584,23 +609,12 @@ private class V133Controller(
             0.0, 0.0, 1.0
         )
 
-        ballMesh?.let { mesh ->
-            val cupVerticalOffset = state
-                ?.takeIf { it.cupPhase != V134CupPhase.NONE }
-                ?.cupVerticalOffsetM
-                ?.toFloat()
-                ?: 0f
-            val z = GreenTerrain.effectiveHeightAt(settings, bx, by).toFloat() +
-                V133CourseSpec.BALL_RADIUS_M + .020f + cupVerticalOffset
-            val transform = floatArrayOf(
-                1f, 0f, 0f, 0f,
-                0f, 1f, 0f, 0f,
-                0f, 0f, 1f, 0f,
-                bx.toFloat(), by.toFloat(), z, 1f
-            )
-            val tm = engine.transformManager
-            tm.setTransform(tm.getInstance(mesh.entity), transform)
-        }
+        val fallbackCenterZ = GreenTerrain.effectiveHeightAt(settings, bx, by) +
+            V133CourseSpec.BALL_RADIUS_M
+        val transform = V136BallPose.matrix(state, bx, by, fallbackCenterZ)
+        val tm = engine.transformManager
+        ballMesh?.let { mesh -> tm.setTransform(tm.getInstance(mesh.entity), transform) }
+        ballMarkerMesh?.let { mesh -> tm.setTransform(tm.getInstance(mesh.entity), transform) }
     }
 
     override fun onNativeWindowChanged(surface: Surface) {
@@ -637,6 +651,8 @@ private class V133Controller(
         sceneMeshes.clear()
         ballMesh?.let { runCatching { destroyMesh(it) } }
         ballMesh = null
+        ballMarkerMesh?.let { runCatching { destroyMesh(it) } }
+        ballMarkerMesh = null
         swapChain?.let { runCatching { engine.destroySwapChain(it) } }
         swapChain = null
         materialInstances.clear()
