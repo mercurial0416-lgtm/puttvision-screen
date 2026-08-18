@@ -55,7 +55,10 @@ class V13ReliabilityTest {
 
     @Test fun centeredPaceCanBeCapturedByCup() {
         val settings = GreenSettings(stimpMeters = 2.8, holeDistanceM = 1.0)
-        val result = simulate(settings, speed = 1.17)
+        // V137 fixes V135's artificial pure-roll re-acceleration. Under the corrected Stimp
+        // calibration 1.17 m/s now dies before a one-metre cup; 1.24 m/s reaches the center at
+        // capture pace, preserving this test's original purpose instead of the old buggy fixture.
+        val result = simulate(settings, speed = 1.24)
         assertTrue("expected centered putt to hole; miss=${result.distanceToCupM}", result.holed)
         assertFalse(result.lipOut)
     }
