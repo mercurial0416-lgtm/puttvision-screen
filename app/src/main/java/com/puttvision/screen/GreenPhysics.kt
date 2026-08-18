@@ -60,6 +60,7 @@ data class SimState(
     var v135SlipSpeedMps: Double = 0.0,
     var v135Airborne: Boolean = false,
     var v135Initialized: Boolean = false,
+    var v135CaptureForbidden: Boolean = false,
     var cupWallContacts: Int = 0,
     var cupBottomContacts: Int = 0,
     var bridgeCount: Int = 0
@@ -79,9 +80,11 @@ data class SimResult(
 /**
  * Stable facade retained for all existing callers.
  *
- * V135 delegates every physical step to [V135RigidBallPhysics], which runs fixed microsteps at up
- * to 480 Hz and owns translational, rotational and cup-contact dynamics. No caller has to know that
- * the old 2D rolling approximation has been replaced.
+ * V135 delegates every ordinary physical step to [V135RigidBallPhysics], which runs fixed
+ * microsteps at up to 480 Hz and owns translational, rotational and cup-contact dynamics. For the
+ * analytically uncatchable region above the published regulation-cup capture limit, the facade
+ * switches only the unsupported cup crossing to [V135CupEscapeModel] so numerical contact friction
+ * cannot create a physically impossible high-speed hole-out.
  */
 class GreenPhysics {
     fun launch(
@@ -109,7 +112,25 @@ class GreenPhysics {
         cupEnabled: Boolean = true
     ): SimResult? {
         if (!state.running) return result(state, settings)
+
+        if (cupEnabled && state.v135CaptureForbidden && state.v135Airborne) {
+            V135CupEscapeModel.stepEscape(state, settings, dtRaw)
+            return if (!state.running) result(state, settings) else null
+        }
+
         val finished = V135RigidBallPhysics.step(state, settings, dtRaw, cupEnabled)
+
+        // Detect entry into the rigorously uncatchable part of rim phase space before later frames
+        // can dissipate it into a false positive. The physical escape model continues from the exact
+        // current 3D state on the next microstep; there is no teleport or result-level rewrite.
+        if (
+            cupEnabled && state.v135Airborne && !state.holed &&
+            V135CupEscapeModel.isUncatchable(state)
+        ) {
+            state.v135CaptureForbidden = true
+            return null
+        }
+
         return if (finished) result(state, settings) else null
     }
 
@@ -123,9 +144,6 @@ class GreenPhysics {
             finishY = state.y,
             distanceToCupM = hypot(dx, dy),
             elapsedSec = state.elapsed,
-            // A bridge is also a cup-boundary miss: the ball loses support over the opening and
-            // recontacts the far lip/green even if the sharp-edge collision solver did not emit a
-            // separate rim impulse during that microstep.
             lipOut = (state.lipOut || state.bridgeCount > 0) && !state.holed,
             cupContacts = state.cupContacts + if (bridgeBoundaryContact) 1 else 0,
             bridgeCount = state.bridgeCount
