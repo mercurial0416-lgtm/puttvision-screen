@@ -12,11 +12,12 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
 
-        // V133: every course visual is rendered in native Filament world space.
-        // The failed V132 camera-agnostic Canvas course overlay is intentionally bypassed.
-        addView(V133FilamentCourseFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        // V138: dedicated commercial screen-golf Filament world. The renderer itself falls back to
+        // V133 if a device cannot initialize the heavier presentation path.
+        addView(V138CommercialScreenGolfFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
 
-        // Functional training/replay behavior stays independent of presentation.
+        // Measurement/training/replay remain independent of presentation and retain their existing
+        // source-of-truth timing and HFR bindings.
         addView(V31TrainingTvOverlay(context), FrameLayout.LayoutParams(-1, -1))
         if (includeImpactReplay) addView(TvImpactReplayView(context), FrameLayout.LayoutParams(-1, -1))
     }
