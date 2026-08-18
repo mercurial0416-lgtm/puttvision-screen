@@ -62,7 +62,9 @@ class V13ReliabilityTest {
 
     @Test fun excessiveCenterSpeedBridgesCupInsteadOfAutoHoling() {
         val settings = GreenSettings(stimpMeters = 2.8, holeDistanceM = 1.0)
-        val result = simulate(settings, speed = 2.05)
+        // V135 models launch skid before pure roll. 2.20 m/s at one metre leaves the ball above the
+        // published 1.626 m/s maximum physical rim-capture speed when it actually reaches the cup.
+        val result = simulate(settings, speed = 2.20)
         assertFalse(result.holed)
         assertTrue("fast cup crossing should be marked lip-out", result.lipOut)
         assertTrue(result.cupContacts >= 1)
