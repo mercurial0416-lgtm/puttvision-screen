@@ -35,9 +35,9 @@ class V134CupPhysicsTest {
     @Test
     fun slowEdgePuttRidesRimBeforeFalling() {
         val physics = GreenPhysics()
-        // 20 mm center offset is off-centre enough to exercise the entry rim while remaining inside
-        // the physical capture envelope of a 42.67 mm ball and 108 mm cup at this dying pace.
-        val state = SimState(x = 0.020, y = 0.93, vx = 0.0, vy = 0.45, running = true)
+        // A small but non-zero impact parameter exercises true rim contact without relying on the
+        // old V134 magnetic edge-capture zone. Larger offsets are legitimately allowed to lip out.
+        val state = SimState(x = 0.008, y = 0.93, vx = 0.0, vy = 0.45, running = true)
         var sawRim = false
         var sawDrop = false
         var result: SimResult? = null
