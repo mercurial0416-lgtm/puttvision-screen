@@ -72,7 +72,8 @@ data class SimResult(
     val distanceToCupM: Double,
     val elapsedSec: Double,
     val lipOut: Boolean = false,
-    val cupContacts: Int = 0
+    val cupContacts: Int = 0,
+    val bridgeCount: Int = 0
 )
 
 /**
@@ -122,7 +123,8 @@ class GreenPhysics {
             distanceToCupM = hypot(dx, dy),
             elapsedSec = state.elapsed,
             lipOut = state.lipOut && !state.holed,
-            cupContacts = state.cupContacts
+            cupContacts = state.cupContacts,
+            bridgeCount = state.bridgeCount
         )
     }
 }
