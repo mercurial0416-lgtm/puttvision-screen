@@ -13,7 +13,7 @@ data class GreenSettings(
 
     // V136 surface/obstacle realism. Neutral defaults preserve existing Stimp calibration while
     // allowing real-green anisotropy and imperfections to be enabled without a second physics path.
-    var flagstickIn: Boolean = true,
+    var flagstickIn: Boolean = false,
     var grainDirectionDeg: Double = 0.0,
     var grainStrength01: Double = 0.0,
     var moisture01: Double = 0.5,
