@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'ci/v143_fetch_cc0_assets.py'
       - '.github/workflows/v131-filament-verify.yml'
 
 permissions:
@@ -29,6 +30,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+
+      - name: Fetch V143 CC0 visual assets
+        run: python3 ci/v143_fetch_cc0_assets.py
+
+      - name: Upload resolved V143 CC0 assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: v143-cc0-assets
+          path: app/src/main/assets/v143_assets
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Validate V143 Godot project
         shell: bash
@@ -100,6 +112,6 @@ jobs:
           test -s "$APK"
           BYTES=$(stat -c%s "$APK")
           echo "consumer release bytes=$BYTES"
-          # V143 embeds one ARM64 Godot runtime (~110 MB total APK today). Keep a hard ceiling so
-          # future art/runtime additions remain deliberate while allowing a real engine asset budget.
-          test "$BYTES" -lt $((160 * 1024 * 1024))
+          # V143 embeds one ARM64 Godot runtime plus CC0 environment assets. Keep a hard ceiling so
+          # future additions remain deliberate while leaving a real game-engine asset budget.
+          test "$BYTES" -lt $((180 * 1024 * 1024))
