@@ -1,4 +1,4 @@
-name: V131 Filament verify
+name: TV renderer verify
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: v131-filament-${{ github.ref }}
+  group: tv-renderer-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,13 +30,28 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: V131 consumer and developer unit tests
+      - name: Validate V143 Godot project
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT_ZIP="$RUNNER_TEMP/godot.zip"
+          GODOT_DIR="$RUNNER_TEMP/godot"
+          curl --fail-with-body -L --retry 3 --retry-delay 2 \
+            "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip" \
+            -o "$GODOT_ZIP"
+          mkdir -p "$GODOT_DIR"
+          unzip -q "$GODOT_ZIP" -d "$GODOT_DIR"
+          GODOT=$(find "$GODOT_DIR" -maxdepth 1 -type f -name 'Godot_v4.7.1-stable_linux.x86_64' | head -1)
+          test -x "$GODOT"
+          "$GODOT" --headless --editor --path app/src/main/assets --quit
+
+      - name: Consumer and developer unit tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
       - name: Compile both debug APK flavors
         run: gradle assembleConsumerDebug assembleDeveloperDebug
 
-      - name: Enforce self-update release size ceiling
+      - name: Enforce engine-aware self-update size ceiling
         shell: bash
         env:
           PV_EXTERNAL_SIGNING: 'true'
@@ -47,4 +62,6 @@ jobs:
           test -s "$APK"
           BYTES=$(stat -c%s "$APK")
           echo "consumer release bytes=$BYTES"
-          test "$BYTES" -lt $((48 * 1024 * 1024))
+          # V143 embeds one ARM64 Godot runtime (~110 MB total APK today). Keep a hard ceiling so
+          # future art/runtime additions remain deliberate while allowing a real engine asset budget.
+          test "$BYTES" -lt $((160 * 1024 * 1024))
