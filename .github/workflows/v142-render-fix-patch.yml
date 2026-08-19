@@ -3,13 +3,16 @@ name: V142 render repair patch
 on:
   push:
     branches: [ agent/v142-playable-render-fix ]
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened ]
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, '[v142-patcher]') }}
+    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, '[v142-patcher]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +30,7 @@ jobs:
           scenery = Path('app/src/main/java/com/puttvision/screen/V141SceneryAssets.kt')
           s = scenery.read_text()
           old = '''                material.baseColor = vec4(tex.rgb * materialParams.tint, tex.a);\n                material.roughness = 0.92;\n                material.reflectance = 0.10;'''
-          new = '''                // V142: billboard foliage is presentation scenery.  Lighting a single flat normal\n                // with the course sun turned the entire alpha card nearly black on real devices.\n                // Keep the sampled authored color and alpha mask unlit; the 3D course still carries\n                // physical lighting and contact shadows.\n                material.baseColor = vec4(tex.rgb * materialParams.tint, tex.a);'''
+          new = '''                // V142: billboard foliage is presentation scenery. Lighting a single flat normal\n                // with the course sun turned the entire alpha card nearly black on real devices.\n                // Keep sampled color and alpha unlit; the 3D course still carries physical light.\n                material.baseColor = vec4(tex.rgb * materialParams.tint, tex.a);'''
           assert old in s, 'tree material body changed'
           s = s.replace(old, new, 1)
           old = '.name("PV141 Tree Billboard")\n            .shading(MaterialBuilder.Shading.LIT)'
@@ -57,9 +60,7 @@ jobs:
           )
           horizon_new = '''    private fun addHorizonTrees(settings: GreenSettings, d: Double, tier: V24RenderTier) {
         val maps = requireNotNull(sceneryMaps)
-        // V142: do not build a continuous hedge wall.  Sparse, smaller cards sit behind the
-        // clubhouse so the target/cup silhouette remains readable and no billboard can dominate
-        // the entire frame.
+        // V142: sparse, smaller cards behind the clubhouse keep the cup silhouette readable.
         val count = when (tier) {
             V24RenderTier.HIGH -> 8
             V24RenderTier.BALANCED -> 7
@@ -74,21 +75,14 @@ jobs:
             val height = 3.45f + (i % 4) * .32f
             val autumn = i == count - 3
             val mi = V141SceneryAssets.treeInstance(
-                treeMaterial,
-                maps,
-                x,
-                ground,
-                width,
-                height,
+                treeMaterial, maps, x, ground, width, height,
                 if (autumn) 1.12f else 1.00f,
                 if (autumn) .72f else 1.00f,
                 if (autumn) .58f else .96f
             ).also { materialInstances += it }
             sceneMeshes += createRenderable(
                 V141Geometry.verticalQuad(x, y, ground, width, height),
-                mi,
-                castShadow = false,
-                contactShadow = false
+                mi, castShadow = false, contactShadow = false
             )
         }
     }
@@ -106,8 +100,6 @@ jobs:
         val surfaceZ = GreenTerrain.effectiveHeightAt(settings, 0.0, d).toFloat() + .020f
         val depth = V135RigidBallPhysics.CUP_DEPTH_M.toFloat()
 
-        // V142: a dark mouth sits a few millimetres below the turf so the regulation 108 mm cup
-        // reads as a real hole from the address camera instead of disappearing into the fringe.
         sceneMeshes += createRenderable(
             V141Geometry.disc(0f, d.toFloat(), surfaceZ - .006f, .050f, 64),
             litInstance(litMaterial, .004f, .006f, .004f), false, false
@@ -125,8 +117,7 @@ jobs:
             litInstance(litMaterial, .90f, .91f, .88f), false, false
         )
 
-        // The gameplay flagstick setting still controls V136 collision physics.  Presentation gets
-        // an always-visible target pin so FLAG OUT never means "the player cannot find the hole".
+        // Presentation pin stays visible even when the physical flagstick is OUT.
         if (V142RenderContract.showTargetPin()) {
             val visualRadius = if (settings.flagstickIn) .0065f else .0046f
             sceneMeshes += createRenderable(
@@ -146,7 +137,7 @@ jobs:
           r = r2
 
           old = '''        val start = V26BallStartRuntime.current(settings)\n        val display = TvInstantRollRuntime.displayPosition(state)\n        val bx = display?.first ?: state?.x ?: start.first\n        val by = display?.second ?: state?.y ?: start.second'''
-          new = '''        val start = V26BallStartRuntime.current(settings)\n        // V142: V29 handoff is a pre-simulation snapshot.  Rendering it every frame froze the\n        // visible ball while MainActivity's simulation ticker correctly advanced GameEngine.state.\n        val authoritative = V142RenderContract.authoritativeBallPosition(\n            state?.x, state?.y, start.first, start.second\n        )\n        val bx = authoritative.first\n        val by = authoritative.second'''
+          new = '''        val start = V26BallStartRuntime.current(settings)\n        // V142: the instant-roll handoff is only a pre-simulation snapshot. Render physics state.\n        val authoritative = V142RenderContract.authoritativeBallPosition(\n            state?.x, state?.y, start.first, start.second\n        )\n        val bx = authoritative.first\n        val by = authoritative.second'''
           assert old in r, 'authoritative ball patch target changed'
           r = r.replace(old, new, 1)
 
@@ -154,7 +145,6 @@ jobs:
           new = '                if (hypot(xm, ym - d) < if (fringe) .068 else .072) continue'
           assert old in r, 'green cup-cutout target changed'
           r = r.replace(old, new, 1)
-
           renderer.write_text(r)
           PY
 
