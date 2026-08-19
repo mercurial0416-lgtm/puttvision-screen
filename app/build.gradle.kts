@@ -23,10 +23,23 @@ android {
         buildConfigField("String", "LICENSE_PUBLIC_KEY_B64", "\"$licensePublicKey\"")
 
         // V131: Filament/Filamat ship universal native AARs. PuttVision's supported
-        // physical Android target is ARM64; filtering the unused x86/32-bit binaries
-        // keeps the self-update APK below the storage release ceiling.
+        // physical Android target is ARM64; filtering unused ABIs also keeps the embedded
+        // V143 Godot runtime practical for self-update delivery.
         ndk {
             abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    // Godot projects intentionally keep a small hidden .godot directory inside Android assets.
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+
+    // Filament and Godot both ship libc++_shared. They target the same ARM64 process; package a
+    // single copy rather than failing the merge task on the duplicate native runtime.
+    packaging {
+        jniLibs {
+            pickFirsts += setOf("**/libc++_shared.so")
         }
     }
 
@@ -103,11 +116,14 @@ dependencies {
     implementation("androidx.room:room-ktx:$room")
     kapt("androidx.room:room-compiler:$room")
 
-    // V131: physically based TV renderer. Filamat is used only to compile the tiny
-    // original PuttVision material package once when the Filament surface is created.
+    // V131 fallback renderer.
     val filament = "1.75.0"
     implementation("com.google.android.filament:filament-android:$filament")
     implementation("com.google.android.filament:filamat-android:$filament")
+
+    // V143: primary TV renderer. Godot is an embeddable Android AAR and runs in a dedicated
+    // secondary-display Activity while the native Android camera / measurement stack stays alive.
+    implementation("org.godotengine:godot:4.7.1.stable")
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")
