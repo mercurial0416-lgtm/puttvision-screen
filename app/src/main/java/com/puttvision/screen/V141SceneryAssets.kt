@@ -12,10 +12,16 @@ import com.google.android.filament.filamat.MaterialBuilder
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 
-/** Original runtime-generated scenery textures used by the V141 clean-room presentation. */
+/**
+ * Runtime-generated clean-room scenery used by the V141/V142 PBR presentation.
+ *
+ * V142 deliberately renders tree cards UNLIT.  V141 used a LIT alpha card with one flat normal;
+ * on the real TV path that normal could face away from both directional lights, turning the whole
+ * card (including its alpha-tested trunk/crown) into the black wall seen in the field screenshot.
+ * The course, ball, cup and clubhouse stay physically lit; distant foliage keeps its sampled color.
+ */
 object V141SceneryAssets {
     data class Maps(
         val sky: Texture,
@@ -51,7 +57,7 @@ object V141SceneryAssets {
         """.trimIndent()
         val pkg = MaterialBuilder()
             .platform(MaterialBuilder.Platform.MOBILE)
-            .name("PV141 Textured Sky")
+            .name("PV142 Textured Sky")
             .shading(MaterialBuilder.Shading.UNLIT)
             .uniformParameter(MaterialBuilder.UniformType.FLOAT, "centerX")
             .uniformParameter(MaterialBuilder.UniformType.FLOAT, "baseZ")
@@ -68,7 +74,7 @@ object V141SceneryAssets {
             .material(source)
             .optimization(MaterialBuilder.Optimization.PERFORMANCE)
             .build(engine)
-        check(pkg.isValid) { "V141 sky material compile failed" }
+        check(pkg.isValid) { "V142 sky material compile failed" }
         val buffer = pkg.buffer
         return Material.Builder().payload(buffer, buffer.remaining()).build(engine)
     }
@@ -82,14 +88,12 @@ object V141SceneryAssets {
                 float v = clamp((p.z - materialParams.baseZ) / materialParams.height, 0.0, 1.0);
                 vec4 tex = texture(materialParams_treeMap, vec2(u, v));
                 material.baseColor = vec4(tex.rgb * materialParams.tint, tex.a);
-                material.roughness = 0.92;
-                material.reflectance = 0.10;
             }
         """.trimIndent()
         val pkg = MaterialBuilder()
             .platform(MaterialBuilder.Platform.MOBILE)
-            .name("PV141 Tree Billboard")
-            .shading(MaterialBuilder.Shading.LIT)
+            .name("PV142 Color Stable Tree Billboard")
+            .shading(MaterialBuilder.Shading.UNLIT)
             .uniformParameter(MaterialBuilder.UniformType.FLOAT, "centerX")
             .uniformParameter(MaterialBuilder.UniformType.FLOAT, "baseZ")
             .uniformParameter(MaterialBuilder.UniformType.FLOAT, "width")
@@ -102,14 +106,13 @@ object V141SceneryAssets {
                 "treeMap"
             )
             .blending(MaterialBuilder.BlendingMode.MASKED)
-            .maskThreshold(.30f)
+            .maskThreshold(.16f)
             .doubleSided(true)
             .culling(MaterialBuilder.CullingMode.NONE)
-            .transparentShadow(true)
             .material(source)
             .optimization(MaterialBuilder.Optimization.PERFORMANCE)
             .build(engine)
-        check(pkg.isValid) { "V141 tree material compile failed" }
+        check(pkg.isValid) { "V142 tree material compile failed" }
         val buffer = pkg.buffer
         return Material.Builder().payload(buffer, buffer.remaining()).build(engine)
     }
@@ -126,7 +129,7 @@ object V141SceneryAssets {
         it.setParameter("baseZ", baseZ)
         it.setParameter("width", width)
         it.setParameter("height", height)
-        it.setParameter("exposureTint", 1.0f, 1.0f, 1.0f)
+        it.setParameter("exposureTint", .98f, 1.00f, 1.02f)
         it.setParameter("skyMap", maps.sky, maps.sampler)
     }
 
@@ -159,25 +162,23 @@ object V141SceneryAssets {
         val pixels = IntArray(width * height)
         for (y in 0 until height) {
             val v = y.toDouble() / (height - 1).coerceAtLeast(1)
-            // Bitmap top is sky zenith; bottom is a warm, slightly hazy horizon.
-            val horizon = v
             for (x in 0 until width) {
                 val u = x.toDouble() / width
-                var r = lerp(37.0, 137.0, horizon)
-                var g = lerp(93.0, 183.0, horizon)
-                var b = lerp(182.0, 222.0, horizon)
+                var r = lerp(35.0, 154.0, v)
+                var g = lerp(92.0, 191.0, v)
+                var b = lerp(181.0, 225.0, v)
 
-                val cloudField = cloudDensity(u, v)
-                if (cloudField > 0.0) {
-                    val a = (cloudField * .82).coerceIn(0.0, .82)
-                    r = lerp(r, 245.0, a)
+                val cloud = cloudDensity(u, v)
+                if (cloud > 0.0) {
+                    val a = (cloud * .78).coerceIn(0.0, .78)
+                    r = lerp(r, 244.0, a)
                     g = lerp(g, 247.0, a)
-                    b = lerp(b, 249.0, a)
+                    b = lerp(b, 250.0, a)
                 }
-                val haze = ((v - .72) / .28).coerceIn(0.0, 1.0) * .14
-                r = lerp(r, 223.0, haze)
+                val haze = ((v - .72) / .28).coerceIn(0.0, 1.0) * .13
+                r = lerp(r, 219.0, haze)
                 g = lerp(g, 229.0, haze)
-                b = lerp(b, 231.0, haze)
+                b = lerp(b, 234.0, haze)
                 pixels[y * width + x] = Color.rgb(r.toInt(), g.toInt(), b.toInt())
             }
         }
@@ -187,7 +188,6 @@ object V141SceneryAssets {
     }
 
     private fun cloudDensity(u: Double, v: Double): Double {
-        // Several broad cloud banks with multi-octave erosion; original and deterministic.
         val banks = listOf(
             doubleArrayOf(.18, .38, .17, .070),
             doubleArrayOf(.31, .31, .12, .055),
@@ -195,53 +195,53 @@ object V141SceneryAssets {
             doubleArrayOf(.84, .28, .13, .060)
         )
         var shape = 0.0
-        for (b in banks) {
-            val dx = wrapDelta(u - b[0]) / b[2]
-            val dy = (v - b[1]) / b[3]
+        for (bank in banks) {
+            val dx = wrapDelta(u - bank[0]) / bank[2]
+            val dy = (v - bank[1]) / bank[3]
             shape = max(shape, exp(-(dx * dx + dy * dy) * 1.25))
         }
         if (shape < .08) return 0.0
-        val noise = .58 * noise(u * 13.0, v * 13.0, 141) +
+        val n = .58 * noise(u * 13.0, v * 13.0, 141) +
             .28 * noise(u * 31.0, v * 31.0, 3141) +
             .14 * noise(u * 71.0, v * 71.0, 5141)
-        return ((shape * 1.20 + noise * .52) - .52).coerceIn(0.0, 1.0)
+        return ((shape * 1.20 + n * .52) - .52).coerceIn(0.0, 1.0)
     }
 
     private fun buildTreeBitmap(width: Int, height: Int): Bitmap {
         val pixels = IntArray(width * height)
+        // Narrower crown than V141 so adjacent cards read as individual trees, not a hedge wall.
         val lobes = listOf(
-            doubleArrayOf(.50, .31, .28, .22),
-            doubleArrayOf(.31, .39, .20, .19),
-            doubleArrayOf(.69, .40, .21, .20),
-            doubleArrayOf(.42, .52, .24, .20),
-            doubleArrayOf(.60, .53, .25, .21),
-            doubleArrayOf(.50, .19, .19, .16)
+            doubleArrayOf(.50, .30, .22, .19),
+            doubleArrayOf(.34, .39, .16, .16),
+            doubleArrayOf(.66, .40, .17, .17),
+            doubleArrayOf(.43, .50, .18, .17),
+            doubleArrayOf(.59, .51, .19, .18),
+            doubleArrayOf(.50, .18, .15, .13)
         )
         for (y in 0 until height) {
             val v = y.toDouble() / (height - 1).coerceAtLeast(1)
             for (x in 0 until width) {
                 val u = x.toDouble() / (width - 1).coerceAtLeast(1)
                 var crown = 0.0
-                for (l in lobes) {
-                    val dx = (u - l[0]) / l[2]
-                    val dy = (v - l[1]) / l[3]
+                for (lobe in lobes) {
+                    val dx = (u - lobe[0]) / lobe[2]
+                    val dy = (v - lobe[1]) / lobe[3]
                     crown = max(crown, 1.0 - sqrt(dx * dx + dy * dy))
                 }
-                val edgeNoise = noise(u * 35.0, v * 35.0, 8141) * .20 - .10
-                crown += edgeNoise
-                val trunkHalf = .032 + (1.0 - v).coerceIn(0.0, .35) * .025
+                crown += noise(u * 37.0, v * 37.0, 8141) * .14 - .07
+                val trunkHalf = .026 + (1.0 - v).coerceIn(0.0, .35) * .018
                 val trunk = v > .48 && v < .97 && kotlin.math.abs(u - .50) < trunkHalf
                 val index = y * width + x
-                if (crown > .02 && v < .72) {
-                    val leafNoise = noise(u * 53.0, v * 53.0, 10141)
-                    val light = (.72 + leafNoise * .28).coerceIn(.65, 1.0)
-                    val r = (52 * light).toInt().coerceIn(25, 75)
-                    val g = (118 * light).toInt().coerceIn(58, 148)
-                    val b = (42 * light).toInt().coerceIn(20, 66)
-                    val alpha = ((crown * 2.6).coerceIn(0.0, 1.0) * 255).toInt()
-                    pixels[index] = Color.argb(alpha, r, g, b)
+                if (crown > .025 && v < .70) {
+                    val leafNoise = noise(u * 59.0, v * 59.0, 10141)
+                    val light = (.80 + leafNoise * .20).coerceIn(.76, 1.0)
+                    val rr = (55 * light).toInt().coerceIn(36, 72)
+                    val gg = (126 * light).toInt().coerceIn(82, 150)
+                    val bb = (47 * light).toInt().coerceIn(28, 68)
+                    val alpha = ((crown * 3.2).coerceIn(0.0, 1.0) * 255).toInt()
+                    pixels[index] = Color.argb(alpha, rr, gg, bb)
                 } else if (trunk) {
-                    pixels[index] = Color.argb(255, 91, 61, 35)
+                    pixels[index] = Color.argb(255, 105, 76, 45)
                 } else {
                     pixels[index] = Color.TRANSPARENT
                 }
