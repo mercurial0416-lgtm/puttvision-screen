@@ -50,16 +50,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! command -v xvfb-run >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq xvfb
-          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb scrot
           rm -f app/src/main/assets/v143-preview.png
-          timeout 35s xvfb-run -a "$GODOT_BIN" \
-            --path app/src/main/assets \
-            --rendering-method gl_compatibility \
-            --resolution 1920x1080 \
-            res://v143_preview.tscn
+          LOG="$RUNNER_TEMP/v143-godot.log"
+          export GODOT_BIN LOG
+          timeout 40s xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render" bash -lc '
+            set -euo pipefail
+            "$GODOT_BIN" \
+              --path app/src/main/assets \
+              --display-driver x11 \
+              --rendering-method gl_compatibility \
+              --resolution 1920x1080 \
+              res://v143_tv.tscn >"$LOG" 2>&1 &
+            PID=$!
+            trap "kill $PID 2>/dev/null || true" EXIT
+            for i in $(seq 1 20); do
+              sleep 0.5
+              if xdotool search --name "PuttVision TV" >/dev/null 2>&1; then break; fi
+            done
+            sleep 2
+            scrot -z app/src/main/assets/v143-preview.png
+            test -s app/src/main/assets/v143-preview.png
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+          '
+          cat "$LOG" || true
           test -s app/src/main/assets/v143-preview.png
 
       - name: Upload V143 reference frame
