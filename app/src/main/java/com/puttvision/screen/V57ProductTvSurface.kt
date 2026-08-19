@@ -12,9 +12,9 @@ object V57ProductTvSurface {
     ): FrameLayout = FrameLayout(context).apply {
         setBackgroundColor(Color.BLACK)
 
-        // V138: dedicated commercial screen-golf Filament world. The renderer itself falls back to
-        // V133 if a device cannot initialize the heavier presentation path.
-        addView(V138CommercialScreenGolfFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
+        // V140: independent Friends public-reference putting world. V140 itself falls back to V138,
+        // and V138 retains the older V133 fallback, so presentation upgrades never replace physics.
+        addView(V140FriendsScreenGolfFactory.create(context, engine), FrameLayout.LayoutParams(-1, -1))
 
         // Measurement/training/replay remain independent of presentation and retain their existing
         // source-of-truth timing and HFR bindings.
