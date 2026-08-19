@@ -45,6 +45,13 @@ jobs:
           test -x "$GODOT"
           echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
           "$GODOT" --headless --editor --path app/src/main/assets --quit
+          "$GODOT" --headless --path app/src/main/assets --script res://v143_tv.gd --check-only
+          SMOKE="$RUNNER_TEMP/v143-smoke.log"
+          "$GODOT" --headless --path app/src/main/assets --quit-after 2 res://v143_tv.tscn 2>&1 | tee "$SMOKE"
+          if grep -Eiq 'SCRIPT ERROR|Parse Error|Invalid assignment|Invalid call|Cannot assign' "$SMOKE"; then
+            echo "V143 runtime smoke detected a GDScript error" >&2
+            exit 1
+          fi
 
       - name: Render V143 reference frame
         shell: bash
