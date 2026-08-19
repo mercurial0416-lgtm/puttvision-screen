@@ -548,7 +548,7 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
         desired_fov = 45.0
     else:
         desired_pos = Vector3(0.0, 0.47, 1.48)
-        var look_distance := min(6.4, max(2.0, target_distance * 0.54))
+        var look_distance: float = min(6.4, max(2.0, target_distance * 0.54))
         desired_look = Vector3(0.0, 0.10, -look_distance)
         desired_fov = 47.0
 
