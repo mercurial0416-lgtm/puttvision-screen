@@ -87,10 +87,10 @@ private class V138Stage(context: Context, game: GameEngine) : FrameLayout(contex
     private val controller: V138Controller
 
     init {
-        setBackgroundColor(Color.rgb(59, 83, 90))
+        setBackgroundColor(Color.rgb(107, 158, 187))
         addView(surface, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         controller = V138Controller(context.applicationContext, surface, game)
-        addView(V138CommercialHud(context, game), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(V139FriendsHud(context, game), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
     override fun onAttachedToWindow() {
@@ -123,7 +123,7 @@ private class V138Controller(
     private val uiHelper: UiHelper
     private val displayHelper = DisplayHelper(context)
     private val choreographer = Choreographer.getInstance()
-    private val cameraSmoother = V138CameraSmoother()
+    private val cameraSmoother = V139FriendsCameraSmoother()
 
     private var swapChain: SwapChain? = null
     private var running = false
@@ -271,13 +271,13 @@ private class V138Controller(
         }
 
     private fun setupLighting() {
-        skybox = Skybox.Builder().color(.34f, .49f, .57f, 1f).build(engine).also { scene.skybox = it }
+        skybox = Skybox.Builder().color(.47f, .67f, .82f, 1f).build(engine).also { scene.skybox = it }
 
         sun = EntityManager.get().create()
         val warm = Colors.cct(5_350f)
         LightManager.Builder(LightManager.Type.DIRECTIONAL)
             .color(warm[0], warm[1], warm[2])
-            .intensity(104_000f)
+            .intensity(112_000f)
             .direction(-.34f, -.58f, -.93f)
             .castShadows(true)
             .build(engine, sun)
@@ -287,12 +287,12 @@ private class V138Controller(
         val cool = Colors.cct(7_100f)
         LightManager.Builder(LightManager.Type.DIRECTIONAL)
             .color(cool[0], cool[1], cool[2])
-            .intensity(13_500f)
+            .intensity(18_000f)
             .direction(.54f, .26f, -.70f)
             .castShadows(false)
             .build(engine, fill)
         scene.addEntity(fill)
-        camera.setExposure(10.8f, 1f / 125f, 100f)
+        camera.setExposure(10.15f, 1f / 125f, 100f)
     }
 
     private fun setupBall() {
@@ -337,19 +337,19 @@ private class V138Controller(
 
         sceneMeshes += createRenderable(
             V138Geometry.courseGround(settings, d, density),
-            instance(turfMaterial, .085f, .174f, .058f),
+            instance(turfMaterial, .108f, .258f, .067f),
             castShadow = false,
             contactShadow = false
         )
         sceneMeshes += createRenderable(
             V138Geometry.green(settings, d, density, fringe = true),
-            instance(turfMaterial, .128f, .268f, .087f),
+            instance(turfMaterial, .155f, .355f, .092f),
             castShadow = false,
             contactShadow = false
         )
         sceneMeshes += createRenderable(
             V138Geometry.green(settings, d, density, fringe = false),
-            instance(turfMaterial, .164f, .348f, .106f),
+            instance(turfMaterial, .205f, .468f, .118f),
             castShadow = false,
             contactShadow = false
         )
@@ -487,7 +487,7 @@ private class V138Controller(
         val display = TvInstantRollRuntime.displayPosition(state)
         val bx = display?.first ?: state?.x ?: start.first
         val by = display?.second ?: state?.y ?: start.second
-        val target = V138CommercialCameraPlanner.target(
+        val target = V139FriendsCameraPlanner.target(
             settings.holeDistanceM,
             start.first,
             start.second,
