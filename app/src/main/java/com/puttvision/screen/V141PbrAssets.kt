@@ -10,11 +10,7 @@ import com.google.android.filament.TextureSampler
 import com.google.android.filament.View
 import com.google.android.filament.android.TextureHelper
 import com.google.android.filament.filamat.MaterialBuilder
-import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.floor
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -81,7 +77,9 @@ object V141PbrAssets {
                 var ny = -dy * 3.7
                 var nz = 1.0
                 val nm = sqrt(nx * nx + ny * ny + nz * nz).coerceAtLeast(1e-6)
-                nx /= nm; ny /= nm; nz /= nm
+                nx /= nm
+                ny /= nm
+                nz /= nm
                 normalPixels[index] = Color.rgb(
                     ((nx * .5 + .5) * 255.0).toInt().coerceIn(0, 255),
                     ((ny * .5 + .5) * 255.0).toInt().coerceIn(0, 255),
@@ -100,7 +98,9 @@ object V141PbrAssets {
         val albedo = textureFromBitmap(engine, albedoBitmap, Texture.InternalFormat.SRGB8_A8)
         val normal = textureFromBitmap(engine, normalBitmap, Texture.InternalFormat.RGBA8)
         val roughness = textureFromBitmap(engine, roughBitmap, Texture.InternalFormat.RGBA8)
-        albedoBitmap.recycle(); normalBitmap.recycle(); roughBitmap.recycle()
+        albedoBitmap.recycle()
+        normalBitmap.recycle()
+        roughBitmap.recycle()
 
         val sampler = TextureSampler(
             TextureSampler.MinFilter.LINEAR,
@@ -210,7 +210,7 @@ object V141PbrAssets {
         taa.enabled = true
         taa.filterHistory = true
         taa.filterInput = true
-        taa.upscaling = false
+        taa.upscaling = 1.0f
         view.temporalAntiAliasingOptions = taa
     }
 
