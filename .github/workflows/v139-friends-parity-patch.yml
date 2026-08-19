@@ -1,0 +1,58 @@
+name: V139 Friends parity guarded patch
+
+on:
+  push:
+    branches:
+      - agent/v139-friends-screen-quantum-parity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v139-friends-screen-quantum-parity
+          fetch-depth: 0
+      - name: Apply clean-room Friends presentation calibration
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('app/src/main/java/com/puttvision/screen/V138CommercialScreenGolf.kt')
+          s = p.read_text()
+          replacements = [
+              ('setBackgroundColor(Color.rgb(59, 83, 90))', 'setBackgroundColor(Color.rgb(107, 158, 187))'),
+              ('addView(V138CommercialHud(context, game), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))', 'addView(V139FriendsHud(context, game), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))'),
+              ('private val cameraSmoother = V138CameraSmoother()', 'private val cameraSmoother = V139FriendsCameraSmoother()'),
+              ('V138CommercialCameraPlanner.target(', 'V139FriendsCameraPlanner.target('),
+              ('Skybox.Builder().color(.34f, .49f, .57f, 1f)', 'Skybox.Builder().color(.47f, .67f, .82f, 1f)'),
+              ('camera.setExposure(10.8f, 1f / 125f, 100f)', 'camera.setExposure(10.15f, 1f / 125f, 100f)'),
+              ('instance(turfMaterial, .085f, .174f, .058f)', 'instance(turfMaterial, .108f, .258f, .067f)'),
+              ('instance(turfMaterial, .128f, .268f, .087f)', 'instance(turfMaterial, .155f, .355f, .092f)'),
+              ('instance(turfMaterial, .164f, .348f, .106f)', 'instance(turfMaterial, .205f, .468f, .118f)'),
+              ('.intensity(104_000f)', '.intensity(112_000f)'),
+              ('.intensity(13_500f)', '.intensity(18_000f)'),
+          ]
+          for old, new in replacements:
+              count = s.count(old)
+              if count == 0 and new in s:
+                  continue
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match for {old!r}, got {count}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          git config user.name "puttvision-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/src/main/java/com/puttvision/screen/V138CommercialScreenGolf.kt
+          if git diff --cached --quiet; then
+            echo "V139 renderer patch already applied"
+            exit 0
+          fi
+          git commit -m "V139: apply Friends public-reference renderer calibration"
+          git push origin HEAD:agent/v139-friends-screen-quantum-parity
