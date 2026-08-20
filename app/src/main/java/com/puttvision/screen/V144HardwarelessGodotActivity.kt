@@ -95,8 +95,11 @@ class V144HardwarelessGodotActivity : GodotActivity() {
      * V146 phone-only safety path. The production HDMI/DeX Activity keeps the project default
      * mobile renderer; only SIM LAB forces the broadly compatible OpenGL backend.
      */
-    override fun getCommandLine(): List<String> =
-        super.getCommandLine() + listOf("--rendering-method", "gl_compatibility")
+    override fun getCommandLine(): MutableList<String> =
+        super.getCommandLine().apply {
+            add("--rendering-method")
+            add("gl_compatibility")
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         markStage("onCreate-before-godot")
