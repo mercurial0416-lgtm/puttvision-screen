@@ -42,6 +42,18 @@
             android:resizeableActivity="false"
             android:theme="@style/Theme.PuttVisionScreen" />
 
+        <!-- V144: SIM LAB runs the exact V143 Godot scene in an isolated process. This gives the
+             phone a real no-hardware renderer without competing with the main/HDMI Godot host. -->
+        <activity
+            android:name=".V144HardwarelessGodotActivity"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:resizeableActivity="false"
+            android:process=":hardwareless"
+            android:theme="@style/Theme.PuttVisionScreen" />
+
         <!-- Godot's AAR also contributes a FileProvider with the same app authority. PuttVision's
              updater owns that provider contract; the TV renderer does not use Godot file sharing. -->
         <provider
