@@ -188,12 +188,12 @@ func _update_aim_line(distance_m: float) -> void:
         child.queue_free()
 
     # Fine segmented guide rather than the old thick red laser beam.
-    var usable := max(0.45, distance_m - 0.34)
-    var pitch := 0.28
-    var dash_len := 0.12
-    var count := int(floor(usable / pitch))
+    var usable: float = maxf(0.45, distance_m - 0.34)
+    var pitch: float = 0.28
+    var dash_len: float = 0.12
+    var count: int = int(floor(usable / pitch))
     for i in range(count):
-        var z := -0.24 - float(i) * pitch
+        var z: float = -0.24 - float(i) * pitch
         if abs(z) > distance_m - 0.18:
             break
         var dash := MeshInstance3D.new()
@@ -247,7 +247,7 @@ func _build_pavilion(local_pos: Vector3) -> void:
 
     # Glass facade with mullions and a warm lounge zone.
     for i in range(6):
-        var x := -1.95 + float(i) * 0.78
+        var x: float = -1.95 + float(i) * 0.78
         _box(house, Vector3(0.63, 0.62, 0.035), Vector3(x, 0.70, -0.882), premium_glass if i < 4 else premium_warm_glass)
         _box(house, Vector3(0.035, 0.68, 0.06), Vector3(x + 0.34, 0.70, -0.90), premium_trim)
 
@@ -255,8 +255,8 @@ func _build_pavilion(local_pos: Vector3) -> void:
     _box(house, Vector3(1.02, 0.70, 0.05), Vector3(2.08, 0.67, -0.89), mat_window)
     _box(house, Vector3(4.45, 0.08, 0.90), Vector3(0.15, 0.08, -1.27), premium_deck)
     _box(house, Vector3(3.15, 0.09, 1.00), Vector3(0.35, 1.05, -1.10), mat_roof)
-    for x in [-1.05, 0.15, 1.35]:
-        _box(house, Vector3(0.07, 0.95, 0.07), Vector3(float(x), 0.56, -1.20), premium_trim)
+    for x_value in [-1.05, 0.15, 1.35]:
+        _box(house, Vector3(0.07, 0.95, 0.07), Vector3(float(x_value), 0.56, -1.20), premium_trim)
 
     # Side stone blade and chimney break the box profile.
     _box(house, Vector3(0.58, 1.55, 1.82), Vector3(-2.25, 0.78, 0.02), premium_stone)
@@ -276,8 +276,8 @@ func _build_shrub(pos: Vector3, radius: float) -> void:
         mesh.rings = 10
         leaf.mesh = mesh
         leaf.material_override = premium_leaf if i % 2 == 0 else premium_leaf_dark
-        var angle := float(i) * TAU / 5.0
-        leaf.position = Vector3(cos(angle) * radius * 0.45, radius * (0.58 + 0.10 * (i % 2)), sin(angle) * radius * 0.28)
+        var angle: float = float(i) * TAU / 5.0
+        leaf.position = Vector3(cos(angle) * radius * 0.45, radius * (0.58 + 0.10 * float(i % 2)), sin(angle) * radius * 0.28)
         leaf.scale = Vector3(1.0, 0.78, 0.72)
         root.add_child(leaf)
 
