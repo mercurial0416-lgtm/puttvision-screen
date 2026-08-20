@@ -26,7 +26,17 @@ uniform float side_slope = 0.0;
 uniform float long_slope = 0.0;
 float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
 void vertex(){
+    // Keep the putting line nearly flat while lifting the shoulders and distant surface.
+    // This is presentation-only geometry; Android remains authoritative for putt physics.
+    float side = UV.x * 2.0 - 1.0;
+    float shoulder = pow(abs(side), 1.75);
+    float depth = smoothstep(0.07, 0.92, UV.y);
+    float center_guard = smoothstep(0.10, 0.72, abs(side));
+    float broad_roll = sin(UV.y * 10.2 + side * 1.4) * 0.018;
+    float secondary_roll = sin(UV.y * 21.0 - side * 3.2) * 0.007;
     VERTEX.y += VERTEX.x * side_slope + (-VERTEX.z) * long_slope;
+    VERTEX.y += shoulder * depth * 0.105;
+    VERTEX.y += (broad_roll + secondary_roll) * depth * mix(0.10, 1.0, center_guard);
 }
 void fragment(){
     vec2 uv = UV * tiling;
@@ -138,19 +148,38 @@ func _organic_course_mesh(y_value: float, z_near: float, z_far: float, near_half
     return mesh
 
 func _build_visual_bunker(pos: Vector3, footprint: Vector2, yaw_degrees: float) -> void:
-    var bunker := MeshInstance3D.new()
-    bunker.name = "VisualBunker"
-    var mesh := CylinderMesh.new()
-    mesh.top_radius = 1.0
-    mesh.bottom_radius = 1.05
-    mesh.height = 0.045
-    mesh.radial_segments = 64
-    bunker.mesh = mesh
-    bunker.position = pos
-    bunker.rotation_degrees.y = yaw_degrees
-    bunker.scale = Vector3(footprint.x, 0.18, footprint.y)
-    bunker.material_override = _pbr(Color("#c7b78e"), 0.96, 0.0)
-    add_child(bunker)
+    var root := Node3D.new()
+    root.name = "VisualBunker"
+    root.position = pos
+    root.rotation_degrees.y = yaw_degrees
+    add_child(root)
+
+    # A lowered sand floor plus raised turf lip reads as a bunker instead of a beige decal.
+    var lip := MeshInstance3D.new()
+    lip.name = "BunkerLip"
+    var lip_mesh := CylinderMesh.new()
+    lip_mesh.top_radius = 1.10
+    lip_mesh.bottom_radius = 1.16
+    lip_mesh.height = 0.055
+    lip_mesh.radial_segments = 64
+    lip.mesh = lip_mesh
+    lip.position.y = 0.018
+    lip.scale = Vector3(footprint.x, 0.50, footprint.y)
+    lip.material_override = _pbr(Color("#39563a"), 0.94, 0.0)
+    root.add_child(lip)
+
+    var sand := MeshInstance3D.new()
+    sand.name = "BunkerSand"
+    var sand_mesh := CylinderMesh.new()
+    sand_mesh.top_radius = 1.0
+    sand_mesh.bottom_radius = 1.03
+    sand_mesh.height = 0.038
+    sand_mesh.radial_segments = 64
+    sand.mesh = sand_mesh
+    sand.position.y = -0.018
+    sand.scale = Vector3(footprint.x * 0.92, 0.32, footprint.y * 0.92)
+    sand.material_override = _pbr(Color("#c7b78e"), 0.98, 0.0)
+    root.add_child(sand)
 
 func _build_environment() -> void:
     # Lower ambient and a stronger oblique key produce readable contact/depth on the clubhouse,
