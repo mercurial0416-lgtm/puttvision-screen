@@ -19,15 +19,11 @@ import org.godotengine.godot.plugin.GodotPlugin
 import kotlin.math.max
 
 /**
- * V144 no-hardware simulator.
+ * V145 no-hardware simulator hotfix.
  *
- * This is deliberately a real V143 Godot host, not an Android imitation of the TV. The only
- * synthetic component is shot input. Every shot enters GameEngine.launch(), advances through the
- * production ball/cup physics, and is published through the exact same V143GodotRenderBridge
- * consumed by the HDMI/DeX renderer.
- *
- * The manifest puts this Activity in :hardwareless so its Godot singleton cannot fight the main
- * process / external-display Godot host for ownership of the native renderer.
+ * Rendering is still the real V143 Godot scene and synthetic shots still enter the production
+ * GameEngine. Unlike V144, the host stays in the app process and does not publish/tick physics
+ * until both Android UI creation and Godot native setup have completed.
  */
 class V144HardwarelessGodotActivity : GodotActivity() {
     private val engine = GameEngine()
@@ -40,6 +36,10 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     private var profile = 8
     private var lastTickNs = 0L
     private var lastRunning = false
+    private var godotReady = false
+    private var uiReady = false
+    private var resumed = false
+    private var pumpStarted = false
 
     private enum class Scenario(
         val label: String,
@@ -57,25 +57,39 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
     private val pump = object : Runnable {
         override fun run() {
+            if (!pumpStarted || !godotReady || !uiReady || !resumed || isFinishing || isDestroyed) {
+                pumpStarted = false
+                return
+            }
+
             val now = System.nanoTime()
-            val dt = if (lastTickNs == 0L) 1.0 / 60.0 else
+            val dt = if (lastTickNs == 0L) {
+                1.0 / 60.0
+            } else {
                 ((now - lastTickNs) / 1_000_000_000.0).coerceIn(1.0 / 240.0, 0.05)
+            }
             lastTickNs = now
 
-            val runningBefore = engine.state?.running == true
-            if (runningBefore) engine.step(dt)
-            V143GodotRenderBridge.publish(engine)
+            runCatching {
+                val runningBefore = engine.state?.running == true
+                if (runningBefore) engine.step(dt)
+                V143GodotRenderBridge.publish(engine)
 
-            val runningNow = engine.state?.running == true
-            if (lastRunning && !runningNow) renderResultStatus()
-            lastRunning = runningNow
-            handler.postDelayed(this, 16L)
+                val runningNow = engine.state?.running == true
+                if (lastRunning && !runningNow) renderResultStatus()
+                lastRunning = runningNow
+            }.onFailure { error ->
+                updateStatus("SIM LAB ERROR · ${error.javaClass.simpleName}")
+                stopPump()
+                return
+            }
+
+            if (pumpStarted) handler.postDelayed(this, 16L)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        configureLabEngine()
-        V143GodotRenderBridge.publish(engine)
+        // GodotActivity owns native initialization. Do not touch GameEngine/bridge before this.
         super.onCreate(savedInstanceState)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -85,8 +99,14 @@ class V144HardwarelessGodotActivity : GodotActivity() {
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 
         addContentView(buildLabOverlay(), FrameLayout.LayoutParams(-1, -1))
-        lastTickNs = System.nanoTime()
-        handler.post(pump)
+        uiReady = true
+
+        // Process-local state is now shared with MainActivity; explicitly hydrate the persisted
+        // virtual ball origin before the first bridge snapshot.
+        V26BallStartRuntime.install(applicationContext)
+        configureLabEngine()
+        V143GodotRenderBridge.publish(engine)
+        maybeStartPump()
     }
 
     override fun getHostPlugins(godot: Godot): Set<GodotPlugin> =
@@ -94,14 +114,48 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
     override fun onGodotSetupCompleted() {
         super.onGodotSetupCompleted()
-        runOnUiThread {
+        godotReady = true
+        V143GodotRuntime.setupComplete = true
+        V143GodotRuntime.lastFailure = null
+        handler.post {
             updateStatus("V143 GODOT READY · ${distanceLabel()} · GREEN ${greenLabel()}")
+            maybeStartPump()
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        maybeStartPump()
+    }
+
+    override fun onPause() {
+        resumed = false
+        stopPump()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        resumed = false
+        godotReady = false
+        uiReady = false
+        V143GodotRuntime.setupComplete = false
+        stopPump()
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
+    }
+
+    private fun maybeStartPump() {
+        if (!godotReady || !uiReady || !resumed || pumpStarted || isFinishing || isDestroyed) return
+        lastTickNs = System.nanoTime()
+        pumpStarted = true
+        handler.post(pump)
+    }
+
+    private fun stopPump() {
+        pumpStarted = false
+        lastTickNs = 0L
+        handler.removeCallbacks(pump)
     }
 
     private fun configureLabEngine() {
@@ -150,7 +204,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
         controls.addView(labButton("RESET") {
             engine.resetSimulation()
-            V143GodotRenderBridge.publish(engine)
+            if (godotReady) V143GodotRenderBridge.publish(engine)
             updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}")
         }, buttonLp())
         controls.addView(labButton("닫기") { finish() }, buttonLp())
@@ -176,6 +230,10 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     }
 
     private fun inject(scenario: Scenario) {
+        if (!godotReady) {
+            updateStatus("GODOT STARTING · 잠시 후 다시")
+            return
+        }
         if (engine.state?.running == true) {
             updateStatus("ROLLING · 끝난 뒤 다음 샷")
             return
@@ -204,6 +262,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         V143GodotRenderBridge.publish(engine)
         lastRunning = engine.state?.running == true
         updateStatus("${scenario.label} · REAL PHYSICS · ${distanceLabel()} · G${greenLabel()}")
+        maybeStartPump()
     }
 
     private fun cycleDistance() {
@@ -227,7 +286,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         engine.settings.longSlopePct = 0.0
         engine.settings.terrainProfileId = profile
         if (reset) engine.resetSimulation()
-        V143GodotRenderBridge.publish(engine)
+        if (godotReady) V143GodotRenderBridge.publish(engine)
     }
 
     private fun renderResultStatus() {
