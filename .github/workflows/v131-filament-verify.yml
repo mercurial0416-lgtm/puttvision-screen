@@ -1,4 +1,4 @@
-name: V131 Filament verify
+name: TV renderer verify
 
 on:
   push:
@@ -6,13 +6,14 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'ci/v143_fetch_cc0_assets.py'
       - '.github/workflows/v131-filament-verify.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: v131-filament-${{ github.ref }}
+  group: tv-renderer-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,13 +31,77 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: V131 consumer and developer unit tests
+      - name: Fetch V143 CC0 visual assets
+        run: python3 ci/v143_fetch_cc0_assets.py
+
+      - name: Upload resolved V143 CC0 assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: v143-cc0-assets
+          path: app/src/main/assets/v143_assets
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Validate V143 Godot project
+        shell: bash
+        run: |
+          set -euo pipefail
+          GODOT_ZIP="$RUNNER_TEMP/godot.zip"
+          GODOT_DIR="$RUNNER_TEMP/godot"
+          curl --fail-with-body -L --retry 3 --retry-delay 2 \
+            "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip" \
+            -o "$GODOT_ZIP"
+          mkdir -p "$GODOT_DIR"
+          unzip -q "$GODOT_ZIP" -d "$GODOT_DIR"
+          GODOT=$(find "$GODOT_DIR" -maxdepth 1 -type f -name 'Godot_v4.7.1-stable_linux.x86_64' | head -1)
+          test -x "$GODOT"
+          echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
+          "$GODOT" --headless --editor --path app/src/main/assets --quit
+          "$GODOT" --headless --path app/src/main/assets --script res://v143_tv.gd --check-only
+          SMOKE="$RUNNER_TEMP/v143-smoke.log"
+          "$GODOT" --headless --path app/src/main/assets --quit-after 2 res://v143_tv.tscn 2>&1 | tee "$SMOKE"
+          if grep -Eiq 'SCRIPT ERROR|Parse Error|Invalid assignment|Invalid call|Cannot assign' "$SMOKE"; then
+            echo "V143 runtime smoke detected a GDScript error" >&2
+            exit 1
+          fi
+
+      - name: Render V143 reference frame
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v xvfb-run >/dev/null
+          rm -f app/src/main/assets/v143-preview.png app/src/main/assets/v143-movie*.png app/src/main/assets/v143-movie.wav
+          timeout 45s xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render" \
+            "$GODOT_BIN" \
+              --path app/src/main/assets \
+              --display-driver x11 \
+              --rendering-method gl_compatibility \
+              --resolution 1920x1080 \
+              --write-movie v143-movie.png \
+              --fixed-fps 30 \
+              --quit-after 18 \
+              res://v143_tv.tscn
+          FRAME=$(find app/src/main/assets -maxdepth 1 -type f -name 'v143-movie*.png' | sort | tail -1)
+          test -n "$FRAME"
+          test -s "$FRAME"
+          cp "$FRAME" app/src/main/assets/v143-preview.png
+          test -s app/src/main/assets/v143-preview.png
+
+      - name: Upload V143 reference frame
+        uses: actions/upload-artifact@v4
+        with:
+          name: v143-godot-preview
+          path: app/src/main/assets/v143-preview.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Consumer and developer unit tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
       - name: Compile both debug APK flavors
         run: gradle assembleConsumerDebug assembleDeveloperDebug
 
-      - name: Enforce self-update release size ceiling
+      - name: Enforce engine-aware self-update size ceiling
         shell: bash
         env:
           PV_EXTERNAL_SIGNING: 'true'
@@ -47,4 +112,6 @@ jobs:
           test -s "$APK"
           BYTES=$(stat -c%s "$APK")
           echo "consumer release bytes=$BYTES"
-          test "$BYTES" -lt $((48 * 1024 * 1024))
+          # V143 embeds one ARM64 Godot runtime plus CC0 environment assets. Keep a hard ceiling so
+          # future additions remain deliberate while leaving a real game-engine asset budget.
+          test "$BYTES" -lt $((180 * 1024 * 1024))
