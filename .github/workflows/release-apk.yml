@@ -1,9 +1,9 @@
-name: Build and publish PuttVision APK
+name: V143 split bridge and release
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  release:
-    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[no-release]') }}
+  bridge:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.number == 138 && github.event.comment.body == '/release-v143-split') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Allocate monotonic app version
+      - name: Allocate bridge version
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,7 +45,7 @@ jobs:
           echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
 
-      - name: Regression tests
+      - name: Bridge regression tests
         run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
       - name: Real-device measurement regression gate
@@ -124,9 +124,9 @@ jobs:
           sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
           echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
           echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
-          test "$(stat -c%s puttvision-consumer.apk)" -lt $((48 * 1024 * 1024))
+          test "$PV_APK_SIZE" -lt $((48 * 1024 * 1024))
 
-      - name: Request bridge Supabase upload token
+      - name: Request bridge upload token
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -142,7 +142,7 @@ jobs:
           echo "PV_APK_URL=$(jq -r .apkUrl prepare.json)" >> "$GITHUB_ENV"
           echo "PV_MANIFEST_URL=$(jq -r .manifestUrl prepare.json)" >> "$GITHUB_ENV"
 
-      - name: Upload bridge consumer APK to Supabase
+      - name: Upload bridge APK to Supabase
         shell: bash
         env:
           SUPABASE_URL: https://razejagceyznnajioxgx.supabase.co
@@ -159,12 +159,11 @@ jobs:
           echo "$PV_RELEASE_SHA  uploaded.apk" | sha256sum -c -
 
       - name: Publish bridge GitHub Release
-        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -u
+          set -euo pipefail
           ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
           if gh release view "$PV_TAG" >/dev/null 2>&1; then
             gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber
@@ -185,4 +184,168 @@ jobs:
           jq -e '.ok == true and .action == "finalize"' finalize.json >/dev/null
           LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
           echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" '.versionCode == $vc and .sha256 == $sha' >/dev/null
+          echo "$LIVE" | jq .
+
+  v143:
+    needs: bridge
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v143-external-delivery
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Fetch V143 Godot visual assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/v143_fetch_cc0_assets.py
+          test -s app/src/main/assets/v143_assets/turf/albedo.png
+          test -s app/src/main/assets/v143_assets/turf/normal.png
+          test -s app/src/main/assets/v143_assets/turf/roughness.png
+          test -s app/src/main/assets/v143_assets/trees/tree_small_02.png
+          test -s app/src/main/assets/v143_assets/trees/island_tree_03.png
+          test -s app/src/main/assets/v143_assets/environment/environment.hdr
+
+      - name: Allocate V143 version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          LAST=${TAG#pv-}
+          [[ "$LAST" =~ ^[0-9]+$ ]]
+          VERSION_CODE=$((LAST + 1))
+          VERSION_NAME="0.7.$((VERSION_CODE - 100000))"
+          echo "PV_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
+
+      - name: V143 regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
+
+      - name: Real-device measurement regression gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF=validation/v20_reference.csv
+          MEASURED=validation/v20_measured.csv
+          if [ -f "$REF" ] && [ -f "$MEASURED" ]; then
+            python3 ci/v20_accuracy_gate.py "$REF" "$MEASURED"
+          elif [ -f "$REF" ] || [ -f "$MEASURED" ]; then
+            echo "Accuracy fixture set is incomplete; both $REF and $MEASURED are required" >&2
+            exit 1
+          else
+            echo "No real-device reference dataset committed yet; release accuracy gate is armed but inactive."
+          fi
+
+      - name: Restore release signing bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/signing-v3.tgz"
+          DIR="$RUNNER_TEMP/signing-v3"
+          ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v3") | .assets[] | select(.name == "puttvision-signing-bundle-v3.tgz" or .label == "puttvision-signing-bundle.tgz") | .id' | head -1)
+          if [ -z "$ASSET_ID" ]; then
+            echo "Missing required release signing secret: private signing lineage v3 escrow is unavailable" >&2
+            exit 1
+          fi
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE"
+          test -s "$BUNDLE"
+          mkdir -p "$DIR"
+          tar -xzf "$BUNDLE" -C "$DIR"
+          test -s "$DIR/release.jks"
+          test -s "$DIR/signing-lineage"
+          test -s "$DIR/signing.env"
+          chmod 600 "$DIR/release.jks" "$DIR/signing-lineage" "$DIR/signing.env"
+          set -a; source "$DIR/signing.env"; set +a
+          for n in STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK; do test -n "${!n:-}"; done
+          test "$ROTATION_MIN_SDK" = 28
+          CERT=$(keytool -exportcert -keystore "$DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sha256sum | cut -d' ' -f1)
+          test "$CERT" = "7a5962aee08d9edc655da5f58cb8199b4d41604793ef539bd0111df2ca0900cb"
+          printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/store.pass"
+          printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/key.pass"
+          chmod 600 "$RUNNER_TEMP/store.pass" "$RUNNER_TEMP/key.pass"
+          echo "PV_SIGNING_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "PV_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "PV_ROTATION_MIN_SDK=$ROTATION_MIN_SDK" >> "$GITHUB_ENV"
+
+      - name: Build unsigned V143 APKs
+        env:
+          PV_EXTERNAL_SIGNING: 'true'
+          PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
+        run: gradle assembleConsumerRelease assembleDeveloperRelease
+
+      - name: Sign V143 APKs and verify certificates
+        shell: bash
+        run: |
+          set -euo pipefail
+          A=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner | sort -V | tail -1)
+          C=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          D=$(find app/build/outputs/apk/developer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          test -s "$C"; test -s "$D"; test -s "$PV_SIGNING_DIR/signing-lineage"
+          sign_one() {
+            "$A" sign --ks "$PV_SIGNING_DIR/release.jks" --ks-key-alias "$PV_KEY_ALIAS" --ks-pass "file:$RUNNER_TEMP/store.pass" --key-pass "file:$RUNNER_TEMP/key.pass" --lineage "$PV_SIGNING_DIR/signing-lineage" --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK" --v1-signing-enabled false --v2-signing-enabled false --v3-signing-enabled true --v4-signing-enabled false --out "$2" "$1"
+            "$A" verify --verbose --print-certs --min-sdk-version 28 "$2"
+          }
+          sign_one "$C" puttvision-consumer.apk
+          sign_one "$D" puttvision.apk
+          for f in puttvision-consumer.apk puttvision.apk; do
+            S=$("$A" verify --print-certs "$f" 2>&1 | sed -n 's/.*certificate SHA-256 digest: //p' | head -1 | tr -d '[:space:]')
+            test "$S" = "7a5962aee08d9edc655da5f58cb8199b4d41604793ef539bd0111df2ca0900cb"
+          done
+          sha256sum puttvision.apk > puttvision.apk.sha256
+          sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
+          echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
+          echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
+          test "$PV_APK_SIZE" -lt $((180 * 1024 * 1024))
+
+      - name: Publish V143 GitHub Release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
+          if gh release view "$PV_TAG" >/dev/null 2>&1; then
+            gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · V143 Godot TV renderer · external large-APK delivery" --latest
+          else
+            gh release create "$PV_TAG" "${ASSETS[@]}" --target release/v143-external-delivery --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · V143 Godot TV renderer · external large-APK delivery" --latest
+          fi
+          APK_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$PV_TAG/puttvision-consumer.apk"
+          echo "PV_APK_URL=$APK_URL" >> "$GITHUB_ENV"
+          curl --fail-with-body -sSIL "$APK_URL" >/dev/null
+
+      - name: Publish V143 external manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
+        run: |
+          set -euo pipefail
+          jq -nc \
+            --arg action external-finalize \
+            --argjson vc "$PV_VERSION_CODE" \
+            --arg vn "$PV_VERSION_NAME" \
+            --arg sha "$PV_RELEASE_SHA" \
+            --argjson size "$PV_APK_SIZE" \
+            --arg apkUrl "$PV_APK_URL" \
+            '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size,apkUrl:$apkUrl}' > payload.json
+          curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > finalize.json
+          jq -e '.ok == true and .action == "external-finalize"' finalize.json >/dev/null
+          PV_MANIFEST_URL=$(jq -r .manifestUrl finalize.json)
+          LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
+          echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" --arg url "$PV_APK_URL" '.versionCode == $vc and .sha256 == $sha and .apkUrl == $url' >/dev/null
           echo "$LIVE" | jq .
