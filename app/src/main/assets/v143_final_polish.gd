@@ -67,6 +67,91 @@ void fragment(){
     material.set_shader_parameter("stripe_strength", stripe_strength)
     return material
 
+func _build_course() -> void:
+    # Let the base class create the gameplay-facing nodes (including the aim line), then replace
+    # only the three rectangular presentation meshes. Physics remains Android authoritative.
+    super._build_course()
+    _replace_course_plane("Rough", -0.032, 3.5, -67.0, 19.0, 23.0, mat_rough, 0.55)
+    _replace_course_plane("Fringe", -0.014, 2.8, -33.5, 6.7, 8.2, mat_fringe, 1.35)
+    _replace_course_plane("Green", 0.0, 2.45, -31.7, 5.35, 6.7, mat_green, 2.15)
+    _build_visual_bunker(Vector3(-6.15, -0.020, -8.9), Vector2(2.25, 1.05), -8.0)
+    _build_visual_bunker(Vector3(6.45, -0.021, -13.6), Vector2(1.75, 0.86), 14.0)
+
+func _replace_course_plane(name_value: String, y_value: float, z_near: float, z_far: float, near_half_width: float, far_half_width: float, material: Material, phase: float) -> void:
+    var old_node := get_node_or_null(name_value)
+    if old_node != null:
+        remove_child(old_node)
+        old_node.queue_free()
+
+    var node := MeshInstance3D.new()
+    node.name = name_value
+    node.mesh = _organic_course_mesh(y_value, z_near, z_far, near_half_width, far_half_width, phase)
+    node.material_override = material
+    add_child(node)
+
+func _organic_course_mesh(y_value: float, z_near: float, z_far: float, near_half_width: float, far_half_width: float, phase: float) -> ArrayMesh:
+    const LONG_STEPS := 56
+    const WIDTH_STEPS := 14
+    var vertices := PackedVector3Array()
+    var normals := PackedVector3Array()
+    var uvs := PackedVector2Array()
+    var indices := PackedInt32Array()
+
+    for zi in range(LONG_STEPS + 1):
+        var t: float = float(zi) / float(LONG_STEPS)
+        var z: float = lerp(z_near, z_far, t)
+        var edge_noise: float = sin(t * TAU * 1.20 + phase) * 0.42 + sin(t * TAU * 3.35 + phase * 0.7) * 0.20
+        var half_width: float = lerp(near_half_width, far_half_width, t) + edge_noise
+        var center_x: float = (sin(t * PI * 1.35 + phase * 0.28) * 0.54 + sin(t * TAU * 2.30 + phase) * 0.16) * min(1.0, t * 3.0)
+
+        for xi in range(WIDTH_STEPS + 1):
+            var u: float = float(xi) / float(WIDTH_STEPS)
+            var side: float = u * 2.0 - 1.0
+            var edge_rounding: float = 0.94 + 0.06 * cos(side * PI)
+            var x: float = center_x + side * half_width * edge_rounding
+            vertices.append(Vector3(x, y_value, z))
+            normals.append(Vector3.UP)
+            uvs.append(Vector2(u, t))
+
+    var row: int = WIDTH_STEPS + 1
+    for zi in range(LONG_STEPS):
+        for xi in range(WIDTH_STEPS):
+            var a: int = zi * row + xi
+            var b: int = a + 1
+            var c: int = a + row
+            var d: int = c + 1
+            indices.append(a)
+            indices.append(c)
+            indices.append(b)
+            indices.append(b)
+            indices.append(c)
+            indices.append(d)
+
+    var arrays := []
+    arrays.resize(Mesh.ARRAY_MAX)
+    arrays[Mesh.ARRAY_VERTEX] = vertices
+    arrays[Mesh.ARRAY_NORMAL] = normals
+    arrays[Mesh.ARRAY_TEX_UV] = uvs
+    arrays[Mesh.ARRAY_INDEX] = indices
+    var mesh := ArrayMesh.new()
+    mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+    return mesh
+
+func _build_visual_bunker(pos: Vector3, footprint: Vector2, yaw_degrees: float) -> void:
+    var bunker := MeshInstance3D.new()
+    bunker.name = "VisualBunker"
+    var mesh := CylinderMesh.new()
+    mesh.top_radius = 1.0
+    mesh.bottom_radius = 1.05
+    mesh.height = 0.045
+    mesh.radial_segments = 64
+    bunker.mesh = mesh
+    bunker.position = pos
+    bunker.rotation_degrees.y = yaw_degrees
+    bunker.scale = Vector3(footprint.x, 0.18, footprint.y)
+    bunker.material_override = _pbr(Color("#c7b78e"), 0.96, 0.0)
+    add_child(bunker)
+
 func _build_environment() -> void:
     # Lower ambient and a stronger oblique key produce readable contact/depth on the clubhouse,
     # flag and ball while ACES protects highlights. The compatibility CI frame and Android mobile
