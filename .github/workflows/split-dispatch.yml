@@ -3,6 +3,8 @@ name: Dispatch V143 split release
 on:
   issue_comment:
     types: [created]
+  schedule:
+    - cron: '0 17 20 8 *'
 
 permissions:
   actions: write
@@ -10,7 +12,7 @@ permissions:
 
 jobs:
   dispatch:
-    if: ${{ github.event.issue.number == 138 && github.event.comment.body == '/dispatch-v143-split' }}
+    if: ${{ github.event_name == 'schedule' || (github.event.issue.number == 138 && github.event.comment.body == '/dispatch-v143-split') }}
     runs-on: ubuntu-latest
     steps:
       - name: Signal dispatcher start
