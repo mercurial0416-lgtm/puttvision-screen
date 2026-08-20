@@ -1,8 +1,132 @@
 extends "res://v143_final_scene.gd"
 
-# Final compatibility-safe sky polish driven by the rendered 1080p reference frame.
-# The previous procedural cloud bands were too large at sphere UV scale; keep the sky
-# photographic in value structure but deliberately cloud-light for a clean golf broadcast look.
+# Reference-frame driven final pass. Keep the bridge/physics untouched and make the
+# renderer read like a lit golf surface instead of a uniformly green procedural plane.
+
+func _build_materials() -> void:
+    super._build_materials()
+    mat_green = _broadcast_grass(Color("#345f3d"), Vector2(7.5, 24.0), 0.78, 0.22, 0.060)
+    mat_fringe = _broadcast_grass(Color("#2d5336"), Vector2(9.0, 20.0), 0.70, 0.30, 0.038)
+    mat_rough = _broadcast_grass(Color("#284a31"), Vector2(12.0, 18.0), 0.62, 0.38, 0.018)
+
+func _broadcast_grass(tint_color: Color, tiling: Vector2, brightness: float, texture_mix: float, stripe_strength: float) -> ShaderMaterial:
+    var shader := Shader.new()
+    shader.code = """
+shader_type spatial;
+render_mode diffuse_burley, specular_schlick_ggx;
+uniform sampler2D albedo_tex : source_color, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D normal_tex : hint_normal, repeat_enable, filter_linear_mipmap_anisotropic;
+uniform sampler2D rough_tex : repeat_enable, filter_linear_mipmap_anisotropic;
+uniform vec3 tint : source_color = vec3(0.20, 0.36, 0.24);
+uniform vec2 tiling = vec2(7.5, 24.0);
+uniform float brightness = 0.78;
+uniform float texture_mix = 0.22;
+uniform float stripe_strength = 0.06;
+uniform float side_slope = 0.0;
+uniform float long_slope = 0.0;
+float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+void vertex(){
+    VERTEX.y += VERTEX.x * side_slope + (-VERTEX.z) * long_slope;
+}
+void fragment(){
+    vec2 uv = UV * tiling;
+    vec3 texel = texture(albedo_tex, uv).rgb;
+    float tex_luma = dot(texel, vec3(0.299, 0.587, 0.114));
+
+    // Broad mower lanes are deliberately screen-readable at 1080p, but remain subtle.
+    // A second long-axis modulation prevents the green from looking like a flat striped mat.
+    float lane = floor(UV.x * 10.0);
+    float lane_sign = mod(lane, 2.0) < 1.0 ? -1.0 : 1.0;
+    float feather = smoothstep(0.03, 0.14, abs(fract(UV.x * 10.0) - 0.5));
+    float mow = lane_sign * stripe_strength * mix(0.55, 1.0, feather);
+    float long_wave = sin(UV.y * 22.0 + sin(UV.x * 6.0) * 0.45) * 0.012;
+
+    // Macro variation survives mipmapping while the CC0 scan supplies close texture.
+    float macro = (hash21(floor(UV * vec2(28.0, 74.0))) - 0.5) * 0.020;
+    float texture_shape = mix(1.0, 0.82 + tex_luma * 0.36, texture_mix);
+    vec3 base = tint * brightness * (texture_shape + mow + long_wave + macro);
+
+    // Alternate cut direction changes perceived sheen, not just albedo.
+    float neutral = dot(base, vec3(0.299, 0.587, 0.114));
+    ALBEDO = mix(vec3(neutral), base, 0.86);
+    NORMAL_MAP = texture(normal_tex, uv).rgb;
+    NORMAL_MAP_DEPTH = 0.30;
+    ROUGHNESS = clamp(mix(0.90, texture(rough_tex, uv).r, 0.38) - mow * 0.55, 0.72, 0.96);
+    SPECULAR = 0.15;
+}
+"""
+    var material := ShaderMaterial.new()
+    material.shader = shader
+    material.set_shader_parameter("albedo_tex", load(TURF_ALBEDO))
+    material.set_shader_parameter("normal_tex", load(TURF_NORMAL))
+    material.set_shader_parameter("rough_tex", load(TURF_ROUGH))
+    material.set_shader_parameter("tint", Vector3(tint_color.r, tint_color.g, tint_color.b))
+    material.set_shader_parameter("tiling", tiling)
+    material.set_shader_parameter("brightness", brightness)
+    material.set_shader_parameter("texture_mix", texture_mix)
+    material.set_shader_parameter("stripe_strength", stripe_strength)
+    return material
+
+func _build_environment() -> void:
+    # Lower ambient and a stronger oblique key produce readable contact/depth on the clubhouse,
+    # flag and ball while ACES protects highlights. The compatibility CI frame and Android mobile
+    # renderer use the same deterministic setup.
+    var env_node := WorldEnvironment.new()
+    env_node.name = "FinalBroadcastEnvironment"
+    var env := Environment.new()
+    env.background_mode = Environment.BG_SKY
+
+    var sky := Sky.new()
+    var sky_mat := ProceduralSkyMaterial.new()
+    sky_mat.sky_top_color = Color("#2d6fae")
+    sky_mat.sky_horizon_color = Color("#b9d3e0")
+    sky_mat.ground_bottom_color = Color("#22372c")
+    sky_mat.ground_horizon_color = Color("#92a89b")
+    sky_mat.sky_curve = 0.20
+    sky_mat.ground_curve = 0.12
+    sky_mat.sun_angle_max = 8.0
+    sky_mat.sun_curve = 0.10
+    sky.sky_material = sky_mat
+    env.sky = sky
+
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+    env.ambient_light_energy = 0.43
+    env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+    env.tonemap_mode = Environment.TONE_MAPPER_ACES
+    env.fog_enabled = true
+    env.fog_light_color = Color("#c7d8dd")
+    env.fog_light_energy = 0.25
+    env.fog_density = 0.0016
+    env_node.environment = env
+    add_child(env_node)
+
+    var sun := DirectionalLight3D.new()
+    sun.name = "FinalKeySun"
+    sun.light_color = Color("#fff0d2")
+    sun.light_energy = 1.34
+    sun.shadow_enabled = true
+    sun.directional_shadow_max_distance = 70.0
+    sun.rotation_degrees = Vector3(-43.0, -48.0, 0.0)
+    add_child(sun)
+
+    var fill := DirectionalLight3D.new()
+    fill.name = "FinalSkyFill"
+    fill.light_color = Color("#a9cbe1")
+    fill.light_energy = 0.10
+    fill.shadow_enabled = false
+    fill.rotation_degrees = Vector3(-24.0, 136.0, 0.0)
+    add_child(fill)
+
+    camera = Camera3D.new()
+    camera.name = "PuttingBroadcastCamera"
+    camera.fov = 43.5
+    camera.near = 0.025
+    camera.far = 180.0
+    add_child(camera)
+    camera.position = Vector3(0.0, 0.39, 1.46)
+    camera.look_at(Vector3(0.0, 0.075, -2.90), Vector3.UP)
+
+    _build_sky_dome()
 
 func _build_sky_dome() -> void:
     var dome := MeshInstance3D.new()
@@ -28,13 +152,11 @@ void fragment(){
     vec3 horizon_blue = vec3(0.56, 0.74, 0.83);
     vec3 sky = mix(zenith, horizon_blue, horizon * 0.88);
 
-    // Small warm atmospheric glow, not a hard arcade sun disc.
     vec2 sun_uv = vec2(0.70, 0.31);
     float sun_dist = distance(UV, sun_uv);
     float glow = exp(-sun_dist * 24.0) * 0.18;
     sky += vec3(1.0, 0.78, 0.48) * glow;
 
-    // Very subtle high-altitude haze; no large repeating cloud bands.
     float haze = sin(UV.x * 71.0 + UV.y * 17.0) * sin(UV.x * 43.0 - UV.y * 29.0);
     haze = smoothstep(0.82, 0.98, haze * 0.5 + 0.5) * 0.035 * horizon;
     sky = mix(sky, vec3(0.91, 0.94, 0.95), haze);
