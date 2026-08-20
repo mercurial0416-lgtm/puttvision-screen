@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: release/v143-bridge
 
       - uses: actions/setup-java@v5
         with:
@@ -27,18 +29,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-
-      - name: Fetch V143 Godot visual assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 ci/v143_fetch_cc0_assets.py
-          test -s app/src/main/assets/v143_assets/turf/albedo.png
-          test -s app/src/main/assets/v143_assets/turf/normal.png
-          test -s app/src/main/assets/v143_assets/turf/roughness.png
-          test -s app/src/main/assets/v143_assets/trees/tree_small_02.png
-          test -s app/src/main/assets/v143_assets/trees/island_tree_03.png
-          test -s app/src/main/assets/v143_assets/environment/environment.hdr
 
       - name: Allocate monotonic app version
         shell: bash
@@ -105,15 +95,14 @@ jobs:
           echo "PV_SIGNING_DIR=$DIR" >> "$GITHUB_ENV"
           echo "PV_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
           echo "PV_ROTATION_MIN_SDK=$ROTATION_MIN_SDK" >> "$GITHUB_ENV"
-          echo "Restored full Android signing lineage v3."
 
-      - name: Build unsigned consumer and developer APKs
+      - name: Build unsigned bridge APKs
         env:
           PV_EXTERNAL_SIGNING: 'true'
           PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
         run: gradle assembleConsumerRelease assembleDeveloperRelease
 
-      - name: Sign release APKs and verify certificates
+      - name: Sign bridge APKs and verify certificates
         shell: bash
         run: |
           set -euo pipefail
@@ -135,9 +124,9 @@ jobs:
           sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
           echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
           echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
-          test "$(stat -c%s puttvision-consumer.apk)" -lt $((180 * 1024 * 1024))
+          test "$(stat -c%s puttvision-consumer.apk)" -lt $((48 * 1024 * 1024))
 
-      - name: Request one-time Supabase upload token
+      - name: Request bridge Supabase upload token
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -153,7 +142,7 @@ jobs:
           echo "PV_APK_URL=$(jq -r .apkUrl prepare.json)" >> "$GITHUB_ENV"
           echo "PV_MANIFEST_URL=$(jq -r .manifestUrl prepare.json)" >> "$GITHUB_ENV"
 
-      - name: Upload consumer APK to public Supabase Storage
+      - name: Upload bridge consumer APK to Supabase
         shell: bash
         env:
           SUPABASE_URL: https://razejagceyznnajioxgx.supabase.co
@@ -169,7 +158,7 @@ jobs:
           test "$(stat -c%s uploaded.apk)" -eq "$PV_APK_SIZE"
           echo "$PV_RELEASE_SHA  uploaded.apk" | sha256sum -c -
 
-      - name: Publish GitHub Release
+      - name: Publish bridge GitHub Release
         continue-on-error: true
         shell: bash
         env:
@@ -177,28 +166,14 @@ jobs:
         run: |
           set -u
           ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
-          ok=0
-          for attempt in 1 2 3 4 5 6; do
-            echo "GitHub Release attempt $attempt/6"
-            if gh release view "$PV_TAG" >/dev/null 2>&1; then
-              if gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber && gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified full-lineage consumer/developer release" --latest; then
-                ok=1
-                break
-              fi
-            else
-              if gh release create "$PV_TAG" "${ASSETS[@]}" --title "PuttVision $PV_VERSION_NAME" --notes "PuttVision $PV_VERSION_NAME · verified full-lineage consumer/developer release" --latest; then
-                ok=1
-                break
-              fi
-            fi
-            sleep $((attempt * 4))
-          done
-          if [ "$ok" -ne 1 ]; then
-            echo "::warning::GitHub Release API remained unavailable; Supabase update publication will continue."
-            exit 1
+          if gh release view "$PV_TAG" >/dev/null 2>&1; then
+            gh release upload "$PV_TAG" "${ASSETS[@]}" --clobber
+            gh release edit "$PV_TAG" --title "PuttVision $PV_VERSION_NAME Bridge" --notes "Small updater bridge for V143 external delivery" --latest
+          else
+            gh release create "$PV_TAG" "${ASSETS[@]}" --target release/v143-bridge --title "PuttVision $PV_VERSION_NAME Bridge" --notes "Small updater bridge for V143 external delivery" --latest
           fi
 
-      - name: Publish verified Supabase update manifest
+      - name: Publish bridge legacy manifest
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
