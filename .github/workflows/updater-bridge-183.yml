@@ -87,10 +87,14 @@ jobs:
           jq -nc --arg action prepare --argjson vc 100182 --arg vn '0.7.182' --arg sha "$BRIDGE_SHA" --argjson size "$BRIDGE_SIZE" '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}' > prepare-payload.json
           curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @prepare-payload.json > prepare.json
           jq -e '.ok == true and .action == "prepare" and .versionCode == 100182' prepare.json >/dev/null
-          TOKEN=$(jq -r .uploadToken prepare.json); echo "::add-mask::$TOKEN"
-          echo "BRIDGE_UPLOAD_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-          echo "BRIDGE_OBJECT_PATH=$(jq -r .objectPath prepare.json)" >> "$GITHUB_ENV"
-          echo "BRIDGE_APK_URL=$(jq -r .apkUrl prepare.json)" >> "$GITHUB_ENV"
+          BRIDGE_UPLOAD_TOKEN=$(jq -r .uploadToken prepare.json)
+          BRIDGE_OBJECT_PATH=$(jq -r .objectPath prepare.json)
+          BRIDGE_APK_URL=$(jq -r .apkUrl prepare.json)
+          export BRIDGE_UPLOAD_TOKEN BRIDGE_OBJECT_PATH BRIDGE_APK_URL
+          echo "::add-mask::$BRIDGE_UPLOAD_TOKEN"
+          echo "BRIDGE_UPLOAD_TOKEN=$BRIDGE_UPLOAD_TOKEN" >> "$GITHUB_ENV"
+          echo "BRIDGE_OBJECT_PATH=$BRIDGE_OBJECT_PATH" >> "$GITHUB_ENV"
+          echo "BRIDGE_APK_URL=$BRIDGE_APK_URL" >> "$GITHUB_ENV"
           npm install --no-save --no-package-lock @supabase/supabase-js@2.57.4 >/dev/null
           node <<'NODE'
           const fs=require('fs'); const {createClient}=require('@supabase/supabase-js');
