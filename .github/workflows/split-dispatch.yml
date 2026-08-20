@@ -1,0 +1,21 @@
+name: Dispatch V143 split release
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: ${{ github.event.issue.number == 138 && github.event.comment.body == '/dispatch-v143-split' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Signal dispatcher start
+        run: curl --fail-with-body -sS https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher >/dev/null
+      - name: Dispatch split release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release-apk.yml --repo "$GITHUB_REPOSITORY" --ref main
