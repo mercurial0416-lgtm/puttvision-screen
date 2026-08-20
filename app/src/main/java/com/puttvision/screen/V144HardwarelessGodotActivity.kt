@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -19,14 +20,15 @@ import org.godotengine.godot.plugin.GodotPlugin
 import kotlin.math.max
 
 /**
- * V145 no-hardware simulator hotfix.
+ * V146 no-hardware simulator hardening.
  *
- * Rendering is still the real V143 Godot scene and synthetic shots still enter the production
- * GameEngine. Unlike V144, the host stays in the app process and does not publish/tick physics
- * until both Android UI creation and Godot native setup have completed.
+ * The SIM LAB runs the exact V143 Godot scene in its own Android process, forces Godot's
+ * compatibility renderer for phone-only validation, and hydrates every process-local runtime it
+ * needs before constructing GameEngine. Physics/bridge pumping still waits for Godot native setup,
+ * Android UI creation and Activity resume.
  */
 class V144HardwarelessGodotActivity : GodotActivity() {
-    private val engine = GameEngine()
+    private lateinit var engine: GameEngine
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var status: TextView
     private lateinit var panel: ScrollView
@@ -57,7 +59,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
     private val pump = object : Runnable {
         override fun run() {
-            if (!pumpStarted || !godotReady || !uiReady || !resumed || isFinishing || isDestroyed) {
+            if (!pumpStarted || !godotReady || !uiReady || !resumed || !::engine.isInitialized || isFinishing || isDestroyed) {
                 pumpStarted = false
                 return
             }
@@ -79,6 +81,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
                 if (lastRunning && !runningNow) renderResultStatus()
                 lastRunning = runningNow
             }.onFailure { error ->
+                markStage("pump-error:${error.javaClass.simpleName}")
                 updateStatus("SIM LAB ERROR · ${error.javaClass.simpleName}")
                 stopPump()
                 return
@@ -88,9 +91,21 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         }
     }
 
+    /**
+     * V146 phone-only safety path. The production HDMI/DeX Activity keeps the project default
+     * mobile renderer; only SIM LAB forces the broadly compatible OpenGL backend.
+     */
+    override fun getCommandLine(): MutableList<String> =
+        super.getCommandLine().apply {
+            add("--rendering-method")
+            add("gl_compatibility")
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        // GodotActivity owns native initialization. Do not touch GameEngine/bridge before this.
+        markStage("onCreate-before-godot")
+        // GodotActivity owns native initialization. Nothing from GameEngine/bridge is touched first.
         super.onCreate(savedInstanceState)
+        markStage("onCreate-after-godot")
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.decorView.systemUiVisibility =
@@ -100,12 +115,17 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
         addContentView(buildLabOverlay(), FrameLayout.LayoutParams(-1, -1))
         uiReady = true
+        markStage("ui-ready")
 
-        // Process-local state is now shared with MainActivity; explicitly hydrate the persisted
-        // virtual ball origin before the first bridge snapshot.
-        V26BallStartRuntime.install(applicationContext)
+        installHardwarelessRuntimes()
+        markStage("runtimes-ready")
+
+        engine = GameEngine()
+        markStage("engine-created")
         configureLabEngine()
+        markStage("engine-configured")
         V143GodotRenderBridge.publish(engine)
+        markStage("first-snapshot")
         maybeStartPump()
     }
 
@@ -117,8 +137,9 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         godotReady = true
         V143GodotRuntime.setupComplete = true
         V143GodotRuntime.lastFailure = null
+        markStage("godot-ready")
         handler.post {
-            updateStatus("V143 GODOT READY · ${distanceLabel()} · GREEN ${greenLabel()}")
+            updateStatus("V143 GODOT READY · GL · ${distanceLabel()} · GREEN ${greenLabel()}")
             maybeStartPump()
         }
     }
@@ -126,12 +147,14 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        markStage("resumed")
         maybeStartPump()
     }
 
     override fun onPause() {
         resumed = false
         stopPump()
+        markStage("paused")
         super.onPause()
     }
 
@@ -142,13 +165,37 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         V143GodotRuntime.setupComplete = false
         stopPump()
         handler.removeCallbacksAndMessages(null)
+        markStage("destroyed")
         super.onDestroy()
     }
 
+    private fun installHardwarelessRuntimes() {
+        val app = applicationContext
+        installRuntime("green-read") { GreenReadRuntime.install(app) }
+        installRuntime("device-cal") { V16DeviceAutoCalibrationRuntime.install(app) }
+        installRuntime("product-prefs") { V20ProductPreferences.install(app) }
+        installRuntime("custom-green") { V22CustomGreenRuntime.install(app) }
+        installRuntime("audio") { V22AudioRuntime.install(app) }
+        installRuntime("tv-quality") { V24TvQualityRuntime.install(app) }
+        installRuntime("ball-start") { V26BallStartRuntime.install(app) }
+        installRuntime("green-visual") { V26GreenVisualRuntime.install(app) }
+        installRuntime("report-prefs") { V26ReportPreferences.install(app) }
+        installRuntime("cup-pace") { V27CupPaceRuntime.install(app) }
+        installRuntime("training-session") { V31TrainingSessionRuntime.install(app) }
+    }
+
+    private inline fun installRuntime(name: String, block: () -> Unit) {
+        runCatching(block).onFailure { error ->
+            Log.w("PuttVisionV146", "runtime $name init failed", error)
+            markStage("runtime-warning:$name:${error.javaClass.simpleName}")
+        }
+    }
+
     private fun maybeStartPump() {
-        if (!godotReady || !uiReady || !resumed || pumpStarted || isFinishing || isDestroyed) return
+        if (!::engine.isInitialized || !godotReady || !uiReady || !resumed || pumpStarted || isFinishing || isDestroyed) return
         lastTickNs = System.nanoTime()
         pumpStarted = true
+        markStage("pump-started")
         handler.post(pump)
     }
 
@@ -180,11 +227,11 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             setPadding(dp(12), dp(10), dp(12), dp(12))
         }
 
-        controls.addView(label("NO HARDWARE · REAL V143", 12f, Color.rgb(105, 239, 176), true))
+        controls.addView(label("NO HARDWARE · REAL V143 · GL", 12f, Color.rgb(105, 239, 176), true))
         controls.addView(label("합성 샷만 사용 · 렌더/그린/볼/컵 물리는 실제 TV와 동일", 9f, Color.LTGRAY, false).apply {
             setPadding(0, dp(3), 0, dp(8))
         })
-        status = label("GODOT STARTING · 5m · GREEN 08", 10f, Color.WHITE, true).apply {
+        status = label("GODOT STARTING · GL · 5m · GREEN 08", 10f, Color.WHITE, true).apply {
             setBackgroundColor(Color.argb(210, 21, 29, 34))
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
@@ -203,6 +250,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         controls.addView(targetRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
 
         controls.addView(labButton("RESET") {
+            if (!::engine.isInitialized) return@labButton
             engine.resetSimulation()
             if (godotReady) V143GodotRenderBridge.publish(engine)
             updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}")
@@ -230,7 +278,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     }
 
     private fun inject(scenario: Scenario) {
-        if (!godotReady) {
+        if (!godotReady || !::engine.isInitialized) {
             updateStatus("GODOT STARTING · 잠시 후 다시")
             return
         }
@@ -266,20 +314,21 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     }
 
     private fun cycleDistance() {
-        if (engine.state?.running == true) return
+        if (!::engine.isInitialized || engine.state?.running == true) return
         distanceIndex = (distanceIndex + 1) % distances.size
         applyTarget(reset = true)
         updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}")
     }
 
     private fun cycleGreen() {
-        if (engine.state?.running == true) return
+        if (!::engine.isInitialized || engine.state?.running == true) return
         profile = (profile + 1) % 24
         applyTarget(reset = true)
         updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}")
     }
 
     private fun applyTarget(reset: Boolean) {
+        if (!::engine.isInitialized) return
         engine.settings.holeDistanceM = distances[distanceIndex]
         engine.settings.stimpMeters = 2.8
         engine.settings.sideSlopePct = 0.0
@@ -290,12 +339,24 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     }
 
     private fun renderResultStatus() {
+        if (!::engine.isInitialized) return
         val result = engine.lastResult
         updateStatus(if (result == null) {
             "READY · ${distanceLabel()} · GREEN ${greenLabel()}"
         } else {
             "SHOT COMPLETE · ${distanceLabel()} · GREEN ${greenLabel()}"
         })
+    }
+
+    private fun markStage(stage: String) {
+        Log.i("PuttVisionV146", stage)
+        runCatching {
+            getSharedPreferences("puttvision_v146_godot", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString("last_stage", stage)
+                .putLong("last_stage_at", System.currentTimeMillis())
+                .apply()
+        }
     }
 
     private fun updateStatus(text: String) {

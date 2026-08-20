@@ -42,15 +42,16 @@
             android:resizeableActivity="false"
             android:theme="@style/Theme.PuttVisionScreen" />
 
-        <!-- V145: SIM LAB intentionally stays in the app process. openHardwarelessLab() already
-             rejects an active real session, so there is no competing TV Godot host; keeping the
-             process shared preserves all process-local runtime initialization used by GameEngine. -->
+        <!-- V146: SIM LAB owns a dedicated process so its Godot singleton can never collide with
+             the real HDMI/DeX Godot host. The Activity hydrates the process-local runtimes itself
+             before constructing GameEngine and forces the compatibility renderer for phone tests. -->
         <activity
             android:name=".V144HardwarelessGodotActivity"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation"
             android:excludeFromRecents="true"
             android:exported="false"
+            android:process=":hardwareless"
             android:resizeableActivity="false"
             android:theme="@style/Theme.PuttVisionScreen" />
 
