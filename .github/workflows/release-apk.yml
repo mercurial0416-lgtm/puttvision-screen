@@ -28,6 +28,18 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      - name: Fetch V143 Godot visual assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/v143_fetch_cc0_assets.py
+          test -s app/src/main/assets/v143_assets/turf/albedo.png
+          test -s app/src/main/assets/v143_assets/turf/normal.png
+          test -s app/src/main/assets/v143_assets/turf/roughness.png
+          test -s app/src/main/assets/v143_assets/trees/tree_small_02.png
+          test -s app/src/main/assets/v143_assets/trees/island_tree_03.png
+          test -s app/src/main/assets/v143_assets/environment/environment.hdr
+
       - name: Allocate monotonic app version
         shell: bash
         env:
@@ -123,6 +135,7 @@ jobs:
           sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
           echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
           echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
+          test "$(stat -c%s puttvision-consumer.apk)" -lt $((180 * 1024 * 1024))
 
       - name: Request one-time Supabase upload token
         shell: bash
