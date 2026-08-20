@@ -7,6 +7,64 @@ var premium_ball_material: ShaderMaterial
 var premium_flag_material: StandardMaterial3D
 var premium_pin_dark: StandardMaterial3D
 
+func _build_environment() -> void:
+    # Godot 4.7.1-safe clear-day environment. Keep this override here so presentation
+    # cannot regress if an unsupported ProceduralSkyMaterial property is added upstream.
+    var env_node := WorldEnvironment.new()
+    env_node.name = "PremiumWorldEnvironment"
+    var env := Environment.new()
+    env.background_mode = Environment.BG_SKY
+
+    var sky := Sky.new()
+    var sky_mat := ProceduralSkyMaterial.new()
+    sky_mat.sky_top_color = Color("#2f70ad")
+    sky_mat.sky_horizon_color = Color("#bfd8e4")
+    sky_mat.ground_bottom_color = Color("#263b31")
+    sky_mat.ground_horizon_color = Color("#9eafa4")
+    sky_mat.sky_curve = 0.18
+    sky_mat.ground_curve = 0.12
+    sky_mat.sun_angle_max = 10.0
+    sky_mat.sun_curve = 0.10
+    sky.sky_material = sky_mat
+    env.sky = sky
+
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+    env.ambient_light_energy = 0.62
+    env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+    env.tonemap_mode = Environment.TONE_MAPPER_ACES
+    env.fog_enabled = true
+    env.fog_light_color = Color("#c7d7da")
+    env.fog_light_energy = 0.34
+    env.fog_density = 0.0019
+    env_node.environment = env
+    add_child(env_node)
+
+    var sun := DirectionalLight3D.new()
+    sun.name = "PremiumKeySun"
+    sun.light_color = Color("#fff1d6")
+    sun.light_energy = 1.08
+    sun.shadow_enabled = true
+    sun.directional_shadow_max_distance = 62.0
+    sun.rotation_degrees = Vector3(-52.0, -28.0, 0.0)
+    add_child(sun)
+
+    var fill := DirectionalLight3D.new()
+    fill.name = "SkyFill"
+    fill.light_color = Color("#b7d2e3")
+    fill.light_energy = 0.18
+    fill.shadow_enabled = false
+    fill.rotation_degrees = Vector3(-26.0, 142.0, 0.0)
+    add_child(fill)
+
+    camera = Camera3D.new()
+    camera.name = "PuttingBroadcastCamera"
+    camera.fov = 45.0
+    camera.near = 0.025
+    camera.far = 180.0
+    add_child(camera)
+    camera.position = camera_pos
+    camera.look_at(camera_look, Vector3.UP)
+
 func _build_ball() -> void:
     ball = MeshInstance3D.new()
     ball.name = "PremiumBall"
@@ -89,7 +147,7 @@ func _build_target() -> void:
     target_root.add_child(lip)
 
     # Segmented tournament-style pin for depth/rotation readability.
-    var segment_h := 0.31
+    var segment_h: float = 0.31
     for i in range(6):
         var pole := MeshInstance3D.new()
         var pole_mesh := CylinderMesh.new()
