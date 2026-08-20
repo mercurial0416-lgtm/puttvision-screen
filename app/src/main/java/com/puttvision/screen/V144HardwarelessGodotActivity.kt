@@ -22,9 +22,9 @@ import kotlin.math.max
  * V144 no-hardware simulator.
  *
  * This is deliberately a real V143 Godot host, not an Android imitation of the TV. The only
- * synthetic component is shot input. Every accepted shot enters GameEngine.startFromCamera(),
- * advances through the production ball/cup physics, and is published through the exact same
- * V143GodotRenderBridge consumed by the HDMI/DeX renderer.
+ * synthetic component is shot input. Every shot enters GameEngine.launch(), advances through the
+ * production ball/cup physics, and is published through the exact same V143GodotRenderBridge
+ * consumed by the HDMI/DeX renderer.
  *
  * The manifest puts this Activity in :hardwareless so its Godot singleton cannot fight the main
  * process / external-display Godot host for ownership of the native renderer.
@@ -63,7 +63,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             lastTickNs = now
 
             val runningBefore = engine.state?.running == true
-            if (runningBefore) engine.tick(dt)
+            if (runningBefore) engine.step(dt)
             V143GodotRenderBridge.publish(engine)
 
             val runningNow = engine.state?.running == true
@@ -200,7 +200,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             confidence = .98,
             uncertainty = MeasurementUncertaintyEstimator.synthetic()
         )
-        engine.startFromCamera(metrics)
+        engine.launch(metrics)
         V143GodotRenderBridge.publish(engine)
         lastRunning = engine.state?.running == true
         updateStatus("${scenario.label} · REAL PHYSICS · ${distanceLabel()} · G${greenLabel()}")
@@ -232,13 +232,11 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
     private fun renderResultStatus() {
         val result = engine.lastResult
-        val text = when {
-            result == null -> "READY · ${distanceLabel()} · GREEN ${greenLabel()}"
-            result.holed -> "HOLE IN · ${distanceLabel()} · GREEN ${greenLabel()}"
-            result.lipOut -> "LIP OUT · ${"%.2f".format(result.distanceToCupM)}m"
-            else -> "STOP · ${"%.2f".format(result.distanceToCupM)}m TO CUP"
-        }
-        updateStatus(text)
+        updateStatus(if (result == null) {
+            "READY · ${distanceLabel()} · GREEN ${greenLabel()}"
+        } else {
+            "SHOT COMPLETE · ${distanceLabel()} · GREEN ${greenLabel()}"
+        })
     }
 
     private fun updateStatus(text: String) {
