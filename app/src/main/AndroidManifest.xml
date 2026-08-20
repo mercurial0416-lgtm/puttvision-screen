@@ -42,8 +42,9 @@
             android:resizeableActivity="false"
             android:theme="@style/Theme.PuttVisionScreen" />
 
-        <!-- V144: SIM LAB runs the exact V143 Godot scene in an isolated process. This gives the
-             phone a real no-hardware renderer without competing with the main/HDMI Godot host. -->
+        <!-- V145: SIM LAB intentionally stays in the app process. openHardwarelessLab() already
+             rejects an active real session, so there is no competing TV Godot host; keeping the
+             process shared preserves all process-local runtime initialization used by GameEngine. -->
         <activity
             android:name=".V144HardwarelessGodotActivity"
             android:screenOrientation="landscape"
@@ -51,7 +52,6 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:resizeableActivity="false"
-            android:process=":hardwareless"
             android:theme="@style/Theme.PuttVisionScreen" />
 
         <!-- Godot's AAR also contributes a FileProvider with the same app authority. PuttVision's
