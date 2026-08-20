@@ -25,18 +25,30 @@ uniform float stripe_strength = 0.06;
 uniform float side_slope = 0.0;
 uniform float long_slope = 0.0;
 float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+float terrain_relief(vec2 uv){
+    float side = uv.x * 2.0 - 1.0;
+    float shoulder = pow(abs(side), 1.75);
+    float depth = smoothstep(0.07, 0.92, uv.y);
+    float center_guard = smoothstep(0.10, 0.72, abs(side));
+    float broad_roll = sin(uv.y * 10.2 + side * 1.4) * 0.018;
+    float secondary_roll = sin(uv.y * 21.0 - side * 3.2) * 0.007;
+    return shoulder * depth * 0.105 + (broad_roll + secondary_roll) * depth * mix(0.10, 1.0, center_guard);
+}
 void vertex(){
     // Keep the putting line nearly flat while lifting the shoulders and distant surface.
     // This is presentation-only geometry; Android remains authoritative for putt physics.
-    float side = UV.x * 2.0 - 1.0;
-    float shoulder = pow(abs(side), 1.75);
-    float depth = smoothstep(0.07, 0.92, UV.y);
-    float center_guard = smoothstep(0.10, 0.72, abs(side));
-    float broad_roll = sin(UV.y * 10.2 + side * 1.4) * 0.018;
-    float secondary_roll = sin(UV.y * 21.0 - side * 3.2) * 0.007;
-    VERTEX.y += VERTEX.x * side_slope + (-VERTEX.z) * long_slope;
-    VERTEX.y += shoulder * depth * 0.105;
-    VERTEX.y += (broad_roll + secondary_roll) * depth * mix(0.10, 1.0, center_guard);
+    float relief = terrain_relief(UV);
+    VERTEX.y += VERTEX.x * side_slope + (-VERTEX.z) * long_slope + relief;
+
+    // The previous pass displaced vertices but left the turf normal pointing straight up,
+    // so the broad rolls barely reacted to the key light. Rebuild a conservative geometric
+    // normal from UV derivatives so TV-distance terrain reads through light, not fake albedo.
+    const float eps = 0.003;
+    float dh_du = (terrain_relief(vec2(clamp(UV.x + eps, 0.0, 1.0), UV.y)) - terrain_relief(vec2(clamp(UV.x - eps, 0.0, 1.0), UV.y))) / (2.0 * eps);
+    float dh_dv = (terrain_relief(vec2(UV.x, clamp(UV.y + eps, 0.0, 1.0))) - terrain_relief(vec2(UV.x, clamp(UV.y - eps, 0.0, 1.0)))) / (2.0 * eps);
+    float dh_dx = side_slope + dh_du / 11.0;
+    float dh_dz = -long_slope - dh_dv / 64.0;
+    NORMAL = normalize(vec3(-dh_dx, 1.0, -dh_dz));
 }
 void fragment(){
     vec2 uv = UV * tiling;
