@@ -1,0 +1,87 @@
+name: V148 native runtime audit
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/v148-native-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: ${{ github.head_ref == 'agent/v148-godot-native-runtime' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/v148-godot-native-runtime
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Fetch V143 visual assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/v143_fetch_cc0_assets.py
+      - name: Build current consumer APK
+        shell: bash
+        env:
+          PV_EXTERNAL_SIGNING: 'true'
+          PV_VERSION_CODE: '100186'
+          PV_VERSION_NAME: '0.7.186-audit'
+        run: |
+          set -euo pipefail
+          gradle assembleConsumerRelease
+          APK=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          test -s "$APK"
+          echo "AUDIT_APK=$APK" >> "$GITHUB_ENV"
+      - name: Audit libc++ provenance and ELF dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-audit"
+          OUT="$RUNNER_TEMP/native-audit"
+          GODOT_AAR=$(find "$HOME/.gradle/caches/modules-2/files-2.1/org.godotengine/godot/4.7.1.stable" -type f -name '*.aar' | head -1)
+          FILAMENT_AAR=$(find "$HOME/.gradle/caches/modules-2/files-2.1/com.google.android.filament/filament-android/1.75.0" -type f -name '*.aar' | head -1)
+          FILAMAT_AAR=$(find "$HOME/.gradle/caches/modules-2/files-2.1/com.google.android.filament/filamat-android/1.75.0" -type f -name '*.aar' | head -1)
+          test -s "$GODOT_AAR"; test -s "$FILAMENT_AAR"; test -s "$FILAMAT_AAR"
+
+          extract_stl() {
+            local aar="$1" out="$2"
+            local entry
+            entry=$(unzip -Z1 "$aar" | grep 'arm64-v8a/libc++_shared.so$' | head -1 || true)
+            if [ -n "$entry" ]; then unzip -p "$aar" "$entry" > "$out"; fi
+          }
+          extract_stl "$GODOT_AAR" "$OUT/godot-libc++.so"
+          extract_stl "$FILAMENT_AAR" "$OUT/filament-libc++.so"
+          extract_stl "$FILAMAT_AAR" "$OUT/filamat-libc++.so"
+          unzip -p "$AUDIT_APK" lib/arm64-v8a/libc++_shared.so > "$OUT/apk-libc++.so"
+          unzip -p "$AUDIT_APK" lib/arm64-v8a/libgodot_android.so > "$OUT/libgodot_android.so"
+          unzip -p "$AUDIT_APK" lib/arm64-v8a/libfilament-jni.so > "$OUT/libfilament-jni.so"
+
+          test -s "$OUT/godot-libc++.so"; test -s "$OUT/apk-libc++.so"; test -s "$OUT/libgodot_android.so"
+          GODOT_SHA=$(sha256sum "$OUT/godot-libc++.so" | cut -d' ' -f1)
+          APK_SHA=$(sha256sum "$OUT/apk-libc++.so" | cut -d' ' -f1)
+          FILAMENT_SHA=$(test -s "$OUT/filament-libc++.so" && sha256sum "$OUT/filament-libc++.so" | cut -d' ' -f1 || echo NONE)
+          FILAMAT_SHA=$(test -s "$OUT/filamat-libc++.so" && sha256sum "$OUT/filamat-libc++.so" | cut -d' ' -f1 || echo NONE)
+          echo "V148_GODOT_STL_SHA=$GODOT_SHA"
+          echo "V148_FILAMENT_STL_SHA=$FILAMENT_SHA"
+          echo "V148_FILAMAT_STL_SHA=$FILAMAT_SHA"
+          echo "V148_APK_STL_SHA=$APK_SHA"
+          if [ "$APK_SHA" = "$GODOT_SHA" ]; then echo 'V148_STL_PROVENANCE=GODOT'; else echo 'V148_STL_PROVENANCE=NOT_GODOT'; fi
+          if [ "$APK_SHA" = "$FILAMENT_SHA" ]; then echo 'V148_STL_MATCHES_FILAMENT=YES'; else echo 'V148_STL_MATCHES_FILAMENT=NO'; fi
+          if [ "$APK_SHA" = "$FILAMAT_SHA" ]; then echo 'V148_STL_MATCHES_FILAMAT=YES'; else echo 'V148_STL_MATCHES_FILAMAT=NO'; fi
+
+          echo '--- libgodot_android.so NEEDED ---'
+          readelf -d "$OUT/libgodot_android.so" | grep NEEDED || true
+          echo '--- libfilament-jni.so NEEDED ---'
+          readelf -d "$OUT/libfilament-jni.so" | grep NEEDED || true
+          echo '--- 16 KiB APK alignment ---'
+          ZIPALIGN=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name zipalign | sort -V | tail -1)
+          "$ZIPALIGN" -c -P 16 4 "$AUDIT_APK"
