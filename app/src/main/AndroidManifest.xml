@@ -75,6 +75,19 @@
             android:resizeableActivity="false"
             android:theme="@style/Theme.PuttVisionScreen" />
 
+        <!-- V150: process-local watchdogs start before each probe Activity and recover healthy
+             Godot 4.7.0 sessions even when onGodotSetupCompleted() is never delivered. -->
+        <provider
+            android:name=".V150GodotProbeWatchdogProvider"
+            android:authorities="${applicationId}.v150.watchdog.smoke"
+            android:exported="false"
+            android:process=":godot_smoke" />
+        <provider
+            android:name=".V150GodotProbeWatchdogProvider"
+            android:authorities="${applicationId}.v150.watchdog.scene"
+            android:exported="false"
+            android:process=":godot_scene" />
+
         <!-- Stage 3: full hardwareless simulator is a third process. -->
         <activity
             android:name=".V148HardwarelessFullActivity"
