@@ -42,16 +42,37 @@
             android:resizeableActivity="false"
             android:theme="@style/Theme.PuttVisionScreen" />
 
-        <!-- V146: SIM LAB owns a dedicated process so its Godot singleton can never collide with
-             the real HDMI/DeX Godot host. The Activity hydrates the process-local runtimes itself
-             before constructing GameEngine and forces the compatibility renderer for phone tests. -->
+        <!-- V148: the existing launcher class is now a native coordinator. It survives child
+             Godot crashes, reads ApplicationExitInfo and presents the exact last fsync'd stage. -->
         <activity
             android:name=".V144HardwarelessGodotActivity"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:process=":hardwareless"
+            android:resizeableActivity="false"
+            android:theme="@style/Theme.PuttVisionScreen" />
+
+        <!-- Pure V143 scene boot: no PuttVisionBridge plugin, no GameEngine and no physics pump. -->
+        <activity
+            android:name=".V148GodotSmokeActivity"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:process=":godot_smoke"
+            android:resizeableActivity="false"
+            android:theme="@style/Theme.PuttVisionScreen" />
+
+        <!-- Full hardwareless simulator is deliberately a different process from both the smoke
+             engine and the production TV Godot host. -->
+        <activity
+            android:name=".V148HardwarelessFullActivity"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density|uiMode|keyboard|keyboardHidden|navigation"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:process=":hardwareless_full"
             android:resizeableActivity="false"
             android:theme="@style/Theme.PuttVisionScreen" />
 
