@@ -20,14 +20,13 @@ import org.godotengine.godot.plugin.GodotPlugin
 import kotlin.math.max
 
 /**
- * V147 no-hardware simulator parity hardening.
+ * V148 full no-hardware simulator.
  *
- * SIM LAB runs the exact V143 Godot scene in its own Android process and now uses the same
- * project-default `mobile` renderer as the production HDMI/DeX TV Activity. Process-local
- * runtimes are hydrated before GameEngine construction, while physics/bridge pumping waits for
- * Godot native setup, Android UI creation and Activity resume.
+ * The native coordinator runs a pure Godot smoke process first.  This Activity is launched only
+ * after that survives, so any subsequent native exit is attributable to the V143 Android plugin,
+ * GameEngine/runtime hydration or bridge/pump path rather than raw Godot scene startup.
  */
-class V144HardwarelessGodotActivity : GodotActivity() {
+class V148HardwarelessFullActivity : GodotActivity() {
     private lateinit var engine: GameEngine
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var status: TextView
@@ -42,6 +41,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     private var uiReady = false
     private var resumed = false
     private var pumpStarted = false
+    private var fullStable = false
 
     private enum class Scenario(
         val label: String,
@@ -132,6 +132,12 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             updateStatus("V143 GODOT READY · MOBILE · ${distanceLabel()} · GREEN ${greenLabel()}")
             maybeStartPump()
         }
+        handler.postDelayed({
+            if (!isFinishing && !isDestroyed && godotReady && uiReady && ::engine.isInitialized) {
+                fullStable = true
+                markStage("full-stable")
+            }
+        }, 4000L)
     }
 
     override fun onResume() {
@@ -155,7 +161,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         V143GodotRuntime.setupComplete = false
         stopPump()
         handler.removeCallbacksAndMessages(null)
-        markStage("destroyed")
+        if (fullStable) markStage("full-finished")
         super.onDestroy()
     }
 
@@ -176,7 +182,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
     private inline fun installRuntime(name: String, block: () -> Unit) {
         runCatching(block).onFailure { error ->
-            Log.w("PuttVisionV147", "runtime $name init failed", error)
+            Log.w("PuttVisionV148", "runtime $name init failed", error)
             markStage("runtime-warning:$name:${error.javaClass.simpleName}")
         }
     }
@@ -217,11 +223,11 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             setPadding(dp(12), dp(10), dp(12), dp(12))
         }
 
-        controls.addView(label("NO HARDWARE · REAL V143 · MOBILE", 12f, Color.rgb(105, 239, 176), true))
+        controls.addView(label("NO HARDWARE · REAL V143 · FULL", 12f, Color.rgb(105, 239, 176), true))
         controls.addView(label("합성 샷만 사용 · 렌더/그린/볼/컵 물리는 실제 TV와 동일", 9f, Color.LTGRAY, false).apply {
             setPadding(0, dp(3), 0, dp(8))
         })
-        status = label("GODOT STARTING · MOBILE · 5m · GREEN 08", 10f, Color.WHITE, true).apply {
+        status = label("GODOT STARTING · FULL · 5m · GREEN 08", 10f, Color.WHITE, true).apply {
             setBackgroundColor(Color.argb(210, 21, 29, 34))
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
@@ -245,7 +251,10 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             if (godotReady) V143GodotRenderBridge.publish(engine)
             updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}")
         }, buttonLp())
-        controls.addView(labButton("닫기") { finish() }, buttonLp())
+        controls.addView(labButton("닫기") {
+            markStage("full-user-close")
+            finish()
+        }, buttonLp())
         panel.addView(controls, FrameLayout.LayoutParams(-1, -2))
 
         overlay.addView(panel, FrameLayout.LayoutParams(dp(250), -1, Gravity.END).apply {
@@ -260,7 +269,10 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             topMargin = dp(8)
             marginEnd = dp(52)
         })
-        overlay.addView(labButton("×") { finish() }, FrameLayout.LayoutParams(dp(40), dp(36), Gravity.TOP or Gravity.END).apply {
+        overlay.addView(labButton("×") {
+            markStage("full-user-close")
+            finish()
+        }, FrameLayout.LayoutParams(dp(40), dp(36), Gravity.TOP or Gravity.END).apply {
             topMargin = dp(8)
             marginEnd = dp(8)
         })
@@ -339,14 +351,8 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     }
 
     private fun markStage(stage: String) {
-        Log.i("PuttVisionV147", stage)
-        runCatching {
-            getSharedPreferences("puttvision_v147_godot", android.content.Context.MODE_PRIVATE)
-                .edit()
-                .putString("last_stage", stage)
-                .putLong("last_stage_at", System.currentTimeMillis())
-                .apply()
-        }
+        Log.i("PuttVisionV148", stage)
+        V148GodotCrashJournal.write(this, "full", stage)
     }
 
     private fun updateStatus(text: String) {
