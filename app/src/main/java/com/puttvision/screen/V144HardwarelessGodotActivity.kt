@@ -20,12 +20,12 @@ import org.godotengine.godot.plugin.GodotPlugin
 import kotlin.math.max
 
 /**
- * V146 no-hardware simulator hardening.
+ * V147 no-hardware simulator parity hardening.
  *
- * The SIM LAB runs the exact V143 Godot scene in its own Android process, forces Godot's
- * compatibility renderer for phone-only validation, and hydrates every process-local runtime it
- * needs before constructing GameEngine. Physics/bridge pumping still waits for Godot native setup,
- * Android UI creation and Activity resume.
+ * SIM LAB runs the exact V143 Godot scene in its own Android process and now uses the same
+ * project-default `mobile` renderer as the production HDMI/DeX TV Activity. Process-local
+ * runtimes are hydrated before GameEngine construction, while physics/bridge pumping waits for
+ * Godot native setup, Android UI creation and Activity resume.
  */
 class V144HardwarelessGodotActivity : GodotActivity() {
     private lateinit var engine: GameEngine
@@ -91,16 +91,6 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         }
     }
 
-    /**
-     * V146 phone-only safety path. The production HDMI/DeX Activity keeps the project default
-     * mobile renderer; only SIM LAB forces the broadly compatible OpenGL backend.
-     */
-    override fun getCommandLine(): MutableList<String> =
-        super.getCommandLine().apply {
-            add("--rendering-method")
-            add("gl_compatibility")
-        }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         markStage("onCreate-before-godot")
         // GodotActivity owns native initialization. Nothing from GameEngine/bridge is touched first.
@@ -139,7 +129,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
         V143GodotRuntime.lastFailure = null
         markStage("godot-ready")
         handler.post {
-            updateStatus("V143 GODOT READY · GL · ${distanceLabel()} · GREEN ${greenLabel()}")
+            updateStatus("V143 GODOT READY · MOBILE · ${distanceLabel()} · GREEN ${greenLabel()}")
             maybeStartPump()
         }
     }
@@ -186,7 +176,7 @@ class V144HardwarelessGodotActivity : GodotActivity() {
 
     private inline fun installRuntime(name: String, block: () -> Unit) {
         runCatching(block).onFailure { error ->
-            Log.w("PuttVisionV146", "runtime $name init failed", error)
+            Log.w("PuttVisionV147", "runtime $name init failed", error)
             markStage("runtime-warning:$name:${error.javaClass.simpleName}")
         }
     }
@@ -227,11 +217,11 @@ class V144HardwarelessGodotActivity : GodotActivity() {
             setPadding(dp(12), dp(10), dp(12), dp(12))
         }
 
-        controls.addView(label("NO HARDWARE · REAL V143 · GL", 12f, Color.rgb(105, 239, 176), true))
+        controls.addView(label("NO HARDWARE · REAL V143 · MOBILE", 12f, Color.rgb(105, 239, 176), true))
         controls.addView(label("합성 샷만 사용 · 렌더/그린/볼/컵 물리는 실제 TV와 동일", 9f, Color.LTGRAY, false).apply {
             setPadding(0, dp(3), 0, dp(8))
         })
-        status = label("GODOT STARTING · GL · 5m · GREEN 08", 10f, Color.WHITE, true).apply {
+        status = label("GODOT STARTING · MOBILE · 5m · GREEN 08", 10f, Color.WHITE, true).apply {
             setBackgroundColor(Color.argb(210, 21, 29, 34))
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
@@ -349,9 +339,9 @@ class V144HardwarelessGodotActivity : GodotActivity() {
     }
 
     private fun markStage(stage: String) {
-        Log.i("PuttVisionV146", stage)
+        Log.i("PuttVisionV147", stage)
         runCatching {
-            getSharedPreferences("puttvision_v146_godot", android.content.Context.MODE_PRIVATE)
+            getSharedPreferences("puttvision_v147_godot", android.content.Context.MODE_PRIVATE)
                 .edit()
                 .putString("last_stage", stage)
                 .putLong("last_stage_at", System.currentTimeMillis())
