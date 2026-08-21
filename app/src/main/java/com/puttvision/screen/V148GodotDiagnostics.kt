@@ -21,16 +21,16 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * V148 hardwareless crash journal.
+ * V149 hardwareless crash journal.
  *
- * SharedPreferences.apply() can lose the last write when the dedicated Godot process dies in
- * native code.  This tiny journal is synchronously fsync'd so the coordinator process can read the
- * exact last stage after SIGSEGV/SIGABRT without requiring adb/logcat from the user.
+ * The child Godot process can die in native code after onGodotSetupCompleted().  Persist every
+ * probe boundary synchronously so the native coordinator can identify the exact last surviving
+ * stage without adb/logcat.
  */
 object V148GodotCrashJournal {
     data class Stage(val atMs: Long, val mode: String, val stage: String)
 
-    private const val FILE_NAME = "v148_godot_stage.txt"
+    private const val FILE_NAME = "v149_godot_stage.txt"
 
     fun write(context: Context, mode: String, stage: String) {
         val payload = "${System.currentTimeMillis()}|$mode|$stage\n".toByteArray(Charsets.UTF_8)
@@ -55,10 +55,15 @@ object V148GodotCrashJournal {
 }
 
 /**
- * Existing MainActivity continues launching this class.  V148 turns it into a native coordinator
- * instead of a GodotActivity so a Godot native crash can never take the diagnostic screen down.
- * It first runs the exact V143 scene with no Android plugin/GameEngine.  Only if that stays alive
- * for four seconds does it launch the full SIM LAB in a second isolated process.
+ * Native coordinator that survives all Godot child crashes.
+ *
+ * V149 runs three increasingly complex processes:
+ *  1) EMPTY: a Node-only scene, no script/resources/plugin/GameEngine.
+ *  2) SCENE: the production V143 scene, still no Android plugin/GameEngine.
+ *  3) FULL: production V143 scene + bridge + real PuttVision GameEngine.
+ *
+ * This distinguishes an engine/device crash from a scene/resource crash and finally an app bridge
+ * crash.  The same coordinator remains the target of MainActivity's existing SIM LAB button.
  */
 class V144HardwarelessGodotActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
@@ -78,7 +83,7 @@ class V144HardwarelessGodotActivity : Activity() {
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         setContentView(buildUi())
         V148GodotCrashJournal.clear(this)
-        handler.postDelayed({ launchSmoke() }, 300L)
+        handler.postDelayed({ launchEmpty() }, 300L)
     }
 
     override fun onResume() {
@@ -94,42 +99,62 @@ class V144HardwarelessGodotActivity : Activity() {
         super.onDestroy()
     }
 
-    private fun launchSmoke() {
-        currentMode = "smoke"
+    private fun prepareLaunch(mode: String, headline: String, message: String, target: Class<out Activity>) {
+        currentMode = mode
         childStarted = true
         evaluating = false
         childLaunchedAtMs = System.currentTimeMillis()
-        V148GodotCrashJournal.write(this, "smoke", "launch-requested")
-        status.text = "1/2  GODOT 단독 부팅"
-        detail.text = "플러그인 · GameEngine · 물리 pump 없이 V143 씬만 확인 중"
-        startActivity(Intent(this, V148GodotSmokeActivity::class.java))
+        V148GodotCrashJournal.write(this, mode, "launch-requested")
+        status.text = headline
+        detail.text = message
+        startActivity(Intent(this, target))
     }
 
-    private fun launchFull() {
-        currentMode = "full"
-        childStarted = true
-        evaluating = false
-        childLaunchedAtMs = System.currentTimeMillis()
-        V148GodotCrashJournal.write(this, "full", "launch-requested")
-        status.text = "2/2  전체 SIM LAB"
-        detail.text = "Godot 단독 부팅 통과 · V143 bridge + 실제 GameEngine 연결"
-        startActivity(Intent(this, V148HardwarelessFullActivity::class.java))
-    }
+    private fun launchEmpty() = prepareLaunch(
+        mode = "empty",
+        headline = "1/3  빈 GODOT 엔진",
+        message = "Node 1개 · 스크립트/텍스처/메시/플러그인/물리 없음",
+        target = V148GodotSmokeActivity::class.java
+    )
+
+    private fun launchScene() = prepareLaunch(
+        mode = "scene",
+        headline = "2/3  V143 씬 단독",
+        message = "빈 엔진 통과 · 실제 코스 씬만 로드 · plugin/GameEngine 없음",
+        target = V149GodotSceneSmokeActivity::class.java
+    )
+
+    private fun launchFull() = prepareLaunch(
+        mode = "full",
+        headline = "3/3  전체 SIM LAB",
+        message = "V143 씬 통과 · bridge + 실제 GameEngine 연결",
+        target = V148HardwarelessFullActivity::class.java
+    )
 
     private fun evaluateReturnedChild(attempt: Int) {
         val stage = V148GodotCrashJournal.read(this)
         val exit = latestExit(currentMode)
         val cleanStage = when (currentMode) {
-            "smoke" -> stage?.mode == "smoke" && (stage.stage == "smoke-stable" || stage.stage == "smoke-finished")
+            "empty" -> stage?.mode == "empty" && (stage.stage == "empty-stable" || stage.stage == "empty-finished")
+            "scene" -> stage?.mode == "scene" && (stage.stage == "scene-stable" || stage.stage == "scene-finished")
             else -> stage?.mode == "full" && (stage.stage == "full-user-close" || stage.stage == "full-finished")
         }
 
-        if (currentMode == "smoke" && cleanStage) {
+        if (currentMode == "empty" && cleanStage) {
             evaluating = false
             childStarted = false
-            status.text = "GODOT 단독 부팅  PASS"
-            detail.text = "씬/렌더러 단독 경로 정상 · 전체 bridge 경로로 자동 전환"
-            handler.postDelayed({ launchFull() }, 500L)
+            status.text = "빈 GODOT 엔진  PASS"
+            detail.text = "엔진/기기 기본 경로 정상 · V143 실제 씬 검사로 전환"
+            handler.postDelayed({ launchScene() }, 450L)
+            return
+        }
+
+        if (currentMode == "scene" && cleanStage) {
+            evaluating = false
+            childStarted = false
+            status.text = "V143 씬 단독  PASS"
+            detail.text = "씬/리소스/렌더러 단독 경로 정상 · 전체 bridge 경로로 전환"
+            handler.postDelayed({ launchFull() }, 450L)
             return
         }
 
@@ -137,7 +162,7 @@ class V144HardwarelessGodotActivity : Activity() {
             evaluating = false
             childStarted = false
             status.text = "전체 SIM LAB  PASS"
-            detail.text = "Godot + bridge + GameEngine 경로가 정상 종료됨"
+            detail.text = "Godot + V143 scene + bridge + GameEngine 경로가 정상 종료됨"
             return
         }
 
@@ -153,13 +178,21 @@ class V144HardwarelessGodotActivity : Activity() {
             "${reasonName(it.reason)} · status=${it.status}" +
                 (it.description?.takeIf(String::isNotBlank)?.let { d -> "\n$d" } ?: "")
         } ?: "Android exit record 없음"
-        status.text = if (currentMode == "smoke") "GODOT 단독 경로에서 종료됨" else "전체 SIM LAB 경로에서 종료됨"
+        status.text = when (currentMode) {
+            "empty" -> "빈 GODOT 엔진에서 종료됨"
+            "scene" -> "V143 씬 단독 경로에서 종료됨"
+            else -> "전체 SIM LAB 경로에서 종료됨"
+        }
         detail.text = "LAST  $stageText\nEXIT  $exitText"
     }
 
     private fun latestExit(mode: String): ApplicationExitInfo? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
-        val suffix = if (mode == "smoke") ":godot_smoke" else ":hardwareless_full"
+        val suffix = when (mode) {
+            "empty" -> ":godot_smoke"
+            "scene" -> ":godot_scene"
+            else -> ":hardwareless_full"
+        }
         val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         return runCatching {
             manager.getHistoricalProcessExitReasons(packageName, 0, 30)
@@ -198,7 +231,7 @@ class V144HardwarelessGodotActivity : Activity() {
             setBackgroundColor(Color.rgb(4, 8, 10))
         }
         root.addView(TextView(this).apply {
-            text = "PUTTVISION · GODOT DIAGNOSTIC"
+            text = "PUTTVISION · GODOT DIAGNOSTIC V149"
             setTextColor(Color.rgb(105, 239, 176))
             textSize = 13f
             gravity = Gravity.CENTER
@@ -214,7 +247,7 @@ class V144HardwarelessGodotActivity : Activity() {
         }
         root.addView(status)
         detail = TextView(this).apply {
-            text = "Godot 단독 → 전체 SIM LAB 순서로 자동 검사합니다"
+            text = "빈 엔진 → V143 씬 → 전체 SIM LAB 순서로 자동 검사합니다"
             setTextColor(Color.LTGRAY)
             textSize = 13f
             gravity = Gravity.CENTER
@@ -234,15 +267,27 @@ class V144HardwarelessGodotActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + .5f).toInt()
 }
 
-/** Pure engine/scene smoke test: intentionally no V143 plugin, GameEngine or bridge pump. */
-class V148GodotSmokeActivity : GodotActivity() {
+/** Shared native-only probe host. No PuttVision GodotPlugin, GameEngine or bridge pump is present. */
+abstract class V149GodotProbeActivity : GodotActivity() {
+    protected abstract val probeMode: String
+    protected abstract val badgeText: String
+    protected open val sceneOverride: String? = null
+
     private val handler = Handler(Looper.getMainLooper())
     private var stable = false
 
+    override fun getCommandLine(): MutableList<String> =
+        super.getCommandLine().apply {
+            sceneOverride?.let {
+                add("--scene")
+                add(it)
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        V148GodotCrashJournal.write(this, "smoke", "onCreate-before-godot")
+        V148GodotCrashJournal.write(this, probeMode, "onCreate-before-godot")
         super.onCreate(savedInstanceState)
-        V148GodotCrashJournal.write(this, "smoke", "onCreate-after-godot")
+        V148GodotCrashJournal.write(this, probeMode, "onCreate-after-godot")
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.decorView.systemUiVisibility =
             View.SYSTEM_UI_FLAG_FULLSCREEN or
@@ -250,7 +295,7 @@ class V148GodotSmokeActivity : GodotActivity() {
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 
         val badge = TextView(this).apply {
-            text = "GODOT SMOKE · NO PLUGIN · NO PHYSICS"
+            text = badgeText
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.argb(210, 4, 8, 10))
             textSize = 11f
@@ -264,11 +309,11 @@ class V148GodotSmokeActivity : GodotActivity() {
 
     override fun onGodotSetupCompleted() {
         super.onGodotSetupCompleted()
-        V148GodotCrashJournal.write(this, "smoke", "godot-ready")
+        V148GodotCrashJournal.write(this, probeMode, "$probeMode-godot-ready")
         handler.postDelayed({
             if (!isFinishing && !isDestroyed) {
                 stable = true
-                V148GodotCrashJournal.write(this, "smoke", "smoke-stable")
+                V148GodotCrashJournal.write(this, probeMode, "$probeMode-stable")
                 finish()
             }
         }, 4000L)
@@ -276,9 +321,22 @@ class V148GodotSmokeActivity : GodotActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        if (stable) V148GodotCrashJournal.write(this, "smoke", "smoke-finished")
+        if (stable) V148GodotCrashJournal.write(this, probeMode, "$probeMode-finished")
         super.onDestroy()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + .5f).toInt()
+}
+
+/** Stage 1: engine + one empty Node. No V143 resources are loaded. */
+class V148GodotSmokeActivity : V149GodotProbeActivity() {
+    override val probeMode = "empty"
+    override val badgeText = "GODOT EMPTY · NO SCRIPT · NO RESOURCE · NO PLUGIN"
+    override val sceneOverride = "res://v149_empty.tscn"
+}
+
+/** Stage 2: exact production V143 scene, still with no Android plugin/GameEngine/bridge. */
+class V149GodotSceneSmokeActivity : V149GodotProbeActivity() {
+    override val probeMode = "scene"
+    override val badgeText = "V143 SCENE · NO PLUGIN · NO GAMEENGINE"
 }

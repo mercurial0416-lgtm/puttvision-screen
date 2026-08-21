@@ -121,9 +121,10 @@ dependencies {
     implementation("com.google.android.filament:filament-android:$filament")
     implementation("com.google.android.filament:filamat-android:$filament")
 
-    // V143: primary TV renderer. Godot is an embeddable Android AAR and runs in a dedicated
-    // secondary-display Activity while the native Android camera / measurement stack stays alive.
-    implementation("org.godotengine:godot:4.7.1.stable")
+    // V149: 4.7.1 showed a real-device Android native crash in the plugin-free smoke path.
+    // Pin back to the previous 4.7 stable AAR while a three-stage empty-scene/real-scene/full
+    // diagnostic keeps the failure domain explicit on physical Android 16 devices.
+    implementation("org.godotengine:godot:4.7.0.stable")
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")
