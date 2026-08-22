@@ -65,9 +65,9 @@ func _build_materials() -> void:
     _tree_a = load("res://v143_assets/trees/tree_small_02.png")
     _tree_b = load("res://v143_assets/trees/island_tree_03.png")
 
-    mat_green = _turf_mat(Color("#607c3e"), 0.050)
-    mat_fringe = _turf_mat(Color("#58723d"), 0.034)
-    mat_rough = _turf_mat(Color("#4d663b"), 0.018)
+    mat_green = _turf_mat(Color("#506a34"), 0.046)
+    mat_fringe = _turf_mat(Color("#486130"), 0.031)
+    mat_rough = _turf_mat(Color("#3f5631"), 0.016)
     mat_white = _v155_mat(Color("#f4f2e9"),0.54)
     mat_dark = _v155_mat(Color("#090d0d"),0.95)
     mat_red = _v155_mat(Color("#cd202b"),0.58)
@@ -95,6 +95,44 @@ func _build_materials() -> void:
     _v155_guide.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     _tree_mat_a = _tree_mat(_tree_a)
     _tree_mat_b = _tree_mat(_tree_b)
+
+func _build_environment() -> void:
+    var env_node := WorldEnvironment.new()
+    env_node.name = "V158NaturalEnvironment"
+    var env := Environment.new()
+    env.background_mode = Environment.BG_COLOR
+    env.background_color = Color("#4b9bd0")
+    env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    env.ambient_light_color = Color("#dce7e2")
+    env.ambient_light_energy = 0.43
+    env.tonemap_mode = Environment.TONE_MAPPER_ACES
+    env.adjustment_enabled = true
+    env.adjustment_brightness = 0.93
+    env.adjustment_contrast = 1.08
+    env.adjustment_saturation = 0.92
+    env.fog_enabled = false
+    env_node.environment = env
+    add_child(env_node)
+
+    var sun := DirectionalLight3D.new()
+    sun.name = "V158KeySun"
+    sun.light_color = Color("#fff1d9")
+    sun.light_energy = 0.86
+    sun.shadow_enabled = false
+    sun.rotation_degrees = Vector3(-46.0,-31.0,0.0)
+    add_child(sun)
+
+    camera = Camera3D.new()
+    camera.name = "PuttingBroadcastCamera"
+    camera.fov = 42.0
+    camera.near = 0.016
+    camera.far = 145.0
+    add_child(camera)
+    camera.position = camera_pos
+    camera.look_at(camera_look, Vector3.UP)
+
+func _v155_build_cloud(_pos: Vector3, _scale_value: float) -> void:
+    pass
 
 func _v155_build_hills() -> void:
     _v155_blob(horizon_root,Vector3(-11.5,-0.8,-12.8),Vector3(13.5,3.0,5.2),_v155_hill_far,48,24)
