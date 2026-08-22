@@ -1,0 +1,151 @@
+name: V152 direct release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .release-v152-now
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: puttvision-v152-direct-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Allocate release version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || echo pv-100190)
+          LAST=${TAG#pv-}
+          [[ "$LAST" =~ ^[0-9]+$ ]] || LAST=100190
+          VERSION_CODE=$((LAST + 1))
+          VERSION_NAME="0.7.$((VERSION_CODE - 100000))"
+          echo "PV_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
+
+      - name: Consumer regression test
+        run: gradle testConsumerDebugUnitTest
+
+      - name: Restore release signing bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BUNDLE="$RUNNER_TEMP/signing-v3.tgz"
+          DIR="$RUNNER_TEMP/signing-v3"
+          ASSET_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == true and .tag_name == "puttvision-signing-vault-v3") | .assets[] | select(.name == "puttvision-signing-bundle-v3.tgz" or .label == "puttvision-signing-bundle.tgz") | .id' | head -1)
+          test -n "$ASSET_ID"
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$BUNDLE"
+          test -s "$BUNDLE"
+          mkdir -p "$DIR"
+          tar -xzf "$BUNDLE" -C "$DIR"
+          test -s "$DIR/release.jks"
+          test -s "$DIR/signing-lineage"
+          test -s "$DIR/signing.env"
+          chmod 600 "$DIR/release.jks" "$DIR/signing-lineage" "$DIR/signing.env"
+          set -a; source "$DIR/signing.env"; set +a
+          for n in STORE_PASSWORD KEY_PASSWORD KEY_ALIAS ROTATION_MIN_SDK; do test -n "${!n:-}"; done
+          test "$ROTATION_MIN_SDK" = 28
+          CERT=$(keytool -exportcert -keystore "$DIR/release.jks" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sha256sum | cut -d' ' -f1)
+          test "$CERT" = "7a5962aee08d9edc655da5f58cb8199b4d41604793ef539bd0111df2ca0900cb"
+          printf '%s' "$STORE_PASSWORD" > "$RUNNER_TEMP/store.pass"
+          printf '%s' "$KEY_PASSWORD" > "$RUNNER_TEMP/key.pass"
+          chmod 600 "$RUNNER_TEMP/store.pass" "$RUNNER_TEMP/key.pass"
+          echo "PV_SIGNING_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "PV_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "PV_ROTATION_MIN_SDK=$ROTATION_MIN_SDK" >> "$GITHUB_ENV"
+
+      - name: Build current main APKs
+        env:
+          PV_EXTERNAL_SIGNING: 'true'
+          PV_LICENSE_PUBLIC_KEY_B64: ${{ secrets.PV_LICENSE_PUBLIC_KEY_B64 }}
+        run: gradle assembleConsumerRelease assembleDeveloperRelease
+
+      - name: Sign APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          A=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name apksigner | sort -V | tail -1)
+          C=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          D=$(find app/build/outputs/apk/developer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
+          test -s "$C"; test -s "$D"
+          sign_one() {
+            "$A" sign --ks "$PV_SIGNING_DIR/release.jks" --ks-key-alias "$PV_KEY_ALIAS" --ks-pass "file:$RUNNER_TEMP/store.pass" --key-pass "file:$RUNNER_TEMP/key.pass" --lineage "$PV_SIGNING_DIR/signing-lineage" --rotation-min-sdk-version "$PV_ROTATION_MIN_SDK" --v1-signing-enabled false --v2-signing-enabled false --v3-signing-enabled true --v4-signing-enabled false --out "$2" "$1"
+            "$A" verify --verbose --print-certs --min-sdk-version 28 "$2"
+          }
+          sign_one "$C" puttvision-consumer.apk
+          sign_one "$D" puttvision.apk
+          sha256sum puttvision-consumer.apk > puttvision-consumer.apk.sha256
+          sha256sum puttvision.apk > puttvision.apk.sha256
+          echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
+          echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
+          gh release create "$PV_TAG" "${ASSETS[@]}" --target main --title "PuttVision $PV_VERSION_NAME" --notes "V152 premium mobile-safe renderer + calibrated cup shots" --latest
+          APK_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$PV_TAG/puttvision-consumer.apk"
+          echo "PV_APK_URL=$APK_URL" >> "$GITHUB_ENV"
+          curl --fail-with-body -sSIL "$APK_URL" >/dev/null
+
+      - name: Publish public updater manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
+        run: |
+          set -euo pipefail
+          jq -nc \
+            --arg action external-finalize \
+            --argjson vc "$PV_VERSION_CODE" \
+            --arg vn "$PV_VERSION_NAME" \
+            --arg sha "$PV_RELEASE_SHA" \
+            --argjson size "$PV_APK_SIZE" \
+            --arg apkUrl "$PV_APK_URL" \
+            '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size,apkUrl:$apkUrl}' > payload.json
+          curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > finalize.json
+          jq -e '.ok == true and .action == "external-finalize"' finalize.json >/dev/null
+          PV_MANIFEST_URL=$(jq -r .manifestUrl finalize.json)
+          LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
+          echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" --arg url "$PV_APK_URL" '.versionCode == $vc and .sha256 == $sha and .apkUrl == $url' >/dev/null
+          echo "$LIVE" | jq .
+
+      - name: Report direct-release result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          VERSION="${PV_VERSION_NAME:-unknown}"
+          CODE="${PV_VERSION_CODE:-unknown}"
+          gh issue comment 138 --body "V152 direct release result: **${JOB_STATUS}** · version ${VERSION} (${CODE}) · run ${GITHUB_RUN_ID}"
