@@ -57,7 +57,6 @@ void fragment() {
 
     float brightness = mow_light + texture_micro + broad + medium + grain + blades;
     vec3 col = base_color * brightness;
-    // Tiny warm/yellow fibre variation prevents the surface from reading as a flat green shader.
     col += vec3(0.012, 0.013, 0.004) * max(0.0, medium * 18.0);
     ALBEDO = col;
 
@@ -81,8 +80,7 @@ void fragment() {
         material.set_shader_parameter("turf_normal", load(normal_path))
         material.set_shader_parameter("turf_roughness", load(rough_path))
     else:
-        # CI/dev fallback still looks like close-cut turf instead of a blank material.
-        return _v158_procedural_turf(base_color, stripe_strength)
+        return _v155_grass(base_color, stripe_strength, 0.020)
 
     material.set_shader_parameter("base_color", Vector3(base_color.r, base_color.g, base_color.b))
     material.set_shader_parameter("tile_scale", tile_scale)
@@ -132,8 +130,8 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
         desired_look = cup_world + Vector3(0.0, 0.017, -0.012)
         desired_fov = 38.0
     elif running:
-        # V158 chased the ball almost 1:1, which visually cancelled its translation.  V159 keeps a
-        # broadcast camera near the launch side and only pans gently, so the ball visibly crosses turf.
+        # V158 chased the ball almost 1:1, which visually cancelled its translation.  Keep the
+        # broadcast camera near the launch side and only pan gently so travel is unmistakable.
         var progress: float = clamp((-ball_world.z) / max(0.50, target_distance), 0.0, 1.0)
         desired_pos = Vector3(ball_world.x * 0.08, 0.405 + progress * 0.025, 1.50 - progress * 0.30)
         var look_z: float = lerp(-1.70, -max(2.30, target_distance - 0.70), min(1.0, progress * 0.72))
