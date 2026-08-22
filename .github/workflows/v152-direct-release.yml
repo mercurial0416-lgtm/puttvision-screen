@@ -122,7 +122,7 @@ jobs:
         run: |
           set -euo pipefail
           ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
-          gh release create "$PV_TAG" "${ASSETS[@]}" --target main --title "PuttVision $PV_VERSION_NAME" --notes "V152 premium mobile-safe renderer + calibrated cup shots" --latest
+          gh release create "$PV_TAG" "${ASSETS[@]}" --target main --title "PuttVision $PV_VERSION_NAME" --notes "V153 premium green + flush regulation cup + cinematic camera" --latest
           APK_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$PV_TAG/puttvision-consumer.apk"
           echo "PV_APK_URL=$APK_URL" >> "$GITHUB_ENV"
           curl --fail-with-body -sSIL "$APK_URL" >/dev/null
@@ -145,9 +145,16 @@ jobs:
           curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > finalize.json
           jq -e '.ok == true and .action == "external-finalize"' finalize.json >/dev/null
           PV_MANIFEST_URL=$(jq -r .manifestUrl finalize.json)
-          LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL")
-          echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" --arg url "$PV_APK_URL" '.versionCode == $vc and .sha256 == $sha and .apkUrl == $url' >/dev/null
-          echo "$LIVE" | jq .
+          for i in 1 2 3 4 5 6; do
+            LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL?cb=${GITHUB_RUN_ID}-${i}")
+            if echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg sha "$PV_RELEASE_SHA" --arg url "$PV_APK_URL" '.versionCode == $vc and .sha256 == $sha and .apkUrl == $url' >/dev/null; then
+              echo "$LIVE" | jq .
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Updater manifest did not converge to the new release" >&2
+          exit 1
 
       - name: Report direct-release result
         if: always()
