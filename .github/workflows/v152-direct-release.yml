@@ -28,6 +28,7 @@ jobs:
           ref: main
 
       - name: Signal V152 direct release start
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh issue comment 138 --body "V152 direct release started · run ${GITHUB_RUN_ID} · event ${GITHUB_EVENT_NAME}"
@@ -150,6 +151,7 @@ jobs:
 
       - name: Report direct-release result
         if: always()
+        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
