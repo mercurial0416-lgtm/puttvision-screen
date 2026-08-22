@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - .release-v152-now
+  pull_request:
+    branches: [main]
+    types: [closed]
 
 permissions:
   contents: write
@@ -17,11 +20,17 @@ concurrency:
 
 jobs:
   release:
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release/v152-direct-trigger') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+
+      - name: Signal V152 direct release start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 138 --body "V152 direct release started · run ${GITHUB_RUN_ID} · event ${GITHUB_EVENT_NAME}"
 
       - uses: actions/setup-java@v5
         with:
