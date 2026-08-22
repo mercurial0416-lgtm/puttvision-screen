@@ -35,7 +35,28 @@ object V126PhysicsFrameBridge {
             cupRimWillDrop = source.cupRimWillDrop,
             cupRimDurationSec = source.cupRimDurationSec,
             cupRimReleaseSpeedMps = source.cupRimReleaseSpeedMps,
-            cupDropDurationSec = source.cupDropDurationSec
+            cupDropDurationSec = source.cupDropDurationSec,
+            ballCenterZM = source.ballCenterZM,
+            vz = source.vz,
+            omegaXRadS = source.omegaXRadS,
+            omegaYRadS = source.omegaYRadS,
+            omegaZRadS = source.omegaZRadS,
+            orientationW = source.orientationW,
+            orientationX = source.orientationX,
+            orientationY = source.orientationY,
+            orientationZ = source.orientationZ,
+            ballRotationRadians = source.ballRotationRadians,
+            surfaceNormalX = source.surfaceNormalX,
+            surfaceNormalY = source.surfaceNormalY,
+            surfaceNormalZ = source.surfaceNormalZ,
+            v135SlipSpeedMps = source.v135SlipSpeedMps,
+            v135Airborne = source.v135Airborne,
+            v135Initialized = source.v135Initialized,
+            v135CaptureForbidden = source.v135CaptureForbidden,
+            cupWallContacts = source.cupWallContacts,
+            cupBottomContacts = source.cupBottomContacts,
+            bridgeCount = source.bridgeCount,
+            flagstickContacts = source.flagstickContacts
         )
     }
 }
