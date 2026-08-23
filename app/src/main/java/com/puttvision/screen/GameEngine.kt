@@ -15,6 +15,10 @@ class GameEngine {
     // threads never receive it directly; they consume the deep snapshot published through state.
     private var physicsState: SimState? = null
 
+    // LAB-only one-shot start override. Normal gameplay never sets this, so its launch path remains
+    // exactly V26BallStartRuntime.current(settings). The value is consumed by the next accepted shot.
+    private var nextLabStartOverride: Pair<Double, Double>? = null
+
     @Volatile var currentShot: ShotMetrics? = null
         private set
     @Volatile var state: SimState? = null
@@ -58,6 +62,19 @@ class GameEngine {
 
     init {
         V31TrainingSessionRuntime.bind(this)
+    }
+
+    /**
+     * Places only the next synthetic LAB shot at a deterministic virtual coordinate.
+     * This is intentionally not a gameplay assist: regular camera/sensor shots never call it.
+     */
+    @Synchronized
+    fun setNextLabShotStart(x: Double, y: Double) {
+        if (!x.isFinite() || !y.isFinite()) {
+            nextLabStartOverride = null
+            return
+        }
+        nextLabStartOverride = x to y
     }
 
     fun seedHistory(records: List<ShotRecord>) {
@@ -124,7 +141,8 @@ class GameEngine {
         coachFeedback = CoachEngine.diagnose(effectiveMetrics, strokeScore!!, recentRecords)
         V15AutoFlowRuntime.rolling()
         V22AudioRuntime.launch(effectiveMetrics.ballSpeedMps)
-        virtualStartAtShot = V26BallStartRuntime.current(settings)
+        virtualStartAtShot = nextLabStartOverride?.also { nextLabStartOverride = null }
+            ?: V26BallStartRuntime.current(settings)
         val launched = physics.launch(effectiveMetrics, settings, virtualStartAtShot.first, virtualStartAtShot.second)
         physicsState = launched
         publishPhysicsFrame(launched)
@@ -230,6 +248,7 @@ class GameEngine {
         ghostComparison = null
         latestRecord = null
         virtualStartAtShot = 0.0 to 0.0
+        nextLabStartOverride = null
         V19StrokeStudioRuntime.clear()
         strokeStudio = null
         V20GreenReadTrainingRuntime.prepare(gameModes.status.mode, settings)
@@ -249,6 +268,7 @@ class GameEngine {
         metricConfidence = null
         ghostComparison = null
         latestRecord = null
+        nextLabStartOverride = null
         V15AutoFlowRuntime.rearm()
     }
 
