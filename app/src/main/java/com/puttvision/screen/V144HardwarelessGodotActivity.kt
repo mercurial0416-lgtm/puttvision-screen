@@ -24,11 +24,11 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V152 full no-hardware simulator presentation.
+ * V160 full no-hardware simulator presentation.
  *
- * Android/GameEngine remains the only physics authority.  The synthetic buttons now generate a
- * distance/Stimp-calibrated launch instead of the old fixed 1.45 m/s shot, so CENTER is a genuine
- * regulation-cup attempt at every selectable distance rather than stopping metres short.
+ * Android/GameEngine remains the only physics authority. Synthetic buttons generate calibrated
+ * launches, while TEST MAKE starts only that LAB shot close to the regulation cup so the user can
+ * inspect real V135 rim/capture/drop behaviour without adding any assist to normal gameplay.
  */
 class V148HardwarelessFullActivity : GodotActivity() {
     private lateinit var engine: GameEngine
@@ -47,6 +47,12 @@ class V148HardwarelessFullActivity : GodotActivity() {
     private var pumpStarted = false
     private var fullStable = false
 
+    private companion object {
+        // Close enough to make cup entry easy to inspect, far enough to see true roll and spin first.
+        const val TEST_MAKE_DISTANCE_M = 0.22
+        const val TEST_MAKE_CUP_SPEED_MPS = 0.28
+    }
+
     private enum class Scenario(
         val label: String,
         val icon: String,
@@ -59,7 +65,8 @@ class V148HardwarelessFullActivity : GodotActivity() {
         PULL("PULL -2°", "↓", 1.00, -2.0, 0.66),
         SHORT("SHORT", "◌", 0.72, 0.0, 0.62),
         LONG("LONG", "+", 1.20, 0.0, 0.70),
-        BREAK("BREAK", "↝", 1.00, 0.0, 0.66)
+        BREAK("BREAK", "↝", 1.00, 0.0, 0.66),
+        TEST_MAKE("TEST MAKE", "✓", 1.00, 0.0, 0.66)
     }
 
     private val pump = object : Runnable {
@@ -186,7 +193,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
 
     private inline fun installRuntime(name: String, block: () -> Unit) {
         runCatching(block).onFailure { error ->
-            Log.w("PuttVisionV152", "runtime $name init failed", error)
+            Log.w("PuttVisionV160", "runtime $name init failed", error)
             markStage("runtime-warning:$name:${error.javaClass.simpleName}")
         }
     }
@@ -234,7 +241,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
             setPadding(dp(14), dp(14), dp(14), dp(14))
         }
 
-        controls.addView(label("NO HARDWARE · REAL V143 · FULL", 12.5f, Color.rgb(105, 233, 170), true))
+        controls.addView(label("NO HARDWARE · REAL V160 · FULL", 12.5f, Color.rgb(105, 233, 170), true))
         controls.addView(label("합성 샷만 사용 · 렌더/그린/볼/컵 물리는 실제 TV와 동일", 8.7f, Color.rgb(206, 215, 216), false).apply {
             setPadding(0, dp(4), 0, dp(10))
         })
@@ -258,6 +265,11 @@ class V148HardwarelessFullActivity : GodotActivity() {
         listOf(Scenario.CENTER, Scenario.PUSH, Scenario.PULL, Scenario.SHORT).forEach { scenario ->
             controls.addView(primaryShotButton(scenario) { inject(scenario) }, primaryButtonLp())
         }
+
+        controls.addView(label("CUP TEST · 실제 컵 물리", 8.6f, Color.rgb(124, 213, 166), true).apply {
+            setPadding(0, dp(10), 0, 0)
+        })
+        controls.addView(primaryShotButton(Scenario.TEST_MAKE) { inject(Scenario.TEST_MAKE) }, primaryButtonLp())
 
         // Preserve power/break diagnostics without letting secondary controls dominate the approved UI.
         val diagnostics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -317,6 +329,11 @@ class V148HardwarelessFullActivity : GodotActivity() {
         if (scenario == Scenario.BREAK && profile == 0) profile = 8
         applyTarget(reset = true)
 
+        if (scenario == Scenario.TEST_MAKE) {
+            val startY = (engine.settings.holeDistanceM - TEST_MAKE_DISTANCE_M).coerceAtLeast(0.0)
+            engine.setNextLabShotStart(0.0, startY)
+        }
+
         val ballSpeed = scenarioBallSpeed(scenario)
         val headSpeed = max(0.20, ballSpeed * scenario.headScale)
         val metrics = ShotMetrics(
@@ -339,22 +356,31 @@ class V148HardwarelessFullActivity : GodotActivity() {
         engine.launch(metrics)
         V143GodotRenderBridge.publish(engine)
         lastRunning = engine.state?.running == true
-        updateStatus("${scenario.label} · ROLLING · ${"%.2f".format(ballSpeed)} m/s", StatusTone.ROLLING)
+        val suffix = if (scenario == Scenario.TEST_MAKE) " · CUP 22 cm" else ""
+        updateStatus("${scenario.label} · ROLLING · ${"%.2f".format(ballSpeed)} m/s$suffix", StatusTone.ROLLING)
         maybeStartPump()
     }
 
     /**
-     * Stimp is defined from a 1.95072 m/s launch.  Solve v² = u² + 2as backwards from a target
-     * cup speed, then compensate the solver's intentional initial 72% roll fraction.  This keeps
-     * synthetic examples realistic while allowing the real 6DOF cup solver to decide make/lip-out.
+     * Stimp is defined from a 1.95072 m/s launch. Solve v² = u² + 2as backwards from a target cup
+     * speed, then compensate the solver's initial skid/roll blend. TEST MAKE uses the same equation
+     * from a 22 cm LAB-only start; the real 6DOF cup solver still decides capture/drop.
      */
     private fun scenarioBallSpeed(scenario: Scenario): Double {
-        val start = V26BallStartRuntime.current(engine.settings)
-        val distance = hypot(start.first, engine.settings.holeDistanceM - start.second).coerceAtLeast(0.25)
+        val distance = if (scenario == Scenario.TEST_MAKE) {
+            TEST_MAKE_DISTANCE_M
+        } else {
+            val start = V26BallStartRuntime.current(engine.settings)
+            hypot(start.first, engine.settings.holeDistanceM - start.second).coerceAtLeast(0.25)
+        }
         val stimp = engine.settings.stimpMeters.coerceIn(1.5, 5.0)
         val stimpLaunch = 1.95072
         val rollingDecel = stimpLaunch * stimpLaunch / (2.0 * stimp)
-        val desiredCupSpeed = V27CupPaceRuntime.targetCupSpeedMps.coerceIn(0.25, 0.85)
+        val desiredCupSpeed = if (scenario == Scenario.TEST_MAKE) {
+            TEST_MAKE_CUP_SPEED_MPS
+        } else {
+            V27CupPaceRuntime.targetCupSpeedMps.coerceIn(0.25, 0.85)
+        }
         val pureRollLaunch = sqrt(desiredCupSpeed * desiredCupSpeed + 2.0 * rollingDecel * distance)
         val skidCompensated = pureRollLaunch / 0.92
         return (skidCompensated * scenario.speedScale).coerceIn(0.15, 4.75)
@@ -407,7 +433,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
     }
 
     private fun markStage(stage: String) {
-        Log.i("PuttVisionV152", stage)
+        Log.i("PuttVisionV160", stage)
         V148GodotCrashJournal.write(this, "full", stage)
     }
 
@@ -446,13 +472,13 @@ class V148HardwarelessFullActivity : GodotActivity() {
         isAllCaps = false
         includeFontPadding = false
         setPadding(dp(16), 0, dp(12), 0)
-        setTextColor(Color.rgb(239, 243, 242))
-        setTypeface(typeface, Typeface.NORMAL)
+        setTextColor(if (scenario == Scenario.TEST_MAKE) Color.rgb(132, 238, 180) else Color.rgb(239, 243, 242))
+        setTypeface(typeface, if (scenario == Scenario.TEST_MAKE) Typeface.BOLD else Typeface.NORMAL)
         stateListAnimator = null
         background = roundedDrawable(
-            Color.argb(222, 24, 34, 37),
+            if (scenario == Scenario.TEST_MAKE) Color.argb(226, 17, 45, 35) else Color.argb(222, 24, 34, 37),
             9,
-            Color.argb(60, 175, 198, 196),
+            if (scenario == Scenario.TEST_MAKE) Color.argb(150, 82, 198, 132) else Color.argb(60, 175, 198, 196),
             1
         )
         setOnClickListener { action() }
