@@ -1,45 +1,12 @@
 extends "res://v161_premium_environment.gd"
 
-# V161 surface/detail polish. Opaque procedural materials only: no alpha foliage cards,
-# no HDRI, no dynamic shadows, no extra texture fetches. This mainly removes the toy-like
-# flat colors from tree canopies, trunks, timber, stone and roof geometry.
+# V161 surface/detail polish. Keep inherited typed StandardMaterial3D fields untouched;
+# custom ShaderMaterials are used directly by the V161 tree geometry instead.
 
-func _v161_noise_material(base: Color, alt: Color, scale_value: float, roughness_value: float, seed: float) -> ShaderMaterial:
-    var shader := Shader.new()
-    shader.code = """
-shader_type spatial;
-render_mode diffuse_burley, specular_schlick_ggx;
-uniform vec3 base_color : source_color;
-uniform vec3 alt_color : source_color;
-uniform float scale_value = 24.0;
-uniform float roughness_value = 0.90;
-uniform float seed = 0.0;
-float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)) + seed) * 43758.5453123); }
-float noise21(vec2 p){
-    vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
-    float a=hash21(i); float b=hash21(i+vec2(1.0,0.0));
-    float c=hash21(i+vec2(0.0,1.0)); float d=hash21(i+vec2(1.0,1.0));
-    return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
-}
-void fragment(){
-    vec2 p=UV*scale_value;
-    float n=noise21(p)*0.62 + noise21(p*2.87+vec2(7.1,3.4))*0.27 + noise21(p*7.2)*0.11;
-    float fleck=(hash21(floor(p*5.0))-0.5)*0.05;
-    vec3 col=mix(base_color,alt_color,smoothstep(0.22,0.82,n));
-    col*=1.0+fleck;
-    ALBEDO=max(col,vec3(0.0));
-    ROUGHNESS=clamp(roughness_value+(0.5-n)*0.055,0.55,0.98);
-    SPECULAR=0.10;
-}
-"""
-    var m := ShaderMaterial.new()
-    m.shader = shader
-    m.set_shader_parameter("base_color", Vector3(base.r, base.g, base.b))
-    m.set_shader_parameter("alt_color", Vector3(alt.r, alt.g, alt.b))
-    m.set_shader_parameter("scale_value", scale_value)
-    m.set_shader_parameter("roughness_value", roughness_value)
-    m.set_shader_parameter("seed", seed)
-    return m
+var _detail_leaf_a: ShaderMaterial
+var _detail_leaf_b: ShaderMaterial
+var _detail_leaf_c: ShaderMaterial
+var _detail_bark: ShaderMaterial
 
 func _v161_leaf_material(base: Color, light: Color, seed: float) -> ShaderMaterial:
     var shader := Shader.new()
@@ -57,16 +24,17 @@ float noise21(vec2 p){
     return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
 }
 void fragment(){
-    vec2 p=UV*vec2(38.0,25.0);
-    float large=noise21(p*0.55);
-    float fine=noise21(p*3.1+vec2(2.7,8.9));
-    float cluster=smoothstep(0.18,0.86,large*0.72+fine*0.28);
-    float tiny=(hash21(floor(p*7.0))-0.5)*0.065;
+    vec2 p=UV*vec2(42.0,29.0);
+    float large=noise21(p*0.48);
+    float mid=noise21(p*1.85+vec2(5.2,2.8));
+    float fine=noise21(p*5.4+vec2(2.7,8.9));
+    float cluster=smoothstep(0.16,0.88,large*0.58+mid*0.29+fine*0.13);
+    float speck=(hash21(floor(p*7.0))-0.5)*0.060;
     vec3 col=mix(base_color,light_color,cluster);
-    col*=0.96+tiny;
+    col*=0.96+speck;
     ALBEDO=max(col,vec3(0.0));
-    ROUGHNESS=0.91+(0.5-fine)*0.045;
-    SPECULAR=0.07;
+    ROUGHNESS=clamp(0.91+(0.5-fine)*0.050,0.82,0.97);
+    SPECULAR=0.065;
 }
 """
     var m := ShaderMaterial.new()
@@ -84,7 +52,7 @@ render_mode diffuse_burley, specular_schlick_ggx;
 float hash21(vec2 p){return fract(sin(dot(p,vec2(17.7,91.3)))*43758.5453);}
 float noise21(vec2 p){
     vec2 i=floor(p);vec2 f=fract(p);f=f*f*(3.0-2.0*f);
-    float a=hash21(i),b=hash21(i+vec2(1,0)),c=hash21(i+vec2(0,1)),d=hash21(i+vec2(1,1));
+    float a=hash21(i),b=hash21(i+vec2(1.0,0.0)),c=hash21(i+vec2(0.0,1.0)),d=hash21(i+vec2(1.0,1.0));
     return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
 }
 void fragment(){
@@ -93,8 +61,7 @@ void fragment(){
     float knots=noise21(UV*vec2(21.0,34.0));
     vec3 dark=vec3(0.17,0.105,0.063);
     vec3 light=vec3(0.34,0.235,0.145);
-    vec3 col=mix(dark,light,ridge*0.48+knots*0.38);
-    ALBEDO=col;
+    ALBEDO=mix(dark,light,ridge*0.48+knots*0.38);
     ROUGHNESS=0.95;
     SPECULAR=0.05;
 }
@@ -105,23 +72,54 @@ void fragment(){
 
 func _build_materials() -> void:
     super._build_materials()
+    _detail_leaf_a = _v161_leaf_material(Color("#24442a"), Color("#58734b"), 2.0)
+    _detail_leaf_b = _v161_leaf_material(Color("#1c3823"), Color("#48633e"), 7.0)
+    _detail_leaf_c = _v161_leaf_material(Color("#2d4d2f"), Color("#688356"), 13.0)
+    _detail_bark = _v161_bark_material()
 
-    _v155_leaf_a = _v161_leaf_material(Color("#26472b"), Color("#506f45"), 2.0)
-    _v155_leaf_b = _v161_leaf_material(Color("#1f3d26"), Color("#405f39"), 7.0)
-    _v155_leaf_c = _v161_leaf_material(Color("#315331"), Color("#5d7d50"), 13.0)
-    _v155_bark = _v161_bark_material()
+func _v155_build_tree(pos: Vector3, scale_value: float) -> void:
+    var tree := Node3D.new()
+    tree.name = "V161DetailedMatureTree3D"
+    tree.position = pos
+    tree.rotation_degrees.y = fmod(abs(pos.x * 41.0 + pos.z * 17.0), 360.0)
+    horizon_root.add_child(tree)
 
-    _v155_wood = _v161_noise_material(Color("#75472f"), Color("#a06b47"), 34.0, 0.84, 4.0)
-    _v155_wood_dark = _v161_noise_material(Color("#4c2f22"), Color("#704733"), 28.0, 0.88, 8.0)
-    mat_stone = _v161_noise_material(Color("#847d70"), Color("#aaa08d"), 16.0, 0.95, 12.0)
-    _v155_stone_light = _v161_noise_material(Color("#aaa18f"), Color("#c8bfad"), 18.0, 0.94, 17.0)
-    mat_roof = _v161_noise_material(Color("#171e20"), Color("#2d3535"), 48.0, 0.90, 20.0)
+    var s := scale_value
+    _v155_shadow(tree, Vector3(0.38 * s, 0.006, 0.34 * s), Vector2(2.45, 0.82) * s, -26.0, 0.14)
+    _v155_cylinder(tree, 0.095 * s, 1.68 * s, Vector3(0.0, 0.84 * s, 0.0), _detail_bark, 22)
+
+    var b1 := _v155_cylinder(tree, 0.035 * s, 0.92 * s, Vector3(-0.18, 1.30, 0.00) * s, _detail_bark, 14)
+    b1.rotation_degrees = Vector3(18.0, 12.0, -34.0)
+    var b2 := _v155_cylinder(tree, 0.033 * s, 0.86 * s, Vector3(0.19, 1.36, 0.02) * s, _detail_bark, 14)
+    b2.rotation_degrees = Vector3(-12.0, 31.0, 37.0)
+    var b3 := _v155_cylinder(tree, 0.027 * s, 0.66 * s, Vector3(0.02, 1.57, -0.13) * s, _detail_bark, 12)
+    b3.rotation_degrees = Vector3(39.0, -18.0, 8.0)
+
+    var canopy := [
+        [Vector3(-0.63,1.60, 0.05), Vector3(0.47,0.41,0.39), _detail_leaf_b],
+        [Vector3(-0.35,1.76, 0.30), Vector3(0.50,0.43,0.40), _detail_leaf_a],
+        [Vector3( 0.02,1.62, 0.40), Vector3(0.50,0.42,0.40), _detail_leaf_c],
+        [Vector3( 0.43,1.69, 0.26), Vector3(0.52,0.45,0.42), _detail_leaf_b],
+        [Vector3( 0.66,1.84,-0.02), Vector3(0.46,0.41,0.38), _detail_leaf_a],
+        [Vector3( 0.48,1.73,-0.34), Vector3(0.45,0.40,0.38), _detail_leaf_c],
+        [Vector3( 0.04,1.70,-0.43), Vector3(0.54,0.44,0.40), _detail_leaf_b],
+        [Vector3(-0.43,1.78,-0.31), Vector3(0.48,0.41,0.39), _detail_leaf_a],
+        [Vector3(-0.66,1.94,-0.09), Vector3(0.43,0.39,0.36), _detail_leaf_c],
+        [Vector3(-0.36,2.08, 0.19), Vector3(0.53,0.46,0.42), _detail_leaf_b],
+        [Vector3( 0.03,2.02, 0.28), Vector3(0.58,0.49,0.44), _detail_leaf_a],
+        [Vector3( 0.40,2.09, 0.13), Vector3(0.51,0.45,0.41), _detail_leaf_c],
+        [Vector3( 0.50,2.16,-0.19), Vector3(0.45,0.40,0.37), _detail_leaf_b],
+        [Vector3( 0.08,2.21,-0.31), Vector3(0.51,0.44,0.40), _detail_leaf_a],
+        [Vector3(-0.38,2.22,-0.20), Vector3(0.46,0.41,0.37), _detail_leaf_c],
+        [Vector3(-0.24,2.42, 0.04), Vector3(0.48,0.42,0.39), _detail_leaf_b],
+        [Vector3( 0.18,2.48, 0.02), Vector3(0.44,0.39,0.36), _detail_leaf_a],
+        [Vector3( 0.00,2.66,-0.02), Vector3(0.34,0.31,0.29), _detail_leaf_c]
+    ]
+    for item in canopy:
+        _v155_blob(tree, item[0] * s, item[1] * s, item[2], 22, 11)
 
 func _build_environment() -> void:
     super._build_environment()
-
-    # Very cheap shadowless side key. It separates branch/trunk silhouettes and facade depth
-    # without returning to dynamic shadow maps.
     var rim := DirectionalLight3D.new()
     rim.name = "V161WarmRim"
     rim.light_color = Color("#f5d5b0")
