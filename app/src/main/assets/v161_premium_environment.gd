@@ -1,4 +1,4 @@
-extends "res://v160_real_green_cup.gd"
+extends "res://v160_natural_finish.gd"
 
 # V161: premium scene pass on top of the proven V160 mobile-safe path.
 # Goals: richer depth, less low-poly repetition, calmer bentgrass mowing, dimensional sky,
@@ -15,8 +15,6 @@ var _v161_conifer_light: StandardMaterial3D
 func _build_materials() -> void:
     super._build_materials()
 
-    # V160 fixed the washed-out Android result. V161 reduces the repetitive stripe contrast and
-    # lets dense fibre/normal detail do more of the work, closer to a maintained bentgrass green.
     if mat_green is ShaderMaterial:
         mat_green.set_shader_parameter("base_color", Vector3(0.205, 0.385, 0.170))
         mat_green.set_shader_parameter("lane_strength", 0.038)
@@ -35,7 +33,6 @@ func _build_materials() -> void:
         mat_rough.set_shader_parameter("texture_scale", 38.0)
         mat_rough.set_shader_parameter("normal_depth", 0.135)
 
-    # The old bright red guide dominates the composition. Keep it useful, but let the green read.
     if _v155_guide != null:
         _v155_guide.albedo_color = Color(0.72, 0.055, 0.045, 0.18)
 
@@ -51,8 +48,6 @@ func _build_environment() -> void:
     _v161_build_sky_shell()
 
 func _v161_build_sky_shell() -> void:
-    # Safe mesh-based sky gradient: visually richer than a flat BG color, but avoids the
-    # ProceduralSkyMaterial/HDRI path that previously crashed affected Android devices.
     var sky_mesh := MeshInstance3D.new()
     sky_mesh.name = "V161GradientSkyShell"
     var sphere := SphereMesh.new()
@@ -85,8 +80,6 @@ void fragment() {
     add_child(sky_mesh)
 
 func _v155_build_cloud(pos: Vector3, scale_value: float) -> void:
-    # Restore clouds with actual shaded meshes. V158 disabled the old cloud path while isolating
-    # the alpha-card crash; these use only opaque sphere geometry and are safe on that path.
     var cloud := Node3D.new()
     cloud.name = "V161VolumetricMeshCloud"
     cloud.position = pos
@@ -101,8 +94,6 @@ func _v155_build_cloud(pos: Vector3, scale_value: float) -> void:
     _v155_blob(cloud, Vector3(0.02, -0.07, 0.02), Vector3(1.42, 0.19, 0.24) * s, _v155_cloud, 30, 12)
 
 func _v155_build_tree(pos: Vector3, scale_value: float) -> void:
-    # Irregular branch structure + many smaller leaf masses reads much more like a mature deciduous
-    # tree than V160's few large spheres, while remaining opaque geometry on the safe renderer.
     var tree := Node3D.new()
     tree.name = "V161MatureTree3D"
     tree.position = pos
@@ -149,19 +140,16 @@ func _v155_build_clubhouse(local_pos: Vector3) -> void:
     if house == null:
         return
 
-    # Roof fascia/gutter and a deeper terrace stop the building reading as simple stacked boxes.
     _v155_box(house, Vector3(7.72, 0.065, 0.075), Vector3(0.05, 1.73, 1.36), _v161_metal)
     _v155_box(house, Vector3(5.30, 0.055, 1.14), Vector3(0.92, 0.060, 1.60), _v161_paver)
     _v155_box(house, Vector3(4.70, 0.075, 0.42), Vector3(1.14, 0.040, 2.20), _v155_stone_light)
 
-    # Warm interior panels sit behind the glass, with varied darkness so the facade gains depth.
     var dark_inside := _v155_mat(Color("#302a24"), 0.84)
     for i in range(7):
         var x := -0.18 + float(i) * 0.54
         var inside_mat: Material = _v161_interior if i == 1 or i == 4 else dark_inside
         _v155_box(house, Vector3(0.40, 0.74, 0.018), Vector3(x, 0.77, 1.045), inside_mat)
 
-    # Slender exterior lights + planters give the eye real scale cues.
     var lamp_mat := _v155_mat(Color("#dbc28a"), 0.52)
     for x in [-0.35, 1.42, 2.96]:
         _v155_box(house, Vector3(0.045, 0.16, 0.045), Vector3(float(x), 1.25, 1.145), _v161_metal)
@@ -176,7 +164,6 @@ func _build_horizon() -> void:
     _v161_add_distant_tree_line()
 
 func _v161_add_distant_tree_line() -> void:
-    # Low-cost conifers create several depth planes between the close trees and hills.
     for i in range(14):
         var x := -14.0 + float(i) * 2.15
         var z := -8.3 - float(i % 3) * 0.65
@@ -210,8 +197,6 @@ func _v161_conifer(pos: Vector3, scale_value: float, light: bool) -> void:
 
 func _build_target() -> void:
     super._build_target()
-    # Add a subtle metal collar on the flagstick and a deeper cup-floor shadow. These are tiny but
-    # materially help the close-up camera read the cup as a physical hole rather than a decal.
     var collar := _v155_cylinder(target_root, 0.0083, 0.025, Vector3(0.0, 0.020, 0.0), _v161_metal, 20)
     collar.name = "V161FlagstickFerrule"
 
