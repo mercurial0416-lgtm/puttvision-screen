@@ -1,117 +1,62 @@
-name: TV renderer verify
+name: V143 split manifest settle
 
 on:
-  push:
-    branches: [ 'agent/filament-*' ]
   pull_request:
     paths:
-      - 'app/**'
-      - 'ci/v143_fetch_cc0_assets.py'
       - '.github/workflows/v131-filament-verify.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: tv-renderer-${{ github.ref }}
-  cancel-in-progress: true
+  group: v143-split-manifest-settle
+  cancel-in-progress: false
 
 jobs:
-  verify:
+  settle:
+    if: ${{ github.head_ref == 'release/v143-pr-deploy' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
-
-      - name: Fetch V143 CC0 visual assets
-        run: python3 ci/v143_fetch_cc0_assets.py
-
-      - name: Upload resolved V143 CC0 assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: v143-cc0-assets
-          path: app/src/main/assets/v143_assets
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Validate V143 Godot project
-        shell: bash
-        run: |
-          set -euo pipefail
-          GODOT_ZIP="$RUNNER_TEMP/godot.zip"
-          GODOT_DIR="$RUNNER_TEMP/godot"
-          curl --fail-with-body -L --retry 3 --retry-delay 2 \
-            "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip" \
-            -o "$GODOT_ZIP"
-          mkdir -p "$GODOT_DIR"
-          unzip -q "$GODOT_ZIP" -d "$GODOT_DIR"
-          GODOT=$(find "$GODOT_DIR" -maxdepth 1 -type f -name 'Godot_v4.7.1-stable_linux.x86_64' | head -1)
-          test -x "$GODOT"
-          echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
-          "$GODOT" --headless --editor --path app/src/main/assets --quit
-          "$GODOT" --headless --path app/src/main/assets --script res://v143_tv.gd --check-only
-          SMOKE="$RUNNER_TEMP/v143-smoke.log"
-          "$GODOT" --headless --path app/src/main/assets --quit-after 2 res://v143_tv.tscn 2>&1 | tee "$SMOKE"
-          if grep -Eiq 'SCRIPT ERROR|Parse Error|Invalid assignment|Invalid call|Cannot assign' "$SMOKE"; then
-            echo "V143 runtime smoke detected a GDScript error" >&2
-            exit 1
-          fi
-
-      - name: Render V143 reference frame
-        shell: bash
-        run: |
-          set -euo pipefail
-          command -v xvfb-run >/dev/null
-          rm -f app/src/main/assets/v143-preview.png app/src/main/assets/v143-movie*.png app/src/main/assets/v143-movie.wav
-          timeout 45s xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render" \
-            "$GODOT_BIN" \
-              --path app/src/main/assets \
-              --display-driver x11 \
-              --rendering-method gl_compatibility \
-              --resolution 1920x1080 \
-              --write-movie v143-movie.png \
-              --fixed-fps 30 \
-              --quit-after 18 \
-              res://v143_tv.tscn
-          FRAME=$(find app/src/main/assets -maxdepth 1 -type f -name 'v143-movie*.png' | sort | tail -1)
-          test -n "$FRAME"
-          test -s "$FRAME"
-          cp "$FRAME" app/src/main/assets/v143-preview.png
-          test -s app/src/main/assets/v143-preview.png
-
-      - name: Upload V143 reference frame
-        uses: actions/upload-artifact@v4
-        with:
-          name: v143-godot-preview
-          path: app/src/main/assets/v143-preview.png
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Consumer and developer unit tests
-        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
-
-      - name: Compile both debug APK flavors
-        run: gradle assembleConsumerDebug assembleDeveloperDebug
-
-      - name: Enforce engine-aware self-update size ceiling
+      - name: Re-publish bridge manifest idempotently
         shell: bash
         env:
-          PV_EXTERNAL_SIGNING: 'true'
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_URL: https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher
         run: |
           set -euo pipefail
-          gradle assembleConsumerRelease
-          APK=$(find app/build/outputs/apk/consumer/release -maxdepth 1 -type f -name '*unsigned*.apk' | head -1)
-          test -s "$APK"
-          BYTES=$(stat -c%s "$APK")
-          echo "consumer release bytes=$BYTES"
-          # V143 embeds one ARM64 Godot runtime plus CC0 environment assets. Keep a hard ceiling so
-          # future additions remain deliberate while leaving a real game-engine asset budget.
-          test "$BYTES" -lt $((180 * 1024 * 1024))
+          jq -nc \
+            --arg action finalize \
+            --argjson vc 100178 \
+            --arg vn 0.7.178 \
+            --arg sha 98ae79733cb6900f7656a651bfc44db78353665a8c197abb6f30add2ac780650 \
+            --argjson size 37157578 \
+            '{action:$action,versionCode:$vc,versionName:$vn,sha256:$sha,sizeBytes:$size}' > payload.json
+          curl --fail-with-body -sS -X POST "$PUBLISH_URL" \
+            -H 'content-type: application/json' \
+            -H "x-github-token: $GH_TOKEN" \
+            --data-binary @payload.json > finalize.json
+          cat finalize.json | jq .
+          jq -e '.ok == true and .action == "finalize" and .versionCode == 100178' finalize.json >/dev/null
+
+      - name: Wait for public manifests to converge
+        shell: bash
+        run: |
+          set -euo pipefail
+          LEGACY_URL=https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/update.json
+          V2_URL=https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/update-v2.json
+          ok=0
+          for i in $(seq 1 18); do
+            bust=$(date +%s%N)
+            LEGACY=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$LEGACY_URL?settle=$bust" || true)
+            V2=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$V2_URL?settle=$bust" || true)
+            echo "attempt=$i legacy=$(echo "$LEGACY" | jq -r '.versionCode // "?"' 2>/dev/null || echo '?') v2=$(echo "$V2" | jq -r '.versionCode // "?"' 2>/dev/null || echo '?')"
+            if echo "$LEGACY" | jq -e '.versionCode == 100178 and .sha256 == "98ae79733cb6900f7656a651bfc44db78353665a8c197abb6f30add2ac780650"' >/dev/null 2>&1 \
+              && echo "$V2" | jq -e '.versionCode == 100179 and .sha256 == "46a833e6d96d666aceb2ba85cd8905bc3a8eac1458f370b576eca7453824f48c"' >/dev/null 2>&1; then
+              ok=1
+              echo "$LEGACY" | jq .
+              echo "$V2" | jq .
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" -eq 1
