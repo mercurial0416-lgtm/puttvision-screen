@@ -14,38 +14,36 @@ func _build_materials() -> void:
     # Tight bentgrass should read through micro-normal and fibre breakup, not arcade mowing stripes.
     if mat_green is ShaderMaterial:
         mat_green.set_shader_parameter("base_color", Vector3(0.175, 0.300, 0.128))
-        mat_green.set_shader_parameter("lane_strength", 0.006)
+        mat_green.set_shader_parameter("lane_strength", 0.0025)
         mat_green.set_shader_parameter("texture_scale", 148.0)
         mat_green.set_shader_parameter("normal_depth", 0.078)
         mat_green.set_shader_parameter("roughness_base", 0.850)
         mat_green.set_shader_parameter("micro_strength", 0.024)
     if mat_fringe is ShaderMaterial:
         mat_fringe.set_shader_parameter("base_color", Vector3(0.145, 0.260, 0.125))
-        mat_fringe.set_shader_parameter("lane_strength", 0.005)
+        mat_fringe.set_shader_parameter("lane_strength", 0.0020)
         mat_fringe.set_shader_parameter("texture_scale", 82.0)
         mat_fringe.set_shader_parameter("normal_depth", 0.110)
         mat_fringe.set_shader_parameter("roughness_base", 0.885)
         mat_fringe.set_shader_parameter("micro_strength", 0.030)
     if mat_rough is ShaderMaterial:
         mat_rough.set_shader_parameter("base_color", Vector3(0.105, 0.210, 0.110))
-        mat_rough.set_shader_parameter("lane_strength", 0.003)
+        mat_rough.set_shader_parameter("lane_strength", 0.0010)
         mat_rough.set_shader_parameter("texture_scale", 42.0)
         mat_rough.set_shader_parameter("normal_depth", 0.155)
         mat_rough.set_shader_parameter("roughness_base", 0.920)
         mat_rough.set_shader_parameter("micro_strength", 0.038)
 
     if _v155_guide != null:
-        _v155_guide.albedo_color = Color(0.70, 0.045, 0.040, 0.10)
+        _v155_guide.albedo_color = Color(0.70, 0.045, 0.040, 0.065)
 
-    # Muted leaf palettes keep the horizon photographic instead of neon/broccoli green.
-    _detail_leaf_a = _v161_leaf_material(Color("#273d29"), Color("#56634b"), 2.0)
-    _detail_leaf_b = _v161_leaf_material(Color("#1f3424"), Color("#47563f"), 7.0)
-    _detail_leaf_c = _v161_leaf_material(Color("#304733"), Color("#68745b"), 13.0)
+    _detail_leaf_a = _v161_leaf_material(Color("#293f2b"), Color("#5d6b50"), 2.0)
+    _detail_leaf_b = _v161_leaf_material(Color("#213626"), Color("#4e5d44"), 7.0)
+    _detail_leaf_c = _v161_leaf_material(Color("#324a35"), Color("#6d795f"), 13.0)
 
 func _build_environment() -> void:
     super._build_environment()
 
-    # Filmic grading: less mobile-game saturation, slightly softer contrast and retained TV exposure.
     var env_node := get_node_or_null("V160NaturalFinishEnvironment") as WorldEnvironment
     if env_node != null and env_node.environment != null:
         var env := env_node.environment
@@ -93,20 +91,19 @@ float noise21(vec2 p){
     return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
 }
 void fragment(){
-    float y=clamp(UV.y,0.0,1.0);
-    vec3 horizon=vec3(0.60,0.735,0.785);
-    vec3 middle=vec3(0.315,0.570,0.735);
-    vec3 upper=vec3(0.145,0.365,0.620);
+    float y=clamp(1.0-UV.y,0.0,1.0);
+    vec3 horizon=vec3(0.62,0.755,0.800);
+    vec3 middle=vec3(0.275,0.535,0.720);
+    vec3 upper=vec3(0.120,0.320,0.570);
     vec3 col=mix(horizon,middle,smoothstep(0.05,0.58,y));
     col=mix(col,upper,smoothstep(0.52,1.0,y));
 
-    float warm=1.0-smoothstep(0.04,0.42,length((UV-vec2(0.70,0.53))*vec2(0.70,1.0)));
-    col+=vec3(0.085,0.060,0.030)*warm*0.30;
+    float warm=1.0-smoothstep(0.04,0.42,length((UV-vec2(0.70,0.47))*vec2(0.70,1.0)));
+    col+=vec3(0.085,0.060,0.030)*warm*0.26;
 
-    // Subtle atmospheric streaks replace the previous large cartoon cloud blobs.
     float n=noise21(UV*vec2(9.0,4.0)+vec2(4.3,1.7));
-    float haze=smoothstep(0.61,0.82,n)*(1.0-smoothstep(0.52,0.92,y));
-    col=mix(col,vec3(0.76,0.81,0.82),haze*0.055);
+    float haze=smoothstep(0.62,0.84,n)*(1.0-smoothstep(0.55,0.94,y));
+    col=mix(col,vec3(0.77,0.82,0.83),haze*0.045);
     ALBEDO=col;
 }
 """
@@ -130,13 +127,13 @@ func _v162_leaf_multimesh(parent: Node3D, material: Material, s: float, count: i
     for i in range(count):
         var fi: float = float(i)
         var angle: float = deg_to_rad(fmod(fi * 137.507 + phase * 43.0, 360.0))
-        var spread: float = 0.46 + float((i * 7) % 11) * 0.052
+        var spread: float = 0.40 + float((i * 7) % 11) * 0.056
         var x: float = cos(angle) * radius * spread
-        var z: float = sin(angle) * radius * 0.76 * spread
-        var y: float = y_base + sin(fi * 1.71 + phase) * 0.16 + float(i % 4) * 0.055
-        var sx: float = 0.30 + float((i * 3) % 7) * 0.022
-        var sy: float = 0.24 + float((i * 5) % 6) * 0.020
-        var sz: float = 0.29 + float((i * 2) % 7) * 0.023
+        var z: float = sin(angle) * radius * 0.77 * spread
+        var y: float = y_base + sin(fi * 1.71 + phase) * 0.17 + float(i % 5) * 0.050
+        var sx: float = 0.34 + float((i * 3) % 7) * 0.023
+        var sy: float = 0.28 + float((i * 5) % 6) * 0.021
+        var sz: float = 0.33 + float((i * 2) % 7) * 0.024
         var basis := Basis.IDENTITY
         basis = basis.rotated(Vector3.UP, angle * 0.37 + phase)
         basis = basis.rotated(Vector3.RIGHT, sin(fi * 0.93 + phase) * 0.12)
@@ -158,32 +155,32 @@ func _v155_build_tree(pos: Vector3, scale_value: float) -> void:
 
     var s: float = scale_value
     _v155_shadow(tree, Vector3(0.40 * s, 0.006, 0.35 * s), Vector2(2.65, 0.88) * s, -25.0, 0.13)
-    _v155_cylinder(tree, 0.090 * s, 1.72 * s, Vector3(0.0, 0.86 * s, 0.0), _detail_bark, 20)
+    _v155_cylinder(tree, 0.078 * s, 1.70 * s, Vector3(0.0, 0.85 * s, 0.0), _detail_bark, 18)
 
-    var b1 := _v155_cylinder(tree, 0.034 * s, 0.96 * s, Vector3(-0.17, 1.30, 0.01) * s, _detail_bark, 12)
+    var b1 := _v155_cylinder(tree, 0.029 * s, 0.90 * s, Vector3(-0.16, 1.28, 0.01) * s, _detail_bark, 12)
     b1.rotation_degrees = Vector3(18.0, 12.0, -35.0)
-    var b2 := _v155_cylinder(tree, 0.032 * s, 0.88 * s, Vector3(0.18, 1.38, 0.02) * s, _detail_bark, 12)
+    var b2 := _v155_cylinder(tree, 0.028 * s, 0.84 * s, Vector3(0.17, 1.35, 0.02) * s, _detail_bark, 12)
     b2.rotation_degrees = Vector3(-13.0, 31.0, 38.0)
-    var b3 := _v155_cylinder(tree, 0.026 * s, 0.70 * s, Vector3(0.02, 1.55, -0.13) * s, _detail_bark, 10)
+    var b3 := _v155_cylinder(tree, 0.023 * s, 0.65 * s, Vector3(0.02, 1.52, -0.13) * s, _detail_bark, 10)
     b3.rotation_degrees = Vector3(39.0, -18.0, 8.0)
-    var b4 := _v155_cylinder(tree, 0.022 * s, 0.58 * s, Vector3(-0.05, 1.73, 0.06) * s, _detail_bark, 10)
+    var b4 := _v155_cylinder(tree, 0.019 * s, 0.54 * s, Vector3(-0.05, 1.66, 0.06) * s, _detail_bark, 10)
     b4.rotation_degrees = Vector3(-21.0, 54.0, -19.0)
-    var b5 := _v155_cylinder(tree, 0.020 * s, 0.54 * s, Vector3(0.08, 1.77, -0.04) * s, _detail_bark, 10)
+    var b5 := _v155_cylinder(tree, 0.018 * s, 0.50 * s, Vector3(0.08, 1.70, -0.04) * s, _detail_bark, 10)
     b5.rotation_degrees = Vector3(24.0, -42.0, 22.0)
 
-    # Many small instanced clusters create an irregular silhouette without hundreds of draw calls.
-    _v162_leaf_multimesh(tree, _detail_leaf_b, s, 16, 0.35, 1.82, 0.90)
-    _v162_leaf_multimesh(tree, _detail_leaf_a, s, 15, 1.75, 2.05, 0.79)
-    _v162_leaf_multimesh(tree, _detail_leaf_c, s, 12, 3.15, 2.30, 0.61)
+    _v162_leaf_multimesh(tree, _detail_leaf_b, s, 26, 0.35, 1.66, 0.96)
+    _v162_leaf_multimesh(tree, _detail_leaf_a, s, 24, 1.75, 1.96, 0.82)
+    _v162_leaf_multimesh(tree, _detail_leaf_c, s, 20, 3.15, 2.24, 0.63)
 
 func _build_horizon() -> void:
     super._build_horizon()
 
-    # Remove the two elements that read most strongly as low-poly/cartoon in the rendered frame.
+    # Auto-renamed repeated nodes carry numeric suffixes, so remove by prefix rather than equality.
     for child_node in horizon_root.get_children():
         if child_node is Node3D:
             var child := child_node as Node3D
-            if child.name == "V161VolumetricMeshCloud" or child.name == "V161DistantConifer":
+            var node_name := String(child.name)
+            if node_name.begins_with("V161VolumetricMeshCloud") or node_name.begins_with("V161DistantConifer"):
                 child.visible = false
 
 func _v162_ball_material() -> ShaderMaterial:
