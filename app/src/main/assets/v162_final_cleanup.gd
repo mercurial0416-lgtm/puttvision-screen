@@ -1,15 +1,17 @@
 extends "res://v162_ultra_real_green.gd"
 
 # Final V162 cleanup after CI reference-frame review.
-# Some inherited V161 horizon nodes are nested and receive auto-renamed suffixes, so hide them
-# recursively instead of relying on direct-child exact-name matching.
+# Legacy visual families come from several inherited generations (V155-V161), can be nested and
+# can receive numeric suffixes. Match semantic family names recursively instead of exact node names.
 
 func _v162_hide_legacy_visuals(root: Node) -> void:
     for child_node in root.get_children():
         var node_name := String(child_node.name)
+        var lower_name := node_name.to_lower()
         var hide_visual: bool = (
-            node_name.find("V161VolumetricMeshCloud") >= 0
-            or node_name.find("V161DistantConifer") >= 0
+            lower_name.find("cloud") >= 0
+            or lower_name.find("conifer") >= 0
+            or lower_name.find("pine") >= 0
             or node_name.find("V161GradientSkyShell") >= 0
         )
         if hide_visual and child_node is Node3D:
@@ -23,5 +25,5 @@ func _build_environment() -> void:
 
 func _build_horizon() -> void:
     super._build_horizon()
-    # Remove every nested/auto-suffixed cartoon cloud and cone-tree instance.
+    # Remove every nested/auto-suffixed legacy cloud and cone-tree instance, regardless of version.
     _v162_hide_legacy_visuals(horizon_root)
