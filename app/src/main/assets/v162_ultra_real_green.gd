@@ -218,7 +218,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
             ball.position.y - BALL_RADIUS + 0.00125,
             ball.position.z
         )
-        var strength := 0.235 + min(0.035, max(0.0, speed) * 0.012)
+        var strength: float = 0.235 + min(0.035, max(0.0, speed) * 0.012)
         if phase == "RIM":
             strength *= 0.58
         _v162_ball_shadow_mat.set_shader_parameter("strength", strength)
