@@ -1,10 +1,8 @@
-name: Dispatch V143 split release
+name: Dispatch current-main release
 
 on:
   issue_comment:
     types: [created]
-  schedule:
-    - cron: '0 17 20 8 *'
 
 permissions:
   actions: write
@@ -12,12 +10,12 @@ permissions:
 
 jobs:
   dispatch:
-    if: ${{ github.event_name == 'schedule' || (github.event.issue.number == 138 && github.event.comment.body == '/dispatch-v143-split') }}
+    if: ${{ github.event.issue.number == 138 && github.event.comment.body == '/release-current-main' }}
     runs-on: ubuntu-latest
     steps:
       - name: Signal dispatcher start
         run: curl --fail-with-body -sS https://razejagceyznnajioxgx.supabase.co/functions/v1/puttvision-update-publisher >/dev/null
-      - name: Dispatch split release workflow
+      - name: Dispatch current-main direct release workflow
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run release-apk.yml --repo "$GITHUB_REPOSITORY" --ref main
+        run: gh workflow run v152-direct-release.yml --repo "$GITHUB_REPOSITORY" --ref main
