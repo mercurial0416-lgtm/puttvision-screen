@@ -2,7 +2,7 @@ name: V162 one-shot release dispatcher
 
 on:
   workflow_run:
-    workflows: ["TV renderer verify"]
+    workflows: ["Solo accuracy and release verify"]
     types: [completed]
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   dispatch:
-    if: ${{ github.event.workflow_run.id == 32722934020 && github.event.workflow_run.run_attempt > 1 && github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.id == 32722933935 && github.event.workflow_run.run_attempt > 1 && github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch current-main direct release
