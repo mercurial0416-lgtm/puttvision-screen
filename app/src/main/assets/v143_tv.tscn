@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource path="res://v164_friends_grid.gd" type="Script" id="1_v143"]
+[ext_resource path="res://v165_screen_golf_read.gd" type="Script" id="1_v143"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
