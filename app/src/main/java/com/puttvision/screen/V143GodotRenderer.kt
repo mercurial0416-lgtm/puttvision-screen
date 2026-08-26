@@ -19,9 +19,9 @@ import kotlin.math.round
  * Godot TV renderer. Rendering is intentionally a consumer of GameEngine snapshots only:
  * V135-V137 remain authoritative for every ball/cup outcome.
  *
- * V166 also exposes a cached spatial terrain field and the existing GreenReadAdvisor inverse-
- * physics result. The terrain payload is kept separate from the per-frame snapshot so a large
- * grid is only parsed when the green settings actually change.
+ * V166 exposes a cached spatial terrain field and the existing GreenReadAdvisor inverse-physics
+ * result. V171 additionally exposes the authoritative Green/Fringe/Rough zone so presentation and
+ * replay can report the same surface resistance the ball actually receives.
  */
 object V143GodotRenderBridge {
     private val snapshot = AtomicReference(defaultSnapshot())
@@ -42,19 +42,21 @@ object V143GodotRenderBridge {
             GreenTerrain.effectiveHeightAt(settings, 0.0, settings.holeDistanceM) + .020
         }.getOrDefault(.020)
         val terrainKey = ensureTerrainField(settings)
+        val surfaceZone = V170SurfaceZones.zoneAt(settings, bx, by).name
 
         // The advisor is already the app's exact inverse solver and delegates to GreenPhysics,
         // which in turn owns the V135-V137 path. Never block the renderer waiting for it.
         val read = GreenReadRuntime.peekOrSchedule(settings)
         val result = engine.lastResult
         val json = JSONObject()
-            .put("version", 166)
+            .put("version", 171)
             .put("holeDistance", settings.holeDistanceM)
             .put("stimp", settings.stimpMeters)
             .put("sideSlope", settings.sideSlopePct)
             .put("longSlope", settings.longSlopePct)
             .put("terrainProfile", settings.terrainProfileId)
             .put("terrainKey", terrainKey)
+            .put("surfaceZone", surfaceZone)
             .put("flagstickPhysical", settings.flagstickIn)
             .put("startX", start.first)
             .put("startY", start.second)
@@ -196,13 +198,14 @@ object V143GodotRenderBridge {
     private fun q(value: Double, scale: Double): Double = round(value * scale) / scale
 
     private fun defaultSnapshot(): String = JSONObject()
-        .put("version", 166)
+        .put("version", 171)
         .put("holeDistance", 5.0)
         .put("stimp", 2.8)
         .put("sideSlope", 0.0)
         .put("longSlope", 0.0)
         .put("terrainProfile", -1)
         .put("terrainKey", "default")
+        .put("surfaceZone", V170SurfaceZone.GREEN.name)
         .put("flagstickPhysical", false)
         .put("startX", 0.0)
         .put("startY", 0.0)
@@ -246,7 +249,7 @@ class V143GodotPlugin(godot: Godot) : GodotPlugin(godot) {
     fun terrainFieldJson(): String = V143GodotRenderBridge.terrainFieldJson()
 
     @UsedByGodot
-    fun rendererVersion(): String = "V166-Godot-4.7.1"
+    fun rendererVersion(): String = "V171-Godot-4.7.1"
 }
 
 /** Dedicated full-screen Godot host launched directly onto the HDMI/DeX presentation display. */
