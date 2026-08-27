@@ -100,7 +100,10 @@ func _v179_refresh() -> void:
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
-    # Session dispersion supersedes the larger single-shot debrief in the same result phase.
-    # Keeping both visible created a stacked translucent block in the lower-right TV layout.
-    if _v179_panel != null and _v179_panel.visible and _v177_panel != null:
-        _v177_panel.visible = false
+    # Session dispersion is the high-density result-phase card. Hide lower-right cards that
+    # otherwise sit underneath it; their data is already summarized by this session view.
+    if _v179_panel != null and _v179_panel.visible:
+        if _v177_panel != null:
+            _v177_panel.visible = false
+        if _v181_panel != null:
+            _v181_panel.visible = false
