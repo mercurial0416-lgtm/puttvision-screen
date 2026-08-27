@@ -1,4 +1,4 @@
-extends "res://v192_drill_progression.gd"
+extends "res://v193_best_rep_ghost.gd"
 
 var _preview_frames := 0
 var _capture_started := false
