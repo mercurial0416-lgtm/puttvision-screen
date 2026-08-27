@@ -84,7 +84,7 @@ func _v190_refresh() -> void:
     _v190_target_zone.color = Color(0.46, 0.84, 0.71, 0.11) if axis != "BOTH" else Color(0.96, 0.86, 0.49, 0.13)
     _v190_target_caption.text = str(spec.get("caption", "NEXT REP"))
 
-    var result := _v190_last_in_window(axis)
+    var result: Variant = _v190_last_in_window(axis)
     if result == null:
         _v190_last_result.text = ""
     elif bool(result):
