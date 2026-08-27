@@ -86,8 +86,8 @@ func _build_hud() -> void:
     _v188_detail = _v174_text(_v188_panel, Vector2(10, 160), Vector2(130, 42), "ON LINE\nCUP PACE", 10, Color("#f1f4ef"), HORIZONTAL_ALIGNMENT_CENTER)
 
 func _v188_point(line_delta_cm: float, pace_delta_cm: float) -> Vector2:
-    var x := clampf(line_delta_cm / 30.0, -1.0, 1.0) * V188_RADIUS
-    var y := -clampf(pace_delta_cm / 70.0, -1.0, 1.0) * V188_RADIUS
+    var x: float = clampf(line_delta_cm / 30.0, -1.0, 1.0) * V188_RADIUS
+    var y: float = -clampf(pace_delta_cm / 70.0, -1.0, 1.0) * V188_RADIUS
     return V188_CENTER + Vector2(x, y)
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
@@ -97,10 +97,10 @@ func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) ->
     if not visible:
         return
 
-    var point := _v188_point(line_delta_cm, pace_delta_cm)
+    var point: Vector2 = _v188_point(line_delta_cm, pace_delta_cm)
     _v188_dot.position = point
     _v188_vector.points = PackedVector2Array([V188_CENTER, point])
-    var within_window := abs(line_delta_cm) <= 9.0 and abs(pace_delta_cm) <= 22.0
+    var within_window: bool = absf(line_delta_cm) <= 9.0 and absf(pace_delta_cm) <= 22.0
     _v188_dot.color = Color("#76d7b6") if within_window else Color("#f4dda0")
     _v188_detail.text = "%s\n%s" % [_v177_line_text(line_delta_cm), _v177_pace_text(pace_delta_cm)]
 
@@ -108,7 +108,7 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     super._v177_update_debrief(s, force_visible)
     if _v188_panel == null:
         return
-    var show := _v177_panel != null and _v177_panel.visible
+    var show: bool = _v177_panel != null and _v177_panel.visible
     _v188_refresh(
         float(s.get("readLineDeltaCm", 0.0)),
         float(s.get("paceDeltaCm", 0.0)),
