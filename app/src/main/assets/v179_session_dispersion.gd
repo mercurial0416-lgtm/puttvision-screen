@@ -57,7 +57,7 @@ func _build_hud() -> void:
     if root == null:
         return
 
-    _v179_panel = _v174_panel(root, Vector2(44, 820), Vector2(560, 210), Color(0.014, 0.021, 0.026, 0.90), Color(0.45, 0.68, 0.78, 0.20), 14)
+    _v179_panel = _v174_panel(root, Vector2(1316, 820), Vector2(560, 210), Color(0.014, 0.021, 0.026, 0.90), Color(0.45, 0.68, 0.78, 0.20), 14)
     _v179_panel.name = "V179SessionDispersion"
     _v179_panel.visible = false
     _v174_accent(_v179_panel, Vector2(0, 0), Vector2(7, 210), Color("#76c7d7"))
