@@ -98,7 +98,7 @@ func _build_hud() -> void:
     _v177_panel.add_child(_v177_line_bar)
 
     _v174_text(_v177_panel, Vector2(22, 105), Vector2(150, 20), "PACE", 11, Color(0.58, 0.67, 0.64, 0.92))
-    _v177_pace_value = _v174_text(_v177_panel, Vector2(174, 101), Vector2(352, 28), "CUP PACE", 17, Color("#f1f4ef"), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v177_pace_value = _v174_text(_v177_panel, Vector2(174, 101), Vector2(160, 28), "CUP PACE", 15, Color("#f1f4ef"), HORIZONTAL_ALIGNMENT_RIGHT)
     var pace_track := ColorRect.new()
     pace_track.position = Vector2(22, 135)
     pace_track.size = Vector2(V177_BAR_MAX_PX, 5)
@@ -112,8 +112,8 @@ func _build_hud() -> void:
     _v177_pace_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(_v177_pace_bar)
 
-    _v174_text(_v177_panel, Vector2(344, 80), Vector2(182, 20), "FINAL LEAVE", 11, Color(0.58, 0.67, 0.64, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
-    _v177_leave_value = _v174_text(_v177_panel, Vector2(344, 101), Vector2(182, 38), "0.00 m", 23, Color("#b9dda6"), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v174_text(_v177_panel, Vector2(358, 80), Vector2(168, 20), "FINAL LEAVE", 11, Color(0.58, 0.67, 0.64, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v177_leave_value = _v174_text(_v177_panel, Vector2(358, 101), Vector2(168, 38), "0.00 m", 23, Color("#b9dda6"), HORIZONTAL_ALIGNMENT_RIGHT)
 
     var divider := ColorRect.new()
     divider.position = Vector2(22, 160)
