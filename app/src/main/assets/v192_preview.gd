@@ -18,7 +18,7 @@ func _process(delta: float) -> void:
         Vector2(2.0, 1.0)
     ]
     _v179_refresh()
-    if _v191_streak != 3 or not _v191_streak_label.text.contains("+0.5 m NEXT"):
+    if _v191_streak != 3 or not _v191_streak_label.text.contains("ADVANCE READY") or not _v191_streak_label.text.contains("+0.5 m NEXT"):
         push_error("Adaptive drill advance regression")
         get_tree().quit(23)
         return
@@ -31,7 +31,7 @@ func _process(delta: float) -> void:
         Vector2(9.0, 1.0)
     ]
     _v179_refresh()
-    if _v191_streak != 0 or _v192_trailing_failures("LINE") < 3 or not _v191_streak_label.text.contains("-0.5 m EASIER"):
+    if _v191_streak != 0 or _v192_trailing_failures("LINE") < 3 or not _v191_streak_label.text.contains("START STREAK") or not _v191_streak_label.text.contains("-0.5 m EASIER"):
         push_error("Adaptive drill reset regression")
         get_tree().quit(23)
         return
@@ -48,7 +48,7 @@ func _process(delta: float) -> void:
         Vector2(8.0, 1.0)
     ]
     _v179_refresh()
-    if not _v191_streak_label.text.contains("BUILD STREAK"):
+    if not _v191_streak_label.text.contains("START STREAK") or not _v191_streak_label.text.contains("BUILD"):
         push_error("Adaptive drill rebuild regression")
         get_tree().quit(23)
         return
