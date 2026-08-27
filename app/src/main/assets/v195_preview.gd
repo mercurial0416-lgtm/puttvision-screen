@@ -4,7 +4,7 @@ var _v195_checks_done := false
 
 func _process(delta: float) -> void:
     super._process(delta)
-    if _v195_checks_done or _preview_frames < 18:
+    if _v195_checks_done or _preview_frames < 13:
         return
     _v195_checks_done = true
 
@@ -44,4 +44,12 @@ func _process(delta: float) -> void:
         get_tree().quit(26)
         return
 
+    _v179_samples = [
+        Vector2(7.0, 18.0),
+        Vector2(9.0, 22.0),
+        Vector2(5.0, 14.0),
+        Vector2(8.0, 20.0)
+    ]
+    _v188_refresh(8.0, 20.0, true)
+    _v179_refresh()
     print("PRACTICE_BIAS_VECTOR_OK=1")
