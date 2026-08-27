@@ -1,4 +1,4 @@
-extends "res://v192_drill_progression.gd"
+extends "res://v193_form_trend.gd"
 
 var _preview_frames := 0
 var _capture_started := false
