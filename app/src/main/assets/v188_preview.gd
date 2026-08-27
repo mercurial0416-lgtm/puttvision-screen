@@ -1,4 +1,4 @@
-extends "res://v193_best_rep_ghost.gd"
+extends "res://v194_dispersion_envelope.gd"
 
 var _preview_frames := 0
 var _capture_started := false
