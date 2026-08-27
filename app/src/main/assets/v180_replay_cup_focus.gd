@@ -20,7 +20,7 @@ func _build_hud() -> void:
     if root == null:
         return
 
-    _v180_focus_chip = _v174_panel(root, Vector2(1410, 42), Vector2(270, 72), Color(0.014, 0.020, 0.024, 0.86), Color(0.90, 0.78, 0.40, 0.22), 12)
+    _v180_focus_chip = _v174_panel(root, Vector2(1320, 138), Vector2(270, 72), Color(0.014, 0.020, 0.024, 0.86), Color(0.90, 0.78, 0.40, 0.22), 12)
     _v180_focus_chip.name = "ReplayCupFocus"
     _v180_focus_chip.visible = false
     _v174_accent(_v180_focus_chip, Vector2(0, 0), Vector2(5, 72), Color("#d6b85c"))
