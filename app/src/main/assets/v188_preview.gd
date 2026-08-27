@@ -1,4 +1,4 @@
-extends "res://v195_practice_bias_vector.gd"
+extends "res://v196_shot_map_hierarchy.gd"
 
 var _preview_frames := 0
 var _capture_started := false
