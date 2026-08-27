@@ -16,11 +16,11 @@ var _v181_preview_force_visible := false
 const V181_BAR_W := 238.0
 
 func _v181_target_speed(distance_m: float, grade_pct: float, green_speed: float) -> float:
-    var d := clampf(distance_m, 0.3, 15.0)
-    var stimp := clampf(green_speed, 1.5, 5.5)
-    var base := 0.58 + sqrt(d) * 0.66
-    var grade_factor := clampf(1.0 + grade_pct * 0.035, 0.72, 1.35)
-    var green_factor := clampf(3.0 / stimp, 0.68, 1.42)
+    var d: float = clampf(distance_m, 0.3, 15.0)
+    var stimp: float = clampf(green_speed, 1.5, 5.5)
+    var base: float = 0.58 + sqrt(d) * 0.66
+    var grade_factor: float = clampf(1.0 + grade_pct * 0.035, 0.72, 1.35)
+    var green_factor: float = clampf(3.0 / stimp, 0.68, 1.42)
     return clampf(base * grade_factor * green_factor, 0.55, 4.8)
 
 func _v181_grade_text(grade_pct: float) -> String:
@@ -79,22 +79,22 @@ func _v181_update(s: Dictionary, force_visible: bool = false) -> void:
     if force_visible:
         _v181_preview_force_visible = true
 
-    var running := bool(s.get("running", false))
-    var replaying := _v171_replay_remaining > 0.0
-    var show := _v181_preview_force_visible or (not replaying and not running)
+    var running: bool = bool(s.get("running", false))
+    var replaying: bool = _v171_replay_remaining > 0.0
+    var show: bool = _v181_preview_force_visible or (not replaying and not running)
     _v181_panel.visible = show
     if not show:
         return
 
-    var distance_m := max(0.3, float(s.get("distanceToCup", 3.0)))
-    var grade_pct := float(s.get("longSlopePct", s.get("slopeLongPct", 0.0)))
-    var green_speed := float(s.get("greenSpeed", 3.0))
-    var ball_speed := max(0.0, float(s.get("ballSpeed", 0.0)))
-    var target := _v181_target_speed(distance_m, grade_pct, green_speed)
+    var distance_m: float = maxf(0.3, float(s.get("distanceToCup", 3.0)))
+    var grade_pct: float = float(s.get("longSlopePct", s.get("slopeLongPct", 0.0)))
+    var green_speed: float = float(s.get("greenSpeed", 3.0))
+    var ball_speed: float = maxf(0.0, float(s.get("ballSpeed", 0.0)))
+    var target: float = _v181_target_speed(distance_m, grade_pct, green_speed)
 
     _v181_target.text = "TARGET %.1f m/s" % target
     _v181_grade.text = _v181_grade_text(grade_pct)
-    var target_x := 20.0 + V181_BAR_W * clampf(target / 5.0, 0.0, 1.0)
+    var target_x: float = 20.0 + V181_BAR_W * clampf(target / 5.0, 0.0, 1.0)
     _v181_marker.position.x = target_x
     _v181_fill.size.x = V181_BAR_W * clampf(ball_speed / 5.0, 0.0, 1.0)
     if ball_speed > 0.03:
