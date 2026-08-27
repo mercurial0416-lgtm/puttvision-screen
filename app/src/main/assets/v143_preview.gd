@@ -1,10 +1,11 @@
-extends "res://v174_broadcast_hud.gd"
+extends "res://v175_cinematic_replay.gd"
 
 var _preview_frames := 0
 var _capture_started := false
 var _profile_switch_checked := false
 var _premium_nodes_checked := false
 var _broadcast_hud_checked := false
+var _cinematic_replay_checked := false
 
 func _v171_profile_switch_selftest() -> bool:
     var original_profile: int = _v169_profile_id
@@ -59,6 +60,22 @@ func _v174_hud_selftest() -> bool:
     print("V174_BROADCAST_HUD_OK=1")
     return true
 
+func _v175_replay_selftest() -> bool:
+    if _v175_replay_panel == null or _v175_replay_fill == null or _v175_replay_marker == null:
+        push_error("V175 replay package missing")
+        return false
+    var synthetic: Array = [Vector2(0.0, 0.0), Vector2(0.4, 1.0), Vector2(0.8, 2.0)]
+    var midpoint := _v175_trail_point(synthetic, 0.5)
+    if midpoint.distance_to(Vector2(0.4, 1.0)) > 0.001:
+        push_error("V175 replay interpolation regression: %s" % midpoint)
+        return false
+    var heading := _v175_trail_heading(synthetic, 0.5)
+    if not is_finite(heading.x) or not is_finite(heading.y) or heading.length() < 0.99:
+        push_error("V175 replay heading regression: %s" % heading)
+        return false
+    print("V175_CINEMATIC_REPLAY_OK=1")
+    return true
+
 func _process(delta: float) -> void:
     super._process(delta)
     _preview_frames += 1
@@ -85,6 +102,12 @@ func _process(delta: float) -> void:
         _broadcast_hud_checked = true
         if not _v174_hud_selftest():
             get_tree().quit(5)
+            return
+
+    if not _cinematic_replay_checked and _preview_frames >= 6:
+        _cinematic_replay_checked = true
+        if not _v175_replay_selftest():
+            get_tree().quit(6)
             return
 
     if !_capture_started and _preview_frames >= 14:

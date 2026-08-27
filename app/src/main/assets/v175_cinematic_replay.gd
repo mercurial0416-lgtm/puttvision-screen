@@ -1,0 +1,124 @@
+extends "res://v174_broadcast_hud.gd"
+
+# V175 cinematic shot replay. Presentation-only: Android V135-V137 / GreenTerrain /
+# GreenReadAdvisor stay authoritative. This layer turns the existing V171 trail replay into a
+# broadcast-style moving camera with explicit replay progress and shot-trace labeling.
+
+var _v175_replay_panel: Panel
+var _v175_replay_title: Label
+var _v175_replay_detail: Label
+var _v175_replay_track: ColorRect
+var _v175_replay_fill: ColorRect
+var _v175_replay_marker: ColorRect
+
+func _build_hud() -> void:
+    super._build_hud()
+
+    var layer := get_node_or_null("V174BroadcastHUD") as CanvasLayer
+    if layer == null:
+        return
+    var root := layer.get_node_or_null("V174HUDRoot") as Control
+    if root == null:
+        return
+
+    _v175_replay_panel = _v174_panel(root, Vector2(620, 30), Vector2(680, 90), Color(0.018, 0.025, 0.029, 0.82), Color(0.90, 0.78, 0.40, 0.22), 14)
+    _v175_replay_panel.name = "V175ReplayPackage"
+    _v175_replay_panel.visible = false
+    _v174_accent(_v175_replay_panel, Vector2(0, 0), Vector2(6, 90), Color("#d6b85c"))
+    _v175_replay_title = _v174_text(_v175_replay_panel, Vector2(22, 8), Vector2(240, 28), "SHOT TRACE REPLAY", 15, Color("#f4dda0"))
+    _v175_replay_detail = _v174_text(_v175_replay_panel, Vector2(420, 8), Vector2(236, 28), "ACTUAL BALL LINE", 13, Color(0.78, 0.82, 0.78, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
+
+    _v175_replay_track = ColorRect.new()
+    _v175_replay_track.position = Vector2(22, 52)
+    _v175_replay_track.size = Vector2(634, 6)
+    _v175_replay_track.color = Color(0.82, 0.85, 0.80, 0.16)
+    _v175_replay_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _v175_replay_panel.add_child(_v175_replay_track)
+
+    _v175_replay_fill = ColorRect.new()
+    _v175_replay_fill.position = Vector2(22, 52)
+    _v175_replay_fill.size = Vector2(0, 6)
+    _v175_replay_fill.color = Color("#d6b85c")
+    _v175_replay_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _v175_replay_panel.add_child(_v175_replay_fill)
+
+    _v175_replay_marker = ColorRect.new()
+    _v175_replay_marker.position = Vector2(22, 47)
+    _v175_replay_marker.size = Vector2(3, 16)
+    _v175_replay_marker.color = Color("#fff0b8")
+    _v175_replay_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _v175_replay_panel.add_child(_v175_replay_marker)
+
+    _v174_text(_v175_replay_panel, Vector2(22, 62), Vector2(120, 18), "START", 11, Color(0.70, 0.74, 0.71, 0.86))
+    _v174_text(_v175_replay_panel, Vector2(536, 62), Vector2(120, 18), "FINISH", 11, Color(0.70, 0.74, 0.71, 0.86), HORIZONTAL_ALIGNMENT_RIGHT)
+
+func _v175_replay_progress() -> float:
+    if _v171_replay_duration <= 0.001:
+        return 1.0
+    return clamp(1.0 - _v171_replay_remaining / _v171_replay_duration, 0.0, 1.0)
+
+func _v175_trail_point(points: Array, progress: float) -> Vector2:
+    if points.is_empty():
+        return Vector2.ZERO
+    if points.size() == 1:
+        return points[0] as Vector2
+    var scaled: float = clamp(progress, 0.0, 1.0) * float(points.size() - 1)
+    var index_a: int = clamp(int(floor(scaled)), 0, points.size() - 1)
+    var index_b: int = min(index_a + 1, points.size() - 1)
+    var local_t: float = scaled - float(index_a)
+    return (points[index_a] as Vector2).lerp(points[index_b] as Vector2, local_t)
+
+func _v175_trail_heading(points: Array, progress: float) -> Vector2:
+    if points.size() < 2:
+        return Vector2(0.0, 1.0)
+    var ahead := _v175_trail_point(points, min(1.0, progress + 0.035))
+    var behind := _v175_trail_point(points, max(0.0, progress - 0.035))
+    var heading: Vector2 = ahead - behind
+    if heading.length_squared() < 0.000001:
+        heading = (points[points.size() - 1] as Vector2) - (points[0] as Vector2)
+    return heading.normalized() if heading.length_squared() > 0.000001 else Vector2(0.0, 1.0)
+
+func _process(delta: float) -> void:
+    super._process(delta)
+    if _v175_replay_panel == null:
+        return
+
+    var active: bool = _v171_replay_remaining > 0.0 and _v171_replay_actual.size() >= 2
+    _v175_replay_panel.visible = active
+    if not active:
+        return
+
+    var progress: float = _v175_replay_progress()
+    var eased: float = smoothstep(0.0, 1.0, progress)
+    var width: float = 634.0 * eased
+    _v175_replay_fill.size.x = width
+    _v175_replay_marker.position.x = 22.0 + max(0.0, width - 1.5)
+    _v175_replay_detail.text = "%3d%%  •  ACTUAL BALL LINE" % int(round(progress * 100.0))
+
+func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_to_cup: float, immediate: bool, delta: float) -> void:
+    if _v171_replay_remaining <= 0.0 or _v171_replay_actual.size() < 2:
+        super._update_camera(ball_world, running, phase, distance_to_cup, immediate, delta)
+        return
+
+    var progress: float = smoothstep(0.0, 1.0, _v175_replay_progress())
+    var current := _v175_trail_point(_v171_replay_actual, progress)
+    var heading := _v175_trail_heading(_v171_replay_actual, progress)
+    var side := Vector2(-heading.y, heading.x)
+
+    # Stay slightly behind and outside the rolling line so the cup/trace remains readable.
+    var look2 := current + heading * (0.34 + 0.28 * progress)
+    var cam2 := current - heading * (1.55 + 0.55 * progress) + side * 0.58
+    var look_y: float = _v166_sample(look2.x, look2.y).x + 0.055
+    var cam_y: float = _v166_sample(cam2.x, cam2.y).x + 0.72 + 0.42 * progress
+    var desired_look := Vector3(look2.x, look_y, -look2.y)
+    var desired_pos := Vector3(cam2.x, cam_y, -cam2.y)
+
+    # Blend harder than live chase, but never teleport between sparse Android trail samples.
+    var pos_alpha: float = 1.0 if immediate else 1.0 - exp(-delta * 5.4)
+    var look_alpha: float = 1.0 if immediate else 1.0 - exp(-delta * 6.4)
+    camera_pos = camera_pos.lerp(desired_pos, pos_alpha)
+    camera_look = camera_look.lerp(desired_look, look_alpha)
+    camera.position = camera_pos
+    var target_fov: float = lerp(41.0, 35.5, progress)
+    camera.fov = lerp(camera.fov, target_fov, 1.0 if immediate else min(1.0, delta * 4.8))
+    camera.look_at(camera_look, Vector3.UP)
