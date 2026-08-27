@@ -1,1 +1,5 @@
-state=building\nrun=33050094591\nsha=92efc1c61f724a7c819c3716955c3abc0e449468
+state=success
+run=33050094591
+version=0.7.205
+code=100205
+sha=92efc1c61f724a7c819c3716955c3abc0e449468
