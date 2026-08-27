@@ -16,6 +16,7 @@ object V136PhysicalRealism {
     private const val FLAGSTICK_RESTITUTION = 0.16
     private const val FLAGSTICK_TANGENT_RETENTION = 0.72
     private const val SLOW_FLAGSTICK_CAPTURE_MPS = 1.15
+    private const val STIMP_LAUNCH_MPS = 1.95072
 
     /**
      * Converts rolling-speed and user surface-condition controls into the instantaneous effective
@@ -47,10 +48,37 @@ object V136PhysicalRealism {
     }
 
     /**
+     * V170 gives the visible green / fringe / rough boundaries physical meaning. The V135 core
+     * keeps its calibrated green Stimp unchanged; this layer adds only the *extra* dissipation
+     * required by slower surrounding turf. Scaling translational and rolling angular velocity by
+     * the same ratio avoids injecting artificial contact slip at the next 480 Hz microstep.
+     */
+    private fun applySurfaceZoneResistance(state: SimState, settings: GreenSettings, dtRaw: Double) {
+        if (!state.running || state.v135Airborne || settings.terrainProfileId < 0) return
+        val zone = V170SurfaceZones.zoneAt(settings, state.x, state.y)
+        if (zone == V170SurfaceZone.GREEN) return
+        val speed = hypot(state.vx, state.vy)
+        if (speed <= 1e-7) return
+
+        val baseStimp = settings.stimpMeters.takeIf { it.isFinite() }?.coerceIn(1.2, 5.6) ?: 2.8
+        val greenDecel = STIMP_LAUNCH_MPS * STIMP_LAUNCH_MPS / (2.0 * baseStimp)
+        val totalMultiplier = 1.0 / zone.effectiveStimpScale
+        val extraDecel = greenDecel * (totalMultiplier - 1.0).coerceAtLeast(0.0)
+        val dt = dtRaw.coerceIn(0.001, 0.033)
+        val nextSpeed = (speed - extraDecel * dt).coerceAtLeast(0.0)
+        val ratio = (nextSpeed / speed).coerceIn(0.0, 1.0)
+        state.vx *= ratio
+        state.vy *= ratio
+        state.omegaXRadS *= ratio
+        state.omegaYRadS *= ratio
+    }
+
+    /**
      * Adds a tiny deterministic lateral component for imperfect trueness. This represents local
      * grass/footprint deviation below the macro GreenTerrain mesh; it is zero for trueness=1.
      */
     fun applyTrueness(state: SimState, settings: GreenSettings, dtRaw: Double) {
+        applySurfaceZoneResistance(state, settings, dtRaw)
         if (!state.running || state.v135Airborne) return
         val defect = (1.0 - settings.trueness01.coerceIn(0.0, 1.0))
         if (defect <= 1e-6) return
