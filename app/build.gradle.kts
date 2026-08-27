@@ -19,7 +19,9 @@ android {
         minSdk = 28
         targetSdk = 36
         versionCode = System.getenv("PV_VERSION_CODE")?.toIntOrNull() ?: 105
-        versionName = System.getenv("PV_VERSION_NAME") ?: "1.2.0-v16"
+        // Public builds receive PV_VERSION_NAME from the release workflow. Keep the local fallback
+        // in the same semantic family so debug/dev APKs never expose an unrelated legacy version.
+        versionName = System.getenv("PV_VERSION_NAME") ?: "0.7.0-dev"
         buildConfigField("String", "LICENSE_PUBLIC_KEY_B64", "\"$licensePublicKey\"")
 
         // V131: Filament/Filamat ship universal native AARs. PuttVision's supported

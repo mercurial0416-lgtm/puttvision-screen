@@ -1,19 +1,25 @@
-# PuttVision v0.5 자동업데이트
+# PuttVision 자동 업데이트 / 버전 정책
 
-- 앱 실행 후 1.8초 뒤 자동으로 update.json 확인
-- 새 versionCode가 있으면 업데이트 팝업
-- APK 다운로드
-- SHA-256 검증
-- Android 설치창 호출
-- 최초 1회 '이 출처 허용' 필요
-- 이후 같은 release key로 빌드되므로 삭제 없이 덮어쓰기 가능
+사용자에게 보이는 버전은 **앱 버전 하나만** 사용합니다.
 
-주의:
-현재 설치된 v0.4 debug APK와 v0.5 release APK는 서명이 다르므로
-v0.5 최초 설치 때만 기존 v0.4를 삭제해야 할 수 있습니다.
-그 이후 v0.5+는 고정 release key를 사용합니다.
+- 표시 형식: `0.7.xxx`
+- 앱 설치 정보 `versionName`: `0.7.xxx`
+- 업데이트 manifest `versionName`: `0.7.xxx`
+- GitHub Release 제목: `PuttVision 0.7.xxx`
+- 업데이트 팝업: `PuttVision 0.7.xxx 업데이트`
 
-업데이트 엔드포인트:
-https://puttvision-update.vercel.app/update.json
+`V176`, `V158`, `pv-100206`, `versionCode=100206` 같은 값은 개발/배포 내부 식별자이며 사용자 버전으로 표시하지 않습니다.
 
-repo는 private 유지 가능하고, APK/update.json만 Vercel로 공개 배포하는 구조입니다.
+## 업데이트 흐름
+
+1. 앱이 공개 `update-v2.json`을 확인합니다.
+2. manifest의 `versionCode`가 설치된 앱보다 높으면 업데이트를 제안합니다.
+3. 사용자에게는 manifest와 APK의 동일한 `0.7.xxx` 버전만 표시합니다.
+4. APK 다운로드 후 SHA-256, 패키지명, 서명 계보, versionCode를 검증합니다.
+5. 검증이 모두 통과해야 Android 설치 화면으로 넘어갑니다.
+
+## 배포 규칙
+
+프로덕션 배포는 `current-main` 직접 릴리스 경로만 사용합니다. 과거 V158/V152/Vxxx 전용 릴리스 트리거는 신규 배포에 사용하지 않습니다.
+
+내부 태그나 기능 세대 번호가 무엇이든 사용자가 확인해야 할 최신 버전은 **`0.7.xxx` 하나**입니다.
