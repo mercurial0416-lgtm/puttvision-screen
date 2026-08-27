@@ -123,6 +123,9 @@ func _v177_shot_debrief_selftest() -> bool:
     if _v177_pace_text(30.0).find("LONG") < 0 or _v177_pace_text(-30.0).find("SHORT") < 0:
         push_error("V177 pace direction regression")
         return false
+    if _v177_pace_value.position.x + _v177_pace_value.size.x > _v177_leave_value.position.x - 8.0:
+        push_error("V177 pace/final-leave layout overlap regression")
+        return false
 
     var synthetic := {
         "actualTrail": [[0.0, 0.0], [0.08, 2.5], [0.11, 5.0]],
