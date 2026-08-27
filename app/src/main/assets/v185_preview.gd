@@ -13,38 +13,47 @@ func _process(delta: float) -> void:
             push_error("Profile state missing")
             get_tree().quit(3)
             return
+        print("V171_PROFILE_SWITCH_OK=1")
         if _v173_ball_shadow == null or _v173_flag_cloth == null or target_root == null or target_root.get_node_or_null("V173CupLiner") == null:
             push_error("Premium nodes missing")
             get_tree().quit(4)
             return
+        print("V173_PREMIUM_NODES_OK=1")
         if _v174_remaining_label == null or _v174_surface_label == null or _v174_result_panel == null:
             push_error("Broadcast HUD missing")
             get_tree().quit(5)
             return
+        print("V174_BROADCAST_HUD_OK=1")
         if _v175_replay_panel == null or _v175_replay_fill == null or _v175_replay_marker == null:
             push_error("Replay package missing")
             get_tree().quit(6)
             return
+        print("V175_CINEMATIC_REPLAY_OK=1")
         if _v176_panel == null or _v176_curve == null or _v176_aim_marker == null:
             push_error("Precision read missing")
             get_tree().quit(7)
             return
+        print("V176_PRECISION_READ_OK=1")
         if _v177_panel == null or _v177_grade_label == null or _v177_line_bar == null or _v177_pace_bar == null:
             push_error("Shot debrief missing")
             get_tree().quit(8)
             return
+        print("V177_SHOT_DEBRIEF_OK=1")
         if _v182_beads.size() != V182_BEAD_COUNT:
             push_error("Break flow bead count regression")
             get_tree().quit(13)
             return
+        print("BREAK_FLOW_BEADS_OK=1")
         if _v183_panel == null or _v183_path_line == null or _v183_ball == null or _v183_cup == null or _v183_distance_label == null:
             push_error("Green overview package missing")
             get_tree().quit(14)
             return
+        print("GREEN_OVERVIEW_OK=1")
         if _v184_left_edge == null or _v184_right_edge == null or _v184_gate == null or _v184_window_label == null:
             push_error("Make-window package missing")
             get_tree().quit(15)
             return
+        print("MAKE_WINDOW_CORRIDOR_OK=1")
         if _v185_pace_label == null or _v185_pace_track == null or _v185_pace_fill == null or _v185_pace_marker == null:
             push_error("Pace-intent package missing")
             get_tree().quit(16)
