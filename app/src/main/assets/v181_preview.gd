@@ -20,34 +20,42 @@ func _process(delta: float) -> void:
             push_error("Premium nodes missing")
             get_tree().quit(4)
             return
+        print("V173_PREMIUM_NODES_OK=1")
         if _v174_remaining_label == null or _v174_surface_label == null or _v174_result_panel == null:
             push_error("Broadcast HUD missing")
             get_tree().quit(5)
             return
+        print("V174_BROADCAST_HUD_OK=1")
         if _v175_replay_panel == null or _v175_replay_fill == null or _v175_replay_marker == null:
             push_error("Replay package missing")
             get_tree().quit(6)
             return
+        print("V175_CINEMATIC_REPLAY_OK=1")
         if _v176_panel == null or _v176_curve == null or _v176_aim_marker == null:
             push_error("Precision read missing")
             get_tree().quit(7)
             return
+        print("V176_PRECISION_READ_OK=1")
         if _v177_panel == null or _v177_grade_label == null or _v177_line_bar == null or _v177_pace_bar == null:
             push_error("Shot debrief missing")
             get_tree().quit(8)
             return
+        print("V177_SHOT_DEBRIEF_OK=1")
         if _v178_panel == null or _v178_score_labels.size() != V178_HISTORY:
             push_error("Session form missing")
             get_tree().quit(9)
             return
+        print("V178_SESSION_FORM_OK=1")
         if _v179_panel == null or _v179_points.size() != V179_HISTORY:
             push_error("Session dispersion package missing")
             get_tree().quit(10)
             return
+        print("V179_SESSION_DISPERSION_OK=1")
         if _v180_focus_chip == null or _v180_focus_distance == null:
             push_error("Replay cup-focus package missing")
             get_tree().quit(11)
             return
+        print("REPLAY_CUP_FOCUS_OK=1")
 
         if _v181_panel == null or _v181_target == null or _v181_actual == null or _v181_marker == null or _v181_fill == null:
             push_error("Pace target ribbon missing")
