@@ -65,27 +65,32 @@ jobs:
             exit 1
           fi
 
-      - name: Render V143 reference frame
+      - name: Render V143 reference frame and run visual regression self-tests
         shell: bash
         run: |
           set -euo pipefail
           command -v xvfb-run >/dev/null
-          rm -f app/src/main/assets/v143-preview.png app/src/main/assets/v143-movie*.png app/src/main/assets/v143-movie.wav
+          rm -f app/src/main/assets/v143-preview.png
+          PREVIEW_LOG="$RUNNER_TEMP/v143-preview.log"
           timeout 45s xvfb-run -a -s "-screen 0 1920x1080x24 -ac +extension GLX +render" \
             "$GODOT_BIN" \
               --path app/src/main/assets \
               --display-driver x11 \
               --rendering-method gl_compatibility \
               --resolution 1920x1080 \
-              --write-movie v143-movie.png \
               --fixed-fps 30 \
-              --quit-after 18 \
-              res://v143_tv.tscn
-          FRAME=$(find app/src/main/assets -maxdepth 1 -type f -name 'v143-movie*.png' | sort | tail -1)
-          test -n "$FRAME"
-          test -s "$FRAME"
-          cp "$FRAME" app/src/main/assets/v143-preview.png
+              res://v143_preview.tscn 2>&1 | tee "$PREVIEW_LOG"
           test -s app/src/main/assets/v143-preview.png
+          grep -q 'V171_PROFILE_SWITCH_OK=' "$PREVIEW_LOG"
+          grep -q 'V173_PREMIUM_NODES_OK=1' "$PREVIEW_LOG"
+          grep -q 'V174_BROADCAST_HUD_OK=1' "$PREVIEW_LOG"
+          grep -q 'V175_CINEMATIC_REPLAY_OK=1' "$PREVIEW_LOG"
+          grep -q 'V176_PRECISION_READ_OK=1' "$PREVIEW_LOG"
+          grep -q 'V177_SHOT_DEBRIEF_OK=1' "$PREVIEW_LOG"
+          if grep -Eiq 'SCRIPT ERROR|Parse Error|Invalid assignment|Invalid call|Cannot assign|push_error' "$PREVIEW_LOG"; then
+            echo "V143 preview regression detected a GDScript error" >&2
+            exit 1
+          fi
 
       - name: Upload V143 reference frame
         uses: actions/upload-artifact@v4
