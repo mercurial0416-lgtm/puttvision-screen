@@ -1,9 +1,10 @@
-extends "res://v173_premium_tv_polish.gd"
+extends "res://v174_broadcast_hud.gd"
 
 var _preview_frames := 0
 var _capture_started := false
 var _profile_switch_checked := false
 var _premium_nodes_checked := false
+var _broadcast_hud_checked := false
 
 func _v171_profile_switch_selftest() -> bool:
     var original_profile: int = _v169_profile_id
@@ -41,6 +42,23 @@ func _v173_premium_selftest() -> bool:
     print("V173_PREMIUM_NODES_OK=1")
     return true
 
+func _v174_hud_selftest() -> bool:
+    var hud := get_node_or_null("V174BroadcastHUD") as CanvasLayer
+    if hud == null:
+        push_error("V174 broadcast HUD layer missing")
+        return false
+    if _v174_remaining_label == null or _v174_surface_label == null or _v174_break_value == null:
+        push_error("V174 primary telemetry labels missing")
+        return false
+    if _v174_result_panel == null or _v174_result_subtitle == null:
+        push_error("V174 result package missing")
+        return false
+    if distance_label == null or speed_label == null or slope_label == null or wait_label == null:
+        push_error("V174 inherited HUD contracts not bound")
+        return false
+    print("V174_BROADCAST_HUD_OK=1")
+    return true
+
 func _process(delta: float) -> void:
     super._process(delta)
     _preview_frames += 1
@@ -61,6 +79,12 @@ func _process(delta: float) -> void:
         _premium_nodes_checked = true
         if not _v173_premium_selftest():
             get_tree().quit(4)
+            return
+
+    if not _broadcast_hud_checked and _preview_frames >= 5:
+        _broadcast_hud_checked = true
+        if not _v174_hud_selftest():
+            get_tree().quit(5)
             return
 
     if !_capture_started and _preview_frames >= 14:
