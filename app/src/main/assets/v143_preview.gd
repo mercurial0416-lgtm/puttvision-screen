@@ -1,4 +1,4 @@
-extends "res://v175_cinematic_replay.gd"
+extends "res://v176_green_read_compass.gd"
 
 var _preview_frames := 0
 var _capture_started := false
@@ -6,6 +6,7 @@ var _profile_switch_checked := false
 var _premium_nodes_checked := false
 var _broadcast_hud_checked := false
 var _cinematic_replay_checked := false
+var _green_read_compass_checked := false
 
 func _v171_profile_switch_selftest() -> bool:
     var original_profile: int = _v169_profile_id
@@ -76,6 +77,25 @@ func _v175_replay_selftest() -> bool:
     print("V175_CINEMATIC_REPLAY_OK=1")
     return true
 
+func _v176_compass_selftest() -> bool:
+    if _v176_read_panel == null or _v176_vector_line == null or _v176_vector_head == null:
+        push_error("V176 green read compass missing")
+        return false
+    var flat := _v176_break_vector(0.0, 0.0)
+    if flat.length() > 0.001:
+        push_error("V176 flat-green vector regression: %s" % flat)
+        return false
+    var right_up := _v176_break_vector(1.0, 1.0)
+    if right_up.x <= 0.0 or right_up.y >= 0.0 or right_up.length() < 18.0:
+        push_error("V176 directional vector regression: %s" % right_up)
+        return false
+    var strength := _v176_strength(3.0, 4.0)
+    if abs(strength - 5.0) > 0.001:
+        push_error("V176 strength regression: %.3f" % strength)
+        return false
+    print("V176_GREEN_READ_COMPASS_OK=1")
+    return true
+
 func _process(delta: float) -> void:
     super._process(delta)
     _preview_frames += 1
@@ -108,6 +128,12 @@ func _process(delta: float) -> void:
         _cinematic_replay_checked = true
         if not _v175_replay_selftest():
             get_tree().quit(6)
+            return
+
+    if not _green_read_compass_checked and _preview_frames >= 7:
+        _green_read_compass_checked = true
+        if not _v176_compass_selftest():
+            get_tree().quit(7)
             return
 
     if !_capture_started and _preview_frames >= 14:
