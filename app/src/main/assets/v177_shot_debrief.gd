@@ -14,6 +14,7 @@ var _v177_leave_value: Label
 var _v177_coach_label: Label
 var _v177_line_bar: ColorRect
 var _v177_pace_bar: ColorRect
+var _v177_preview_force_visible := false
 
 const V177_BAR_MAX_PX := 150.0
 
@@ -127,6 +128,10 @@ func _build_hud() -> void:
 func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     if _v177_panel == null:
         return
+    if force_visible:
+        # Preview-only latch. Production snapshots never set this; the CI reference frame does so
+        # the new result package is visually inspected instead of only node-tested.
+        _v177_preview_force_visible = true
 
     var actual_variant: Variant = s.get("actualTrail", [])
     var has_shot: bool = actual_variant is Array and (actual_variant as Array).size() >= 2
@@ -134,9 +139,14 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     var running: bool = bool(s.get("running", false))
     var holed: bool = bool(s.get("holed", false))
     var lip_out: bool = bool(s.get("lipOut", false))
-    var show: bool = force_visible or (has_shot and has_read_metrics and not running and _v171_replay_remaining <= 0.0)
+    var show: bool = _v177_preview_force_visible or (has_shot and has_read_metrics and not running and _v171_replay_remaining <= 0.0)
     _v177_panel.visible = show
-    if not show and not force_visible:
+    if not show:
+        return
+
+    # While the preview latch is active, keep the last synthetic evaluation rather than replacing it
+    # with the renderer's empty startup snapshot before the PNG is captured.
+    if _v177_preview_force_visible and not force_visible and not has_read_metrics:
         return
 
     var line_delta: float = float(s.get("readLineDeltaCm", 0.0))
