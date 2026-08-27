@@ -4,7 +4,9 @@ var _v191_checks_done := false
 
 func _process(delta: float) -> void:
     super._process(delta)
-    if _v191_checks_done or _preview_frames < 18:
+    # The inherited preview schedules its capture/quit on frame 14. Run this package's
+    # regression assertions in that same frame before the deferred capture executes.
+    if _v191_checks_done or _preview_frames < 14:
         return
     _v191_checks_done = true
 
