@@ -69,7 +69,6 @@ func _build_hud() -> void:
     map_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v183_panel.add_child(map_bg)
 
-    # Lightweight mowing/contour bands: static presentation geometry, Forward Mobile safe.
     for i in range(5):
         var band := Line2D.new()
         band.width = 1.0
@@ -115,13 +114,17 @@ func _build_hud() -> void:
     _v183_grade_label = _v174_text(_v183_panel, Vector2(170, 198), Vector2(148, 20), "GRADE  LEVEL", 11, Color(0.72, 0.90, 0.84, 0.96), HORIZONTAL_ALIGNMENT_RIGHT)
     _v174_text(_v183_panel, Vector2(20, 222), Vector2(298, 18), "gold = recommended read  •  teal = fall line", 10, Color(0.50, 0.62, 0.58, 0.88))
 
-    _v183_update({"distanceToCup": 3.0, "sideSlope": 0.0, "longSlope": 0.0}, true)
+    # Initialize geometry without engaging the preview-only visibility latch.
+    _v183_update({"distanceToCup": 3.0, "sideSlope": 0.0, "longSlope": 0.0}, false)
 
 func _v183_update(s: Dictionary, force_visible: bool = false) -> void:
     if _v183_panel == null:
         return
     if force_visible:
         _v183_preview_force_visible = true
+    elif _v183_preview_force_visible:
+        # CI preview keeps the synthetic curved read stable until the screenshot is captured.
+        return
 
     var running := bool(s.get("running", false))
     var active := _v183_preview_force_visible or (_v165_enhanced_enabled and _v164_grid_enabled and not running and _v171_replay_remaining <= 0.0)
