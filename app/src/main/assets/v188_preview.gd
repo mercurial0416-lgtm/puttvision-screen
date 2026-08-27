@@ -1,4 +1,4 @@
-extends "res://v190_target_window.gd"
+extends "res://v191_practice_streak.gd"
 
 var _preview_frames := 0
 var _capture_started := false
