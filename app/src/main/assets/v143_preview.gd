@@ -1,4 +1,4 @@
-extends "res://v176_precision_read_window.gd"
+extends "res://v177_shot_debrief.gd"
 
 var _preview_frames := 0
 var _capture_started := false
@@ -7,6 +7,7 @@ var _premium_nodes_checked := false
 var _broadcast_hud_checked := false
 var _cinematic_replay_checked := false
 var _precision_read_checked := false
+var _shot_debrief_checked := false
 
 func _v171_profile_switch_selftest() -> bool:
     var original_profile: int = _v169_profile_id
@@ -106,6 +107,39 @@ func _v176_precision_read_selftest() -> bool:
     print("V176_PRECISION_READ_OK=1")
     return true
 
+func _v177_shot_debrief_selftest() -> bool:
+    if _v177_panel == null or _v177_grade_label == null or _v177_line_bar == null or _v177_pace_bar == null:
+        push_error("V177 shot debrief package missing")
+        return false
+    if _v177_metric_score(0.0, 0.0, true) != 100:
+        push_error("V177 holed score regression")
+        return false
+    if _v177_metric_score(4.0, 12.0, false) <= _v177_metric_score(18.0, 55.0, false):
+        push_error("V177 scoring order regression")
+        return false
+    if _v177_line_text(12.0).find("RIGHT") < 0 or _v177_line_text(-12.0).find("LEFT") < 0:
+        push_error("V177 line direction regression")
+        return false
+    if _v177_pace_text(30.0).find("LONG") < 0 or _v177_pace_text(-30.0).find("SHORT") < 0:
+        push_error("V177 pace direction regression")
+        return false
+
+    var synthetic := {
+        "actualTrail": [[0.0, 0.0], [0.08, 2.5], [0.11, 5.0]],
+        "readLineDeltaCm": 6.0,
+        "paceDeltaCm": 14.0,
+        "distanceToCup": 0.16,
+        "running": false,
+        "holed": false,
+        "lipOut": false
+    }
+    _v177_update_debrief(synthetic, true)
+    if not _v177_panel.visible or _v177_grade_label.text.is_empty() or _v177_line_bar.size.x <= 0.0 or _v177_pace_bar.size.x <= 0.0:
+        push_error("V177 live debrief binding regression")
+        return false
+    print("V177_SHOT_DEBRIEF_OK=1")
+    return true
+
 func _process(delta: float) -> void:
     super._process(delta)
     _preview_frames += 1
@@ -144,6 +178,12 @@ func _process(delta: float) -> void:
         _precision_read_checked = true
         if not _v176_precision_read_selftest():
             get_tree().quit(7)
+            return
+
+    if not _shot_debrief_checked and _preview_frames >= 8:
+        _shot_debrief_checked = true
+        if not _v177_shot_debrief_selftest():
+            get_tree().quit(8)
             return
 
     if !_capture_started and _preview_frames >= 14:
