@@ -18,16 +18,16 @@ func _v192_trailing_failures(axis: String) -> int:
 
 func _v191_copy(streak: int, axis: String) -> String:
     if axis == "BUILDING":
-        return "DRILL STEP  ·  BUILDING PATTERN"
+        return "PRESSURE LADDER  ·  BUILDING"
     if streak >= V191_ADVANCE_STREAK:
-        return "DRILL STEP  ·  +0.5 m NEXT"
+        return "ADVANCE READY  ·  +0.5 m NEXT"
     if streak == 2:
-        return "PRESSURE  ·  ONE MORE  ·  2/3"
+        return "PRESSURE LADDER  ·  ONE MORE  ·  2/3"
     if streak == 1:
-        return "PRESSURE  ·  HOLD IT  ·  1/3"
+        return "PRESSURE LADDER  ·  HOLD IT  ·  1/3"
     if _v192_trailing_failures(axis) >= V192_RESET_FAILURES:
-        return "DRILL RESET  ·  -0.5 m EASIER"
-    return "PRESSURE  ·  BUILD STREAK  ·  0/3"
+        return "START STREAK  ·  -0.5 m EASIER"
+    return "START STREAK  ·  BUILD  ·  0/3"
 
 func _v191_refresh() -> void:
     super._v191_refresh()
