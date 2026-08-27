@@ -1,4 +1,4 @@
-extends "res://v171_commercial_completion.gd"
+extends "res://v172_final_scene_completion.gd"
 
 var _preview_frames := 0
 var _capture_started := false
@@ -36,8 +36,6 @@ func _process(delta: float) -> void:
         if not _v171_profile_switch_selftest():
             get_tree().quit(3)
             return
-        # Finish the preview on a visibly asymmetric profile so CI screenshots also
-        # prove the current renderer is not silently falling back to the old rectangle.
         _v169_profile_id = 5
         _v166_rebuild_surface("Green", Vector2(11.8, 34.5), 30, 86)
         _v166_rebuild_surface("Fringe", Vector2(13.8, 36.0), 24, 64)
