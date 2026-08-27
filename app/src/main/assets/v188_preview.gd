@@ -1,4 +1,4 @@
-extends "res://v191_practice_streak.gd"
+extends "res://v192_drill_progression.gd"
 
 var _preview_frames := 0
 var _capture_started := false

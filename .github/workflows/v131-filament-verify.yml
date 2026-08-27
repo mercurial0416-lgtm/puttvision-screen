@@ -89,6 +89,7 @@ jobs:
           grep -q 'V177_SHOT_DEBRIEF_OK=1' "$PREVIEW_LOG"
           grep -q 'PRACTICE_TARGET_WINDOW_OK=1' "$PREVIEW_LOG"
           grep -q 'PRACTICE_PRESSURE_LADDER_OK=1' "$PREVIEW_LOG"
+          grep -q 'PRACTICE_DRILL_PROGRESSION_OK=1' "$PREVIEW_LOG"
           if grep -Eiq 'SCRIPT ERROR|Parse Error|Invalid assignment|Invalid call|Cannot assign|push_error' "$PREVIEW_LOG"; then
             echo "V143 preview regression detected a GDScript error" >&2
             exit 1
