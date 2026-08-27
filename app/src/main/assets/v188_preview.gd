@@ -1,4 +1,4 @@
-extends "res://v189_practice_focus.gd"
+extends "res://v190_target_window.gd"
 
 var _preview_frames := 0
 var _capture_started := false
