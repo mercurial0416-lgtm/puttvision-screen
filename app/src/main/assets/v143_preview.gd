@@ -1,4 +1,4 @@
-extends "res://v177_shot_debrief.gd"
+extends "res://v178_session_form.gd"
 
 var _preview_frames := 0
 var _capture_started := false
@@ -8,6 +8,7 @@ var _broadcast_hud_checked := false
 var _cinematic_replay_checked := false
 var _precision_read_checked := false
 var _shot_debrief_checked := false
+var _session_form_checked := false
 
 func _v171_profile_switch_selftest() -> bool:
     var original_profile: int = _v169_profile_id
@@ -143,6 +144,34 @@ func _v177_shot_debrief_selftest() -> bool:
     print("V177_SHOT_DEBRIEF_OK=1")
     return true
 
+func _v178_session_form_selftest() -> bool:
+    if _v178_panel == null or _v178_average_label == null or _v178_consistency_label == null or _v178_score_labels.size() != V178_HISTORY:
+        push_error("V178 session form package missing")
+        return false
+    var sample: Array[int] = [90, 80, 100, 90, 90]
+    if abs(_v178_average(sample) - 90.0) > 0.001:
+        push_error("V178 average regression")
+        return false
+    if _v178_consistency([90, 90, 90]) != 100:
+        push_error("V178 perfect consistency regression")
+        return false
+    var spread := _v178_consistency([55, 100, 55, 100])
+    if spread >= 100 or spread < 0:
+        push_error("V178 spread consistency regression: %d" % spread)
+        return false
+    _v178_scores.clear()
+    for score in [70, 75, 80, 85, 90, 95]:
+        _v178_push_score(score)
+    if _v178_scores.size() != V178_HISTORY or _v178_scores[0] != 75 or _v178_scores[4] != 95:
+        push_error("V178 rolling history regression: %s" % _v178_scores)
+        return false
+    _v178_preview_seed()
+    if not _v178_panel.visible or _v178_average_label.text != "90" or _v178_consistency_label.text == "--":
+        push_error("V178 preview binding regression")
+        return false
+    print("V178_SESSION_FORM_OK=1")
+    return true
+
 func _process(delta: float) -> void:
     super._process(delta)
     _preview_frames += 1
@@ -187,6 +216,12 @@ func _process(delta: float) -> void:
         _shot_debrief_checked = true
         if not _v177_shot_debrief_selftest():
             get_tree().quit(8)
+            return
+
+    if not _session_form_checked and _preview_frames >= 9:
+        _session_form_checked = true
+        if not _v178_session_form_selftest():
+            get_tree().quit(9)
             return
 
     if !_capture_started and _preview_frames >= 14:
