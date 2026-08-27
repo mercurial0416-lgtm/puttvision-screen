@@ -38,7 +38,7 @@ func _build_hud() -> void:
     if root == null:
         return
 
-    _v188_panel = _v174_panel(root, Vector2(1162, 810), Vector2(150, 220), Color(0.014, 0.021, 0.026, 0.92), Color(0.90, 0.78, 0.40, 0.20), 14)
+    _v188_panel = _v174_panel(root, Vector2(1162, 500), Vector2(150, 220), Color(0.014, 0.021, 0.026, 0.92), Color(0.90, 0.78, 0.40, 0.20), 14)
     _v188_panel.name = "ShotMissMap"
     _v188_panel.visible = false
     _v174_accent(_v188_panel, Vector2(0, 0), Vector2(5, 220), Color("#d6b85c"))
