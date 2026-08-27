@@ -10,8 +10,12 @@ func _process(delta: float) -> void:
         return
     _v191_checks_done = true
 
-    if _v191_streak_label == null or _v191_segments.size() != V191_ADVANCE_STREAK:
+    if _v191_bar == null or _v191_streak_label == null or _v191_segments.size() != V191_ADVANCE_STREAK:
         push_error("Practice pressure ladder package missing")
+        get_tree().quit(22)
+        return
+    if _v191_bar.position.y + _v191_bar.size.y > 1070.0:
+        push_error("Practice pressure ladder safe-area regression")
         get_tree().quit(22)
         return
 
@@ -24,7 +28,7 @@ func _process(delta: float) -> void:
     ]
     _v179_preview_force_visible = true
     _v179_refresh()
-    if _v191_streak != 3 or not _v191_streak_label.text.contains("ADVANCE READY"):
+    if not _v191_bar.visible or _v191_streak != 3 or not _v191_streak_label.text.contains("ADVANCE READY"):
         push_error("Practice pressure ladder advance regression")
         get_tree().quit(22)
         return
