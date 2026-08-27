@@ -1,4 +1,4 @@
-extends "res://v188_miss_map.gd"
+extends "res://v189_practice_focus.gd"
 
 var _preview_frames := 0
 var _capture_started := false
