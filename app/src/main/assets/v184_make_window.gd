@@ -8,10 +8,10 @@ var _v184_left_edge: Line2D
 var _v184_right_edge: Line2D
 var _v184_gate: Line2D
 var _v184_window_label: Label
-var _v184_last_tolerance_cm := 0.0
+var _v184_last_tolerance_cm: float = 0.0
 
 func _v184_tolerance_cm(distance_m: float, side_pct: float, long_pct: float) -> float:
-    var difficulty := distance_m * 0.64 + abs(side_pct) * 0.82 + abs(long_pct) * 0.38
+    var difficulty: float = distance_m * 0.64 + absf(side_pct) * 0.82 + absf(long_pct) * 0.38
     return clampf(8.8 - difficulty, 2.0, 8.0)
 
 func _v184_offset_curve(points: PackedVector2Array, offset_px: float) -> PackedVector2Array:
@@ -22,7 +22,7 @@ func _v184_offset_curve(points: PackedVector2Array, offset_px: float) -> PackedV
         var prev: Vector2 = points[max(0, i - 1)]
         var next: Vector2 = points[min(points.size() - 1, i + 1)]
         var tangent: Vector2 = (next - prev).normalized()
-        var normal := Vector2(-tangent.y, tangent.x)
+        var normal: Vector2 = Vector2(-tangent.y, tangent.x)
         out.append(points[i] + normal * offset_px)
     return out
 
@@ -62,26 +62,26 @@ func _build_hud() -> void:
 func _v184_refresh_window(distance_m: float, side_pct: float, long_pct: float) -> void:
     if _v184_left_edge == null or _v183_path_line == null:
         return
-    var center := _v183_path_line.points
+    var center: PackedVector2Array = _v183_path_line.points
     if center.size() < 2:
         return
     _v184_last_tolerance_cm = _v184_tolerance_cm(distance_m, side_pct, long_pct)
     # ~3 px/cm is readable at 1080p while staying inside the compact overview map.
-    var half_width_px := clampf(_v184_last_tolerance_cm * 2.8, 6.0, 22.0)
+    var half_width_px: float = clampf(_v184_last_tolerance_cm * 2.8, 6.0, 22.0)
     _v184_left_edge.points = _v184_offset_curve(center, -half_width_px)
     _v184_right_edge.points = _v184_offset_curve(center, half_width_px)
 
-    var finish := center[center.size() - 1]
-    var before := center[max(0, center.size() - 3)]
+    var finish: Vector2 = center[center.size() - 1]
+    var before: Vector2 = center[max(0, center.size() - 3)]
     var tangent: Vector2 = (finish - before).normalized()
-    var normal := Vector2(-tangent.y, tangent.x)
+    var normal: Vector2 = Vector2(-tangent.y, tangent.x)
     _v184_gate.points = PackedVector2Array([
         finish - normal * half_width_px,
         finish + normal * half_width_px
     ])
     _v184_window_label.text = "MAKE WINDOW  ±%.0f cm" % _v184_last_tolerance_cm
 
-    var visible := _v183_panel.visible
+    var visible: bool = _v183_panel.visible
     _v184_left_edge.visible = visible
     _v184_right_edge.visible = visible
     _v184_gate.visible = visible
