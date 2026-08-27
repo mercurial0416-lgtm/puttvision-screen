@@ -4,6 +4,7 @@ extends "res://v190_target_window.gd"
 # the same recent dispersion samples and active next-rep target window. Nothing feeds back into
 # Android physics, GreenTerrain, GreenReadAdvisor, aiming, scoring, or shot capture.
 
+var _v191_bar: Panel
 var _v191_streak_label: Label
 var _v191_segments: Array[ColorRect] = []
 var _v191_streak := 0
@@ -42,30 +43,39 @@ func _v191_copy(streak: int, axis: String) -> String:
 
 func _build_hud() -> void:
     super._build_hud()
-    if _v179_panel == null:
+    var layer := get_node_or_null("V174BroadcastHUD") as CanvasLayer
+    if layer == null:
+        return
+    var root := layer.get_node_or_null("V174HUDRoot") as Control
+    if root == null:
         return
 
+    # Keep the high-density session card readable. The streak lives in its own compact footer
+    # instead of stealing vertical space from LAST REP / NEXT REP telemetry.
+    _v191_bar = _v174_panel(root, Vector2(1316, 1038), Vector2(560, 28), Color(0.012, 0.019, 0.023, 0.94), Color(0.45, 0.68, 0.78, 0.18), 9)
+    _v191_bar.name = "PracticePressureLadder"
+    _v191_bar.visible = false
+    _v174_accent(_v191_bar, Vector2(0, 0), Vector2(5, 28), Color("#76d7b6"))
     _v191_streak_label = _v174_text(
-        _v179_panel,
-        Vector2(360, 191),
-        Vector2(190, 12),
+        _v191_bar,
+        Vector2(18, 5),
+        Vector2(270, 18),
         "PRESSURE LADDER  ·  BUILDING",
-        8,
-        Color(0.58, 0.69, 0.68, 0.94),
-        HORIZONTAL_ALIGNMENT_RIGHT
+        9,
+        Color(0.76, 0.88, 0.84, 0.96)
     )
 
-    var x0 := 360.0
-    var gap := 4.0
-    var width := (190.0 - gap * 2.0) / 3.0
+    var x0 := 326.0
+    var gap := 7.0
+    var width := (216.0 - gap * 2.0) / 3.0
     for index in range(V191_ADVANCE_STREAK):
         var segment := ColorRect.new()
         segment.name = "PressureLadder%d" % (index + 1)
-        segment.position = Vector2(x0 + float(index) * (width + gap), 205)
-        segment.size = Vector2(width, 3)
+        segment.position = Vector2(x0 + float(index) * (width + gap), 11)
+        segment.size = Vector2(width, 6)
         segment.color = Color(0.60, 0.72, 0.70, 0.14)
         segment.mouse_filter = Control.MOUSE_FILTER_IGNORE
-        _v179_panel.add_child(segment)
+        _v191_bar.add_child(segment)
         _v191_segments.append(segment)
     _v191_refresh()
 
@@ -93,6 +103,14 @@ func _v191_refresh() -> void:
     else:
         _v191_streak_label.modulate = Color(0.76, 0.88, 0.84, 0.96)
 
+    if _v191_bar != null:
+        _v191_bar.visible = _v179_preview_force_visible or (_v179_panel != null and _v179_panel.visible)
+
 func _v179_refresh() -> void:
     super._v179_refresh()
     _v191_refresh()
+
+func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
+    super._apply_snapshot(s, immediate, delta)
+    if _v191_bar != null:
+        _v191_bar.visible = _v179_panel != null and _v179_panel.visible
