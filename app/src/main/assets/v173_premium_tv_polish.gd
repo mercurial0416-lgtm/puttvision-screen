@@ -3,7 +3,7 @@ extends "res://v172_final_scene_completion.gd"
 # V173 premium TV polish. Rendering-only pass: Android V135-V137 / GreenTerrain remain authoritative.
 # This layer brightens and separates turf materials, grounds the ball with a soft contact shadow,
 # replaces the rigid flag prism with a lightweight animated cloth mesh, exposes a real-looking cup
-# liner under the lip, and lets the low-poly foliage react to course lighting instead of rendering flat.
+# liner under the lip, and lets the low-poly foliage react to course lighting without crushing black.
 
 var _v173_ball_shadow: MeshInstance3D
 var _v173_ball_shadow_mat: StandardMaterial3D
@@ -12,21 +12,20 @@ var _v173_flag_cloth: MeshInstance3D
 func _build_materials() -> void:
     super._build_materials()
 
-    # The previous pass was deliberately conservative and read too dark on a TV. Keep the exact
-    # texture/normal pipeline but separate green, fringe and rough more clearly at broadcast range.
+    # Separate the three cuts clearly at TV distance while retaining the original scanned turf maps.
     if mat_green != null:
-        mat_green.set_shader_parameter("tint", Vector3(0.286, 0.505, 0.294))
-        mat_green.set_shader_parameter("brightness", 0.90)
-        mat_green.set_shader_parameter("scan_mix", 0.58)
+        mat_green.set_shader_parameter("tint", Vector3(0.300, 0.525, 0.310))
+        mat_green.set_shader_parameter("brightness", 0.94)
+        mat_green.set_shader_parameter("scan_mix", 0.60)
         mat_green.set_shader_parameter("tiling", Vector2(7.5, 22.0))
     if mat_fringe != null:
-        mat_fringe.set_shader_parameter("tint", Vector3(0.235, 0.420, 0.260))
-        mat_fringe.set_shader_parameter("brightness", 0.86)
-        mat_fringe.set_shader_parameter("scan_mix", 0.53)
+        mat_fringe.set_shader_parameter("tint", Vector3(0.242, 0.432, 0.268))
+        mat_fringe.set_shader_parameter("brightness", 0.88)
+        mat_fringe.set_shader_parameter("scan_mix", 0.54)
         mat_fringe.set_shader_parameter("tiling", Vector2(8.0, 20.0))
     if mat_rough != null:
-        mat_rough.set_shader_parameter("tint", Vector3(0.190, 0.335, 0.220))
-        mat_rough.set_shader_parameter("brightness", 0.82)
+        mat_rough.set_shader_parameter("tint", Vector3(0.192, 0.342, 0.224))
+        mat_rough.set_shader_parameter("brightness", 0.83)
         mat_rough.set_shader_parameter("scan_mix", 0.46)
 
 func _build_environment() -> void:
@@ -34,7 +33,7 @@ func _build_environment() -> void:
 
     var env_node := get_node_or_null("WorldEnvironment") as WorldEnvironment
     if env_node != null and env_node.environment != null:
-        env_node.environment.ambient_light_energy = 0.56
+        env_node.environment.ambient_light_energy = 0.58
         env_node.environment.fog_light_energy = 0.24
         env_node.environment.fog_density = 0.0027
 
@@ -42,12 +41,10 @@ func _build_environment() -> void:
     if key_sun != null:
         key_sun.light_energy = 0.88
 
-    # Very soft opposite fill prevents card foliage and the clubhouse facade from crushing to black
-    # while preserving the single-shadow mobile renderer path.
     var fill := DirectionalLight3D.new()
     fill.name = "V173SkyFill"
     fill.light_color = Color("#c8d7e2")
-    fill.light_energy = 0.14
+    fill.light_energy = 0.15
     fill.shadow_enabled = false
     fill.rotation_degrees = Vector3(-34.0, 142.0, 0.0)
     add_child(fill)
@@ -55,11 +52,11 @@ func _build_environment() -> void:
 func _build_course() -> void:
     super._build_course()
     if _v163_green_blade_mat != null:
-        _v163_green_blade_mat.set_shader_parameter("base_color", Vector3(0.205, 0.390, 0.215))
-        _v163_green_blade_mat.set_shader_parameter("tip_color", Vector3(0.390, 0.555, 0.330))
+        _v163_green_blade_mat.set_shader_parameter("base_color", Vector3(0.218, 0.410, 0.226))
+        _v163_green_blade_mat.set_shader_parameter("tip_color", Vector3(0.410, 0.575, 0.345))
     if _v163_fringe_blade_mat != null:
-        _v163_fringe_blade_mat.set_shader_parameter("base_color", Vector3(0.175, 0.335, 0.195))
-        _v163_fringe_blade_mat.set_shader_parameter("tip_color", Vector3(0.330, 0.485, 0.285))
+        _v163_fringe_blade_mat.set_shader_parameter("base_color", Vector3(0.180, 0.345, 0.200))
+        _v163_fringe_blade_mat.set_shader_parameter("tip_color", Vector3(0.340, 0.500, 0.292))
 
 func _build_ball() -> void:
     super._build_ball()
@@ -151,14 +148,12 @@ void fragment(){
 func _build_target() -> void:
     super._build_target()
 
-    # Hide the inherited rigid prism flag but keep its proven pole/cup placement.
     for child in target_root.get_children():
         if child is MeshInstance3D:
             var mesh_instance := child as MeshInstance3D
             if mesh_instance.mesh is PrismMesh:
                 mesh_instance.visible = false
 
-    # White plastic liner segments sit just below the turf lip, leaving the center physically dark.
     var liner_root := Node3D.new()
     liner_root.name = "V173CupLiner"
     target_root.add_child(liner_root)
@@ -187,8 +182,8 @@ func _v172_leaf_material(phase: float) -> ShaderMaterial:
     shader.code = """
 shader_type spatial;
 render_mode cull_disabled;
-uniform vec3 leaf_dark : source_color = vec3(0.105, 0.18, 0.12);
-uniform vec3 leaf_light : source_color = vec3(0.32, 0.43, 0.27);
+uniform vec3 leaf_dark : source_color = vec3(0.14, 0.24, 0.15);
+uniform vec3 leaf_light : source_color = vec3(0.39, 0.50, 0.31);
 uniform float phase = 0.0;
 varying float leaf_variation;
 float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
@@ -207,6 +202,7 @@ void fragment(){
     float vertical = smoothstep(0.0, 1.0, UV.y);
     float variation = clamp(vertical * 0.42 + leaf_variation * 0.34, 0.0, 1.0);
     ALBEDO = mix(leaf_dark, leaf_light, variation);
+    EMISSION = ALBEDO * 0.19;
     ROUGHNESS = 0.90;
     SPECULAR = 0.10;
 }
@@ -214,8 +210,8 @@ void fragment(){
     var material := ShaderMaterial.new()
     material.shader = shader
     var hue: float = fmod(abs(phase) * 0.071, 0.07)
-    material.set_shader_parameter("leaf_dark", Vector3(0.100 + hue * 0.20, 0.170 + hue * 0.42, 0.115 + hue * 0.16))
-    material.set_shader_parameter("leaf_light", Vector3(0.285 + hue * 0.28, 0.390 + hue * 0.36, 0.235 + hue * 0.22))
+    material.set_shader_parameter("leaf_dark", Vector3(0.135 + hue * 0.20, 0.225 + hue * 0.40, 0.145 + hue * 0.16))
+    material.set_shader_parameter("leaf_light", Vector3(0.345 + hue * 0.28, 0.455 + hue * 0.34, 0.285 + hue * 0.22))
     material.set_shader_parameter("phase", phase)
     return material
 
