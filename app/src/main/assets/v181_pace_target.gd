@@ -42,7 +42,7 @@ func _build_hud() -> void:
     if root == null:
         return
 
-    _v181_panel = _v174_panel(root, Vector2(48, 864), Vector2(470, 142), Color(0.014, 0.020, 0.024, 0.90), Color(0.90, 0.78, 0.40, 0.20), 14)
+    _v181_panel = _v174_panel(root, Vector2(1128, 878), Vector2(470, 142), Color(0.014, 0.020, 0.024, 0.90), Color(0.90, 0.78, 0.40, 0.20), 14)
     _v181_panel.name = "PaceTargetRibbon"
     _v174_accent(_v181_panel, Vector2(0, 0), Vector2(6, 142), Color("#d6b85c"))
     _v181_title = _v174_text(_v181_panel, Vector2(20, 10), Vector2(220, 22), "PACE TARGET", 13, Color("#f4dda0"))
