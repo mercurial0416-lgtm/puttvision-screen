@@ -4,7 +4,7 @@ var _v196_checks_done := false
 
 func _process(delta: float) -> void:
     super._process(delta)
-    if _v196_checks_done or _preview_frames < 17:
+    if _v196_checks_done or _preview_frames < 13:
         return
     _v196_checks_done = true
 
