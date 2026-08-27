@@ -36,8 +36,8 @@ func _v179_tendency() -> String:
     return "%s  •  %s" % [line_text, pace_text]
 
 func _v179_plot_position(sample: Vector2) -> Vector2:
-    var nx := clamp(sample.x / V179_LINE_SCALE_CM, -1.0, 1.0)
-    var ny := clamp(sample.y / V179_PACE_SCALE_CM, -1.0, 1.0)
+    var nx: float = clampf(sample.x / V179_LINE_SCALE_CM, -1.0, 1.0)
+    var ny: float = clampf(sample.y / V179_PACE_SCALE_CM, -1.0, 1.0)
     return Vector2(
         V179_PLOT_SIZE.x * 0.5 + nx * V179_PLOT_SIZE.x * 0.46,
         V179_PLOT_SIZE.y * 0.5 - ny * V179_PLOT_SIZE.y * 0.42
