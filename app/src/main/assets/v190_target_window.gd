@@ -97,3 +97,10 @@ func _v190_refresh() -> void:
 func _v179_refresh() -> void:
     super._v179_refresh()
     _v190_refresh()
+
+func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
+    super._apply_snapshot(s, immediate, delta)
+    # Session dispersion supersedes the larger single-shot debrief in the same result phase.
+    # Keeping both visible created a stacked translucent block in the lower-right TV layout.
+    if _v179_panel != null and _v179_panel.visible and _v177_panel != null:
+        _v177_panel.visible = false
