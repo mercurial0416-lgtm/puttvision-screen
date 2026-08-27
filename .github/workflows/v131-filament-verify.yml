@@ -92,6 +92,7 @@ jobs:
           grep -q 'PRACTICE_DRILL_PROGRESSION_OK=1' "$PREVIEW_LOG"
           grep -q 'PRACTICE_BEST_REP_GHOST_OK=1' "$PREVIEW_LOG"
           grep -q 'PRACTICE_DISPERSION_ENVELOPE_OK=1' "$PREVIEW_LOG"
+          grep -q 'PRACTICE_BIAS_VECTOR_OK=1' "$PREVIEW_LOG"
           if grep -Eiq 'SCRIPT ERROR|Parse Error|Invalid assignment|Invalid call|Cannot assign|push_error' "$PREVIEW_LOG"; then
             echo "V143 preview regression detected a GDScript error" >&2
             exit 1
@@ -122,6 +123,4 @@ jobs:
           test -s "$APK"
           BYTES=$(stat -c%s "$APK")
           echo "consumer release bytes=$BYTES"
-          # V143 embeds one ARM64 Godot runtime plus CC0 environment assets. Keep a hard ceiling so
-          # future additions remain deliberate while leaving a real game-engine asset budget.
           test "$BYTES" -lt $((180 * 1024 * 1024))

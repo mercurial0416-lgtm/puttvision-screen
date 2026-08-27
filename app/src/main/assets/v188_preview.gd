@@ -1,4 +1,4 @@
-extends "res://v194_dispersion_envelope.gd"
+extends "res://v195_practice_bias_vector.gd"
 
 var _preview_frames := 0
 var _capture_started := false
