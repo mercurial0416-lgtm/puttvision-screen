@@ -1,4 +1,4 @@
-extends "res://v175_cinematic_replay.gd"
+extends "res://v176_precision_read_window.gd"
 
 var _preview_frames := 0
 var _capture_started := false
@@ -6,6 +6,7 @@ var _profile_switch_checked := false
 var _premium_nodes_checked := false
 var _broadcast_hud_checked := false
 var _cinematic_replay_checked := false
+var _precision_read_checked := false
 
 func _v171_profile_switch_selftest() -> bool:
     var original_profile: int = _v169_profile_id
@@ -76,6 +77,35 @@ func _v175_replay_selftest() -> bool:
     print("V175_CINEMATIC_REPLAY_OK=1")
     return true
 
+func _v176_precision_read_selftest() -> bool:
+    var hud := get_node_or_null("V176PrecisionReadHUD") as CanvasLayer
+    if hud == null or _v176_panel == null or _v176_curve == null or _v176_aim_marker == null:
+        push_error("V176 precision read package missing")
+        return false
+
+    var straight := _v176_read_curve(0.0)
+    var right := _v176_read_curve(0.90)
+    var left := _v176_read_curve(-0.90)
+    if straight.size() != 17 or right.size() != 17 or left.size() != 17:
+        push_error("V176 read curve point count regression")
+        return false
+    if abs(straight[8].x - V176_DIAGRAM_CENTER_X) > 0.001:
+        push_error("V176 straight read no longer centered: %s" % straight[8])
+        return false
+    if right[8].x <= V176_DIAGRAM_CENTER_X or left[8].x >= V176_DIAGRAM_CENTER_X:
+        push_error("V176 read curve direction regression: L=%s R=%s" % [left[8], right[8]])
+        return false
+    if right[0].distance_to(straight[0]) > 0.001 or right[16].distance_to(straight[16]) > 0.001:
+        push_error("V176 guide endpoints moved away from ball/cup")
+        return false
+
+    _v176_update_visuals(0.35, 1.25, -0.40)
+    if _v176_curve.points.size() != 17 or _v176_aim_value.text.find("cm") < 0:
+        push_error("V176 live visual update regression")
+        return false
+    print("V176_PRECISION_READ_OK=1")
+    return true
+
 func _process(delta: float) -> void:
     super._process(delta)
     _preview_frames += 1
@@ -108,6 +138,12 @@ func _process(delta: float) -> void:
         _cinematic_replay_checked = true
         if not _v175_replay_selftest():
             get_tree().quit(6)
+            return
+
+    if not _precision_read_checked and _preview_frames >= 7:
+        _precision_read_checked = true
+        if not _v176_precision_read_selftest():
+            get_tree().quit(7)
             return
 
     if !_capture_started and _preview_frames >= 14:
