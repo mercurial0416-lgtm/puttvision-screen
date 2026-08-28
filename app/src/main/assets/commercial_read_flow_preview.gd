@@ -4,6 +4,8 @@ const FlowScene = preload("res://commercial_read_flow.gd")
 const PREVIEW_SIDE_SLOPE := 1.35
 const PREVIEW_LONG_SLOPE := -0.55
 
+var _replay_compare_preview_ready := false
+
 # Keep the rendered regression frame internally honest: the authoritative/base HUD and the
 # commercial green-read panel must describe the same slope. Previously the overview injected a
 # synthetic break while the base snapshot stayed flat, producing a misleading verification image.
@@ -12,6 +14,27 @@ func _snapshot() -> Dictionary:
     s["sideSlope"] = PREVIEW_SIDE_SLOPE
     s["longSlope"] = PREVIEW_LONG_SLOPE
     return s
+
+func _process(delta: float) -> void:
+    super._process(delta)
+    # The parent preview captures on a deferred frame. Hold the synthetic replay after all parent
+    # snapshot/focus choreography so the uploaded image proves this HUD is actually visible.
+    if _replay_compare_preview_ready and _capture_started:
+        _seed_replay_compare_preview()
+
+func _seed_replay_compare_preview() -> void:
+    _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
+    _v171_replay_predicted = [Vector2(0.0, 1.0), Vector2(0.03, 3.0), Vector2(0.04, 5.0), Vector2(0.0, 6.5)]
+    _v171_replay_duration = 10.0
+    _v171_replay_remaining = 1.20
+    _v180_refresh_compare()
+    if _v180_compare_chip != null:
+        _v180_compare_chip.visible = true
+        _v180_compare_chip.modulate.a = 1.0
+    if _v180_focus_chip != null:
+        _v180_focus_chip.visible = true
+        _v180_focus_chip.modulate.a = 1.0
+        _v180_focus_distance.text = "42 cm TO CUP"
 
 func _run_apex_preview_regression() -> bool:
     if not super._run_apex_preview_regression():
@@ -82,8 +105,22 @@ func _run_apex_preview_regression() -> bool:
             cue.points = PackedVector2Array([left, tip, right])
             _v183_panel.add_child(cue)
 
+    if _v180_compare_chip == null or _v180_compare_primary == null or _v180_compare_secondary == null:
+        push_error("Current TV preview missing replay read comparison HUD")
+        probe.free()
+        get_tree().quit(38)
+        return false
+    _seed_replay_compare_preview()
+    if not _v180_compare_primary.text.begins_with("AVG ") or not _v180_compare_primary.text.contains("PEAK ") or not _v180_compare_secondary.text.begins_with("FINISH Δ "):
+        push_error("Replay read-vs-roll comparison regression")
+        probe.free()
+        get_tree().quit(38)
+        return false
+    _replay_compare_preview_ready = true
+
     probe.free()
     print("COMMERCIAL_READ_FLOW_OK=1")
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
+    print("REPLAY_READ_COMPARE_OK=1")
     return true
