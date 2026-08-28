@@ -105,15 +105,21 @@ func _run_apex_preview_regression() -> bool:
             cue.points = PackedVector2Array([left, tip, right])
             _v183_panel.add_child(cue)
 
-    probe._v179_samples = [Vector2(-8, -18), Vector2(-3, 10), Vector2(5, 22), Vector2(7, 6), Vector2(3, 14)]
-    if probe._v179_make_count() != 2 or probe._v179_make_rate_text() != "WINDOW 2/5":
-        push_error("Session make-window tally regression: %s" % probe._v179_make_rate_text())
+    _v179_samples = [Vector2(-8, -18), Vector2(-3, 10), Vector2(5, 22), Vector2(7, 6), Vector2(3, 14)]
+    if _v179_make_count() != 2 or _v179_make_rate_text() != "WINDOW 2/5":
+        push_error("Session make-window tally regression: %s" % _v179_make_rate_text())
         probe.free()
         get_tree().quit(40)
         return false
-    probe._v179_samples = [Vector2(-5, -15), Vector2(5, 15), Vector2(5.01, 0), Vector2(0, 15.01)]
-    if probe._v179_make_count() != 2:
-        push_error("Session make-window boundary regression: %d" % probe._v179_make_count())
+    _v179_samples = [Vector2(-5, -15), Vector2(5, 15), Vector2(5.01, 0), Vector2(0, 15.01)]
+    if _v179_make_count() != 2:
+        push_error("Session make-window boundary regression: %d" % _v179_make_count())
+        probe.free()
+        get_tree().quit(40)
+        return false
+    _v179_preview_seed()
+    if _v179_window_label == null or _v179_window_label.text != "WINDOW 2/5" or _v179_plot == null or _v179_plot.get_node_or_null("MakeWindow") == null:
+        push_error("Session make-window HUD regression")
         probe.free()
         get_tree().quit(40)
         return false
