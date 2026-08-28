@@ -100,9 +100,29 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    if probe._focus_replay_status(0.50, 1.26) != "TRAIL CAM · 1.3s":
+        push_error("Replay remaining-time rounding regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._focus_replay_status(0.90, -0.4) != "CUP CAM · 0.0s":
+        push_error("Replay remaining-time clamp regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._focus_replay_status(0.90, NAN) != "CUP CAM":
+        push_error("Replay invalid-time fallback regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe.REPLAY_TIMELINE_STAGE_WIDTH < 130.0:
+        push_error("Replay status width too narrow for timecode")
+        probe.free()
+        get_tree().quit(29)
+        return
 
     # Render replay-focused hierarchy in the CI screenshot: setup overlays recede while
-    # cinematic framing, playback progress, and the camera handoff chapter remain legible.
+    # cinematic framing, playback progress, camera handoff, and time-to-finish remain legible.
     var replay_phase := "REPLAY"
     var target_card := distance_label.get_parent() as CanvasItem if distance_label != null else null
     var telemetry_card := speed_label.get_parent() as CanvasItem if speed_label != null else null
@@ -118,12 +138,14 @@ func _process(delta: float) -> void:
     _preview_set_alpha(_v188_panel, probe._focus_role_alpha(replay_phase, "result"))
     _preview_add_letterbox(probe.REPLAY_BAR_HEIGHT, probe._focus_role_alpha(replay_phase, "letterbox"))
     var preview_progress := 0.78
-    _preview_add_replay_timeline(preview_progress, probe._focus_role_alpha(replay_phase, "replay_timeline"), probe.REPLAY_BAR_HEIGHT, probe.REPLAY_TIMELINE_SIDE_INSET, probe.REPLAY_TIMELINE_LABEL_WIDTH, probe.REPLAY_TIMELINE_STAGE_WIDTH, probe.REPLAY_TIMELINE_TRACK_HEIGHT, probe.REPLAY_CUP_CHAPTER_START, probe._focus_replay_stage(preview_progress))
+    var preview_remaining := 0.62
+    _preview_add_replay_timeline(preview_progress, probe._focus_role_alpha(replay_phase, "replay_timeline"), probe.REPLAY_BAR_HEIGHT, probe.REPLAY_TIMELINE_SIDE_INSET, probe.REPLAY_TIMELINE_LABEL_WIDTH, probe.REPLAY_TIMELINE_STAGE_WIDTH, probe.REPLAY_TIMELINE_TRACK_HEIGHT, probe.REPLAY_CUP_CHAPTER_START, probe._focus_replay_status(preview_progress, preview_remaining))
     probe.free()
     print("PRESENTATION_FOCUS_CHOREOGRAPHY_OK=1")
     print("REPLAY_CINEMATIC_LETTERBOX_OK=1")
     print("REPLAY_TIMELINE_OK=1")
     print("REPLAY_CAMERA_CHAPTER_OK=1")
+    print("REPLAY_TIMECODE_OK=1")
 
 func _preview_add_letterbox(height: float, alpha: float) -> void:
     var top := ColorRect.new()
