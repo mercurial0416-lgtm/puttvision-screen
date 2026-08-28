@@ -10,7 +10,6 @@ var _v179_line_mean_label: Label
 var _v179_pace_mean_label: Label
 var _v179_window_label: Label
 var _v179_window_detail: Label
-var _v179_next_rep_label: Label
 var _v179_points: Array[ColorRect] = []
 var _v179_samples: Array[Vector2] = []
 var _v179_last_signature := ""
@@ -58,23 +57,23 @@ func _v179_make_rate_text() -> String:
 
 func _v179_next_rep_text() -> String:
     if _v179_samples.size() < V179_COACH_MIN_SAMPLES:
-        return "NEXT REP  •  BUILD 3 SHOTS"
+        return "NEXT · BUILD 3 SHOTS"
 
     var line := _v179_mean(0)
     var pace := _v179_mean(1)
     var line_text := "HOLD LINE"
     if line > V179_COACH_LINE_DEADBAND_CM:
-        line_text = "START %d CM LEFT" % clampi(int(round(absf(line))), 3, 9)
+        line_text = "%dcm LEFT" % clampi(int(round(absf(line))), 3, 9)
     elif line < -V179_COACH_LINE_DEADBAND_CM:
-        line_text = "START %d CM RIGHT" % clampi(int(round(absf(line))), 3, 9)
+        line_text = "%dcm RIGHT" % clampi(int(round(absf(line))), 3, 9)
 
     var pace_text := "HOLD PACE"
     if pace > V179_COACH_PACE_DEADBAND_CM:
-        pace_text = "SOFTER PACE"
+        pace_text = "SOFTER"
     elif pace < -V179_COACH_PACE_DEADBAND_CM:
-        pace_text = "FIRMER PACE"
+        pace_text = "FIRMER"
 
-    return "NEXT REP  •  %s  •  %s" % [line_text, pace_text]
+    return "NEXT · %s · %s" % [line_text, pace_text]
 
 func _v179_plot_position(sample: Vector2) -> Vector2:
     var nx: float = clampf(sample.x / V179_LINE_SCALE_CM, -1.0, 1.0)
@@ -103,7 +102,7 @@ func _build_hud() -> void:
     _v179_panel.visible = false
     _v174_accent(_v179_panel, Vector2(0, 0), Vector2(7, 210), Color("#76c7d7"))
     _v174_text(_v179_panel, Vector2(24, 12), Vector2(220, 22), "SESSION DISPERSION", 14, Color(0.77, 0.84, 0.84, 0.96))
-    _v179_tendency_label = _v174_text(_v179_panel, Vector2(250, 9), Vector2(280, 28), "BUILDING PATTERN", 13, Color("#f4dda0"), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v179_tendency_label = _v174_text(_v179_panel, Vector2(230, 9), Vector2(300, 28), "NEXT · BUILD 3 SHOTS", 12, Color("#f4dda0"), HORIZONTAL_ALIGNMENT_RIGHT)
 
     _v179_plot = Control.new()
     _v179_plot.position = Vector2(24, 50)
@@ -137,10 +136,8 @@ func _build_hud() -> void:
     v.color = Color(0.74, 0.82, 0.82, 0.18)
     _v179_plot.add_child(v)
 
-    _v179_window_label = _v174_text(_v179_panel, Vector2(344, 52), Vector2(186, 24), "WINDOW --", 15, Color("#8ce0b7"), HORIZONTAL_ALIGNMENT_RIGHT)
-    _v179_window_detail = _v174_text(_v179_panel, Vector2(344, 78), Vector2(186, 30), "±5 cm LINE · ±15 cm PACE", 9, Color(0.58, 0.72, 0.68, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
-    _v179_next_rep_label = _v174_text(_v179_panel, Vector2(336, 112), Vector2(194, 42), "NEXT REP  •  BUILD 3 SHOTS", 10, Color("#f4dda0"), HORIZONTAL_ALIGNMENT_RIGHT)
-    _v179_next_rep_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _v179_window_label = _v174_text(_v179_panel, Vector2(344, 58), Vector2(186, 24), "WINDOW --", 15, Color("#8ce0b7"), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v179_window_detail = _v174_text(_v179_panel, Vector2(344, 86), Vector2(186, 36), "±5 cm LINE\n±15 cm PACE", 10, Color(0.58, 0.72, 0.68, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
 
     _v174_text(_v179_panel, Vector2(24, 174), Vector2(110, 18), "LINE AVG", 10, Color(0.56, 0.66, 0.67, 0.92))
     _v179_line_mean_label = _v174_text(_v179_panel, Vector2(122, 169), Vector2(115, 24), "0 cm", 14, Color("#e8eeee"), HORIZONTAL_ALIGNMENT_RIGHT)
@@ -159,13 +156,11 @@ func _build_hud() -> void:
 func _v179_refresh() -> void:
     if _v179_panel == null:
         return
-    _v179_tendency_label.text = _v179_tendency()
+    _v179_tendency_label.text = _v179_next_rep_text()
     _v179_line_mean_label.text = "%+.0f cm" % _v179_mean(0)
     _v179_pace_mean_label.text = "%+.0f cm" % _v179_mean(1)
     if _v179_window_label != null:
         _v179_window_label.text = _v179_make_rate_text()
-    if _v179_next_rep_label != null:
-        _v179_next_rep_label.text = _v179_next_rep_text()
     for index in range(V179_HISTORY):
         var dot := _v179_points[index]
         if index < _v179_samples.size():
