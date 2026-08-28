@@ -24,7 +24,7 @@ func _process(delta: float) -> void:
         if _capture_started:
             _seed_replay_finish_preview()
         return
-    if _preview_frames < 18:
+    if not _capture_started:
         return
     _replay_playhead_checks_done = true
 
