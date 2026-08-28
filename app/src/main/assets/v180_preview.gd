@@ -105,8 +105,8 @@ func _process(delta: float) -> void:
         print("REPLAY_READ_COMPARE_OK=1")
 
     # Parent snapshot application is intentionally live in the preview. Re-seed only the
-    # synthetic replay after that pass so the rendered frame proves the replay HUD itself.
-    if _checks_done and not _capture_started:
+    # synthetic replay after that pass and keep it alive through the deferred capture frame.
+    if _checks_done:
         _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
         _v171_replay_predicted = [Vector2(0.0, 1.0), Vector2(0.03, 3.0), Vector2(0.04, 5.0), Vector2(0.0, 6.5)]
         _v171_replay_duration = 10.0
