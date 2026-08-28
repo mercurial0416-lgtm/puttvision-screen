@@ -89,7 +89,6 @@ func _process(delta: float) -> void:
             return
         _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
         _v171_replay_predicted = [Vector2(0.0, 1.0), Vector2(0.03, 3.0), Vector2(0.04, 5.0), Vector2(0.0, 6.5)]
-        # Keep the synthetic replay alive long enough for the rendered regression frame.
         _v171_replay_duration = 10.0
         _v171_replay_remaining = 1.20
         var final_point := _v180_final_point()
@@ -102,11 +101,22 @@ func _process(delta: float) -> void:
             push_error("Replay read-vs-roll comparison regression")
             get_tree().quit(11)
             return
-        _v180_focus_chip.visible = true
-        _v180_focus_distance.text = "42 cm TO CUP"
-        _v180_compare_chip.visible = true
         print("REPLAY_CUP_FOCUS_OK=1")
         print("REPLAY_READ_COMPARE_OK=1")
+
+    # Parent snapshot application is intentionally live in the preview. Re-seed only the
+    # synthetic replay after that pass so the rendered frame proves the replay HUD itself.
+    if _checks_done and not _capture_started:
+        _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
+        _v171_replay_predicted = [Vector2(0.0, 1.0), Vector2(0.03, 3.0), Vector2(0.04, 5.0), Vector2(0.0, 6.5)]
+        _v171_replay_duration = 10.0
+        _v171_replay_remaining = 1.20
+        _v180_refresh_compare()
+        _v180_compare_chip.visible = true
+        _v180_compare_chip.modulate.a = 1.0
+        _v180_focus_chip.visible = true
+        _v180_focus_chip.modulate.a = 1.0
+        _v180_focus_distance.text = "42 cm TO CUP"
 
     if not _capture_started and _preview_frames >= 14:
         _capture_started = true
