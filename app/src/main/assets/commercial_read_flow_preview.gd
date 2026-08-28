@@ -116,9 +116,9 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(38)
         return false
-    var verdict_right := _v180_finish_verdict(Vector2(0.08, 1.0), Vector2(0.0, 1.0), Vector2.UP)
-    var verdict_left_short := _v180_finish_verdict(Vector2(-0.06, 0.92), Vector2(0.0, 1.0), Vector2.UP)
-    var verdict_center := _v180_finish_verdict(Vector2(0.01, 1.01), Vector2(0.0, 1.0), Vector2.UP)
+    var verdict_right := _v180_finish_verdict(Vector2(0.08, 1.0), Vector2(0.0, 1.0), Vector2.DOWN)
+    var verdict_left_short := _v180_finish_verdict(Vector2(-0.06, 0.92), Vector2(0.0, 1.0), Vector2.DOWN)
+    var verdict_center := _v180_finish_verdict(Vector2(0.01, 1.01), Vector2(0.0, 1.0), Vector2.DOWN)
     if verdict_right != "8 cm RIGHT  ·  PACE OK" or verdict_left_short != "6 cm LEFT  ·  8 cm SHORT" or verdict_center != "ON LINE  ·  PACE OK":
         push_error("Replay miss-direction semantics regression: %s / %s / %s" % [verdict_right, verdict_left_short, verdict_center])
         probe.free()
