@@ -111,10 +111,18 @@ func _run_apex_preview_regression() -> bool:
         get_tree().quit(38)
         return false
     _seed_replay_compare_preview()
-    if not _v180_compare_primary.text.begins_with("AVG ") or not _v180_compare_primary.text.contains("PEAK ") or not _v180_compare_secondary.text.begins_with("FINISH Δ "):
-        push_error("Replay read-vs-roll comparison regression")
+    if not _v180_compare_primary.text.begins_with("AVG ") or not _v180_compare_primary.text.contains("PEAK ") or _v180_compare_secondary.text.find("RIGHT") < 0 or _v180_compare_secondary.text.find("PACE OK") < 0:
+        push_error("Replay directional finish verdict regression: %s" % _v180_compare_secondary.text)
         probe.free()
         get_tree().quit(38)
+        return false
+    var verdict_right := _v180_finish_verdict(Vector2(0.08, 1.0), Vector2(0.0, 1.0), Vector2.UP)
+    var verdict_left_short := _v180_finish_verdict(Vector2(-0.06, 0.92), Vector2(0.0, 1.0), Vector2.UP)
+    var verdict_center := _v180_finish_verdict(Vector2(0.01, 1.01), Vector2(0.0, 1.0), Vector2.UP)
+    if verdict_right != "8 cm RIGHT  ·  PACE OK" or verdict_left_short != "6 cm LEFT  ·  8 cm SHORT" or verdict_center != "ON LINE  ·  PACE OK":
+        push_error("Replay miss-direction semantics regression: %s / %s / %s" % [verdict_right, verdict_left_short, verdict_center])
+        probe.free()
+        get_tree().quit(39)
         return false
     _replay_compare_preview_ready = true
 
@@ -123,4 +131,5 @@ func _run_apex_preview_regression() -> bool:
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
     print("REPLAY_READ_COMPARE_OK=1")
+    print("REPLAY_FINISH_VERDICT_OK=1")
     return true
