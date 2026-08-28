@@ -13,10 +13,11 @@ const PHASE_RESULT := "RESULT"
 const REPLAY_BAR_HEIGHT := 46.0
 const REPLAY_TIMELINE_SIDE_INSET := 28.0
 const REPLAY_TIMELINE_LABEL_WIDTH := 122.0
-const REPLAY_TIMELINE_STAGE_WIDTH := 142.0
+const REPLAY_TIMELINE_STAGE_WIDTH := 154.0
 const REPLAY_TIMELINE_TRACK_HEIGHT := 3.0
 # Matches the existing cinematic cup-focus handoff without changing camera or shot logic.
 const REPLAY_CUP_CHAPTER_START := 0.72
+const REPLAY_CUP_CHAPTER_FULL := 0.90
 
 var _focus_phase := PHASE_READY
 var _focus_running := false
@@ -28,10 +29,12 @@ var _focus_letterbox_top: ColorRect
 var _focus_letterbox_bottom: ColorRect
 var _focus_replay_timeline: Control
 var _focus_replay_track: ColorRect
+var _focus_replay_blend_range: ColorRect
 var _focus_replay_fill: ColorRect
 var _focus_replay_label: Label
 var _focus_replay_stage_label: Label
 var _focus_replay_chapter_marker: ColorRect
+var _focus_replay_chapter_end_marker: ColorRect
 
 func _build_hud() -> void:
     super._build_hud()
@@ -105,6 +108,14 @@ func _focus_build_replay_timeline() -> void:
     _focus_replay_track.color = Color(0.28, 0.34, 0.38, 0.42)
     _focus_replay_timeline.add_child(_focus_replay_track)
 
+    _focus_replay_blend_range = ColorRect.new()
+    _focus_replay_blend_range.name = "ReplayCameraBlendRange"
+    _focus_replay_blend_range.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _focus_replay_blend_range.position = Vector2.ZERO
+    _focus_replay_blend_range.size = Vector2.ZERO
+    _focus_replay_blend_range.color = Color(0.90, 0.78, 0.40, 0.26)
+    _focus_replay_track.add_child(_focus_replay_blend_range)
+
     _focus_replay_fill = ColorRect.new()
     _focus_replay_fill.name = "ReplayTimelineFill"
     _focus_replay_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -120,6 +131,14 @@ func _focus_build_replay_timeline() -> void:
     _focus_replay_chapter_marker.size = Vector2(2.0, 11.0)
     _focus_replay_chapter_marker.color = Color(0.90, 0.78, 0.40, 0.90)
     _focus_replay_track.add_child(_focus_replay_chapter_marker)
+
+    _focus_replay_chapter_end_marker = ColorRect.new()
+    _focus_replay_chapter_end_marker.name = "ReplayCupCameraFullMarker"
+    _focus_replay_chapter_end_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _focus_replay_chapter_end_marker.position = Vector2.ZERO
+    _focus_replay_chapter_end_marker.size = Vector2(2.0, 11.0)
+    _focus_replay_chapter_end_marker.color = Color(0.90, 0.78, 0.40, 0.62)
+    _focus_replay_track.add_child(_focus_replay_chapter_end_marker)
 
 func _focus_phase_for(running: bool, replaying: bool, showing_result: bool) -> String:
     if running:
@@ -180,7 +199,12 @@ func _focus_replay_progress(remaining: float, duration: float) -> float:
     return clamp(1.0 - max(0.0, remaining) / duration, 0.0, 1.0)
 
 func _focus_replay_stage(progress: float) -> String:
-    return "CUP CAM" if clampf(progress, 0.0, 1.0) >= REPLAY_CUP_CHAPTER_START else "TRAIL CAM"
+    var p := clampf(progress, 0.0, 1.0)
+    if p < REPLAY_CUP_CHAPTER_START:
+        return "TRAIL CAM"
+    if p < REPLAY_CUP_CHAPTER_FULL:
+        return "CAM BLEND"
+    return "CUP CAM"
 
 func _focus_replay_status(progress: float, remaining: float) -> String:
     var stage := _focus_replay_stage(progress)
@@ -193,9 +217,16 @@ func _focus_update_replay_timeline() -> void:
         return
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
     var track_width := maxf(0.0, _focus_replay_track.size.x)
+    var blend_left := track_width * REPLAY_CUP_CHAPTER_START
+    var blend_right := track_width * REPLAY_CUP_CHAPTER_FULL
+    if _focus_replay_blend_range != null:
+        _focus_replay_blend_range.position = Vector2(blend_left, 0.0)
+        _focus_replay_blend_range.size = Vector2(maxf(0.0, blend_right - blend_left), REPLAY_TIMELINE_TRACK_HEIGHT)
     _focus_replay_fill.size = Vector2(track_width * progress, REPLAY_TIMELINE_TRACK_HEIGHT)
     if _focus_replay_chapter_marker != null:
-        _focus_replay_chapter_marker.position = Vector2(maxf(0.0, track_width * REPLAY_CUP_CHAPTER_START - 1.0), -4.0)
+        _focus_replay_chapter_marker.position = Vector2(maxf(0.0, blend_left - 1.0), -4.0)
+    if _focus_replay_chapter_end_marker != null:
+        _focus_replay_chapter_end_marker.position = Vector2(maxf(0.0, blend_right - 1.0), -4.0)
     if _focus_replay_stage_label != null:
         _focus_replay_stage_label.text = _focus_replay_status(progress, _v171_replay_remaining)
 
