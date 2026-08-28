@@ -2,10 +2,29 @@ extends "res://commercial_read_flow_preview.gd"
 
 const ReplayFinish = preload("res://replay_playhead_finish.gd")
 var _replay_playhead_checks_done := false
+var _preview_replay_playhead: ColorRect
+var _preview_replay_chapter_color := Color.WHITE
+
+func _seed_replay_finish_preview() -> void:
+    var track := get_node_or_null("PreviewReplayTimelineTrack") as ColorRect
+    var fill := get_node_or_null("PreviewReplayTimelineFill") as ColorRect
+    var stage := get_node_or_null("PreviewReplayCameraStage") as Label
+    if track == null or fill == null or stage == null:
+        return
+    fill.color = Color(_preview_replay_chapter_color.r, _preview_replay_chapter_color.g, _preview_replay_chapter_color.b, 0.94)
+    stage.add_theme_color_override("font_color", Color(_preview_replay_chapter_color.r, _preview_replay_chapter_color.g, _preview_replay_chapter_color.b, 0.94))
+    _preview_set_alpha(_v179_panel, 0.0)
+    if _preview_replay_playhead != null:
+        _preview_replay_playhead.visible = true
+        _preview_replay_playhead.modulate.a = 1.0
 
 func _process(delta: float) -> void:
     super._process(delta)
-    if _replay_playhead_checks_done or _preview_frames < 18:
+    if _replay_playhead_checks_done:
+        if _capture_started:
+            _seed_replay_finish_preview()
+        return
+    if _preview_frames < 18:
         return
     _replay_playhead_checks_done = true
 
@@ -47,7 +66,7 @@ func _process(delta: float) -> void:
         return
 
     var preview_progress := 0.78
-    var chapter_color: Color = probe._replay_chapter_color(preview_progress)
+    _preview_replay_chapter_color = probe._replay_chapter_color(preview_progress)
     var track := get_node_or_null("PreviewReplayTimelineTrack") as ColorRect
     var fill := get_node_or_null("PreviewReplayTimelineFill") as ColorRect
     var stage := get_node_or_null("PreviewReplayCameraStage") as Label
@@ -57,18 +76,15 @@ func _process(delta: float) -> void:
         get_tree().quit(29)
         return
 
-    fill.color = Color(chapter_color.r, chapter_color.g, chapter_color.b, 0.94)
-    stage.add_theme_color_override("font_color", Color(chapter_color.r, chapter_color.g, chapter_color.b, 0.94))
-    _preview_set_alpha(_v179_panel, probe._replay_session_alpha("REPLAY"))
-
-    var playhead := ColorRect.new()
-    playhead.name = "PreviewReplayCurrentPlayhead"
-    playhead.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    playhead.position = Vector2(track.position.x + probe._replay_playhead_x(preview_progress, track.size.x), track.position.y - 4.0)
-    playhead.size = Vector2(probe.REPLAY_PLAYHEAD_WIDTH, probe.REPLAY_PLAYHEAD_HEIGHT)
-    playhead.color = chapter_color
-    playhead.z_index = 245
-    add_child(playhead)
+    _preview_replay_playhead = ColorRect.new()
+    _preview_replay_playhead.name = "PreviewReplayCurrentPlayhead"
+    _preview_replay_playhead.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _preview_replay_playhead.position = Vector2(track.position.x + probe._replay_playhead_x(preview_progress, track.size.x), track.position.y - 4.0)
+    _preview_replay_playhead.size = Vector2(probe.REPLAY_PLAYHEAD_WIDTH, probe.REPLAY_PLAYHEAD_HEIGHT)
+    _preview_replay_playhead.color = _preview_replay_chapter_color
+    _preview_replay_playhead.z_index = 245
+    add_child(_preview_replay_playhead)
+    _seed_replay_finish_preview()
 
     probe.free()
     print("REPLAY_PLAYHEAD_OK=1")
