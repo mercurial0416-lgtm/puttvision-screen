@@ -28,12 +28,39 @@ func _process(delta: float) -> void:
         push_error("Shot map make-window threshold regression")
         get_tree().quit(28)
         return
-    if _v196_center_legend == null or _v196_center_legend.text != "GREEN = MAKE WINDOW":
-        push_error("Shot map make-window legend regression")
+
+    var fill_points := _v197_window_points()
+    var outline_points := _v197_window_points(true)
+    if fill_points.size() != 4 or outline_points.size() != 5:
+        push_error("Shot map make-window rectangle topology regression")
         get_tree().quit(28)
         return
-    if _v197_make_outline.points.size() != V197_SEGMENTS + 1:
-        push_error("Shot map make-window outline regression")
+    if fill_points[2].distance_to(Vector2(expected_x, expected_y)) > 0.01:
+        push_error("Shot map make-window visual boundary disagrees with verdict")
+        get_tree().quit(28)
+        return
+    if outline_points[0] != outline_points[4]:
+        push_error("Shot map make-window outline is not closed")
+        get_tree().quit(28)
+        return
+
+    _v188_refresh(8.0, 20.0, true)
+    if _v196_center_legend == null or _v196_center_legend.text != "IN MAKE WINDOW":
+        push_error("Shot map make-window success feedback regression")
+        get_tree().quit(28)
+        return
+    if _v197_make_outline.default_color != V197_MAKE_OUTLINE:
+        push_error("Shot map make-window success emphasis regression")
+        get_tree().quit(28)
+        return
+
+    _v188_refresh(9.1, 20.0, true)
+    if _v196_center_legend.text != "OUTSIDE MAKE WINDOW":
+        push_error("Shot map make-window miss feedback regression")
+        get_tree().quit(28)
+        return
+    if _v197_make_outline.default_color != V197_MISS_OUTLINE:
+        push_error("Shot map make-window miss de-emphasis regression")
         get_tree().quit(28)
         return
 
