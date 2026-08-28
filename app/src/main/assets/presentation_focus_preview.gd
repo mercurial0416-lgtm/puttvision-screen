@@ -71,12 +71,29 @@ func _process(delta: float) -> void:
     _preview_set_alpha(_v183_panel, probe._focus_role_alpha(replay_phase, "read"))
     _preview_set_alpha(_v177_panel, probe._focus_role_alpha(replay_phase, "result"))
     _preview_set_alpha(_v188_panel, probe._focus_role_alpha(replay_phase, "result"))
-    probe._focus_build_letterbox()
-    _preview_set_alpha(probe._focus_letterbox_top, probe._focus_role_alpha(replay_phase, "letterbox"))
-    _preview_set_alpha(probe._focus_letterbox_bottom, probe._focus_role_alpha(replay_phase, "letterbox"))
-    add_child(probe)
+    _preview_add_letterbox(probe.REPLAY_BAR_HEIGHT, probe._focus_role_alpha(replay_phase, "letterbox"))
+    probe.free()
     print("PRESENTATION_FOCUS_CHOREOGRAPHY_OK=1")
     print("REPLAY_CINEMATIC_LETTERBOX_OK=1")
+
+func _preview_add_letterbox(height: float, alpha: float) -> void:
+    var top := ColorRect.new()
+    top.name = "PreviewReplayLetterboxTop"
+    top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    top.position = Vector2.ZERO
+    top.size = Vector2(1920.0, height)
+    top.color = Color(0.012, 0.018, 0.024, alpha)
+    top.z_index = 240
+    add_child(top)
+
+    var bottom := ColorRect.new()
+    bottom.name = "PreviewReplayLetterboxBottom"
+    bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    bottom.position = Vector2(0.0, 1080.0 - height)
+    bottom.size = Vector2(1920.0, height)
+    bottom.color = Color(0.012, 0.018, 0.024, alpha)
+    bottom.z_index = 240
+    add_child(bottom)
 
 func _preview_set_alpha(item: CanvasItem, alpha: float) -> void:
     if item == null:
