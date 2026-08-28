@@ -8,7 +8,6 @@ const READ_LAUNCH_WING_HALF_WIDTH := 4.6
 
 var _read_launch_shaft: Line2D
 var _read_launch_head: Line2D
-var _read_launch_badge: Label
 
 func _read_launch_geometry(offset_m: float) -> Dictionary:
     var curve := _v183_path(offset_m)
@@ -62,24 +61,12 @@ func _build_hud() -> void:
     _read_launch_head.end_cap_mode = Line2D.LINE_CAP_ROUND
     _v183_panel.add_child(_read_launch_head)
 
-    _read_launch_badge = _v174_text(
-        _v183_panel,
-        Vector2.ZERO,
-        Vector2(66, 17),
-        "LAUNCH",
-        8,
-        Color(0.70, 0.94, 1.0, 0.96),
-        HORIZONTAL_ALIGNMENT_CENTER
-    )
-    _read_launch_badge.name = "CommercialReadLaunchBadge"
-
 func _refresh_read_launch_vector() -> void:
-    if _v183_panel == null or _read_launch_shaft == null or _read_launch_head == null or _read_launch_badge == null:
+    if _v183_panel == null or _read_launch_shaft == null or _read_launch_head == null:
         return
     var visible := _v183_panel.visible
     _read_launch_shaft.visible = visible
     _read_launch_head.visible = visible
-    _read_launch_badge.visible = visible
     if not visible:
         return
 
@@ -88,10 +75,6 @@ func _refresh_read_launch_vector() -> void:
     var tip: Vector2 = geometry["tip"]
     _read_launch_shaft.points = PackedVector2Array([start, tip])
     _read_launch_head.points = PackedVector2Array([geometry["left"], tip, geometry["right"]])
-
-    var badge_x := clampf(tip.x + (10.0 if _v165_recommended_offset <= 0.0 else -76.0), V183_MAP_ORIGIN.x + 4.0, V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - 70.0)
-    var badge_y := clampf(tip.y + 7.0, V183_MAP_ORIGIN.y + 4.0, V183_MAP_ORIGIN.y + V183_MAP_SIZE.y - 20.0)
-    _read_launch_badge.position = Vector2(badge_x, badge_y)
 
 func _v183_update(s: Dictionary, force_visible: bool = false) -> void:
     super._v183_update(s, force_visible)
