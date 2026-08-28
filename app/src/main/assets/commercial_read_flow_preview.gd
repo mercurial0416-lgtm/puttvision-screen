@@ -9,6 +9,7 @@ var _live_break_preview_ready := false
 var _preview_live_break_panel: Panel
 var _preview_live_break_value: Label
 var _preview_live_break_peak: Label
+var _preview_live_roll_pace: Label
 
 # Keep the rendered regression frame internally honest: the authoritative/base HUD and the
 # commercial green-read panel must describe the same slope. Previously the overview injected a
@@ -31,10 +32,13 @@ func _seed_live_break_preview() -> void:
         _preview_live_break_panel.name = "PreviewLiveBreakMeter"
         _v174_accent(_preview_live_break_panel, Vector2(0, 0), Vector2(6, 92), Color("#73c2d4"))
         _v174_text(_preview_live_break_panel, Vector2(20, 8), Vector2(170, 22), "LIVE BREAK", 13, Color("#bfe9f1"))
+        _preview_live_roll_pace = _v174_text(_preview_live_break_panel, Vector2(190, 8), Vector2(286, 22), "PACE 46% · SETTLING", 12, Color(0.68, 0.82, 0.82, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
+        _preview_live_roll_pace.name = "PreviewLiveRollPace"
         _preview_live_break_value = _v174_text(_preview_live_break_panel, Vector2(20, 30), Vector2(250, 42), "R 12.4 cm", 24, Color("#f4f6f0"))
         _preview_live_break_peak = _v174_text(_preview_live_break_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 18.7 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
     _preview_live_break_panel.visible = true
     _preview_live_break_panel.modulate.a = 1.0
+    _preview_live_roll_pace.text = "PACE 46% · SETTLING"
     _preview_live_break_value.text = "R 12.4 cm"
     _preview_live_break_peak.text = "PEAK 18.7 cm"
 
@@ -135,14 +139,24 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(42)
         return false
+    if probe._live_pace_readout(0.0, 0.0) != "PACE --" or probe._live_pace_readout(0.86, 1.0) != "PACE 86% · ROLLING" or probe._live_pace_readout(0.46, 1.0) != "PACE 46% · SETTLING" or probe._live_pace_readout(0.18, 1.0) != "PACE 18% · DYING":
+        push_error("Live roll pace phase/readout regression")
+        probe.free()
+        get_tree().quit(43)
+        return false
+    if probe._live_pace_readout(2.0, 1.0) != "PACE 100% · ROLLING":
+        push_error("Live roll pace clamp regression")
+        probe.free()
+        get_tree().quit(43)
+        return false
     _seed_live_break_preview()
-    if _preview_live_break_panel == null or _preview_live_break_value == null or _preview_live_break_peak == null:
-        push_error("Live break preview HUD missing")
+    if _preview_live_break_panel == null or _preview_live_break_value == null or _preview_live_break_peak == null or _preview_live_roll_pace == null:
+        push_error("Live roll preview HUD missing")
         probe.free()
         get_tree().quit(42)
         return false
-    if _preview_live_break_value.text != "R 12.4 cm" or _preview_live_break_peak.text != "PEAK 18.7 cm":
-        push_error("Live break meter HUD regression")
+    if _preview_live_break_value.text != "R 12.4 cm" or _preview_live_break_peak.text != "PEAK 18.7 cm" or _preview_live_roll_pace.text != "PACE 46% · SETTLING":
+        push_error("Live roll meter HUD regression")
         probe.free()
         get_tree().quit(42)
         return false
@@ -224,6 +238,7 @@ func _run_apex_preview_regression() -> bool:
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
     print("LIVE_BREAK_METER_OK=1")
+    print("LIVE_ROLL_PACE_OK=1")
     print("SESSION_MAKE_WINDOW_OK=1")
     print("NEXT_REP_COACH_OK=1")
     print("REPLAY_READ_COMPARE_OK=1")
