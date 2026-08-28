@@ -7,6 +7,7 @@ const READ_FLOW_FRACTIONS := [0.40, 0.60, 0.78]
 const READ_FLOW_TIP_LENGTH := 4.8
 const READ_FLOW_WING_HALF_WIDTH := 3.4
 const LIVE_TRACE_MAX_POINTS := 28
+const LIVE_TRACE_SAMPLE_STEP_M := 0.02
 const LIVE_TRACE_LEFT := 20.0
 const LIVE_TRACE_RIGHT := 476.0
 const LIVE_TRACE_CENTER_Y := 81.0
@@ -25,6 +26,8 @@ var _live_curve_launch_speed := 0.0
 var _live_curve_trace: Line2D
 var _live_curve_zero: Line2D
 var _live_curve_history := PackedFloat32Array()
+var _live_curve_last_trace_pos := Vector2.ZERO
+var _live_curve_has_trace_pos := false
 
 func _read_flow_geometry(offset_m: float, fraction: float) -> Dictionary:
     var curve := _v183_path(offset_m)
@@ -151,6 +154,16 @@ func _live_trace_points(history: PackedFloat32Array) -> PackedVector2Array:
         points.append(Vector2(x, y))
     return points
 
+func _live_trace_accept_sample(ball_pos: Vector2) -> bool:
+    if not _live_curve_has_trace_pos:
+        _live_curve_last_trace_pos = ball_pos
+        _live_curve_has_trace_pos = true
+        return true
+    if ball_pos.distance_squared_to(_live_curve_last_trace_pos) < LIVE_TRACE_SAMPLE_STEP_M * LIVE_TRACE_SAMPLE_STEP_M:
+        return false
+    _live_curve_last_trace_pos = ball_pos
+    return true
+
 func _live_trace_push(cross_track_cm: float) -> void:
     _live_curve_history.append(cross_track_cm)
     while _live_curve_history.size() > LIVE_TRACE_MAX_POINTS:
@@ -160,8 +173,9 @@ func _live_trace_push(cross_track_cm: float) -> void:
 
 # Make the authoritative roll response obvious without touching physics. During a live roll the
 # dedicated meter reports current/peak cross-track curve, speed decay, and a bounded mini trace of
-# the curve history from bridge snapshots; nothing feeds back into GreenTerrain, GreenReadAdvisor,
-# scoring, aim, or Android physics.
+# the curve history from bridge snapshots. Trace samples are distance-gated so duplicate/repeated
+# bridge frames cannot distort the curve on different refresh rates; nothing feeds back into
+# GreenTerrain, GreenReadAdvisor, scoring, aim, or Android physics.
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
     var running := bool(s.get("running", false))
@@ -172,6 +186,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         _live_curve_peak_cm = 0.0
         _live_curve_launch_speed = velocity.length()
         _live_curve_history.clear()
+        _live_curve_has_trace_pos = false
         if _live_curve_trace != null:
             _live_curve_trace.clear_points()
 
@@ -183,7 +198,8 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
         var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
         _live_curve_peak_cm = maxf(_live_curve_peak_cm, absf(cross_track_cm))
-        _live_trace_push(cross_track_cm)
+        if _live_trace_accept_sample(ball_pos):
+            _live_trace_push(cross_track_cm)
         if _live_curve_value != null:
             _live_curve_value.text = _live_curve_readout(cross_track_cm)
         if _live_curve_peak_label != null:
