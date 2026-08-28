@@ -12,7 +12,8 @@ func _seed_replay_finish_preview() -> void:
     var stage := get_node_or_null("PreviewReplayCameraStage") as Label
     if track == null or fill == null or stage == null:
         return
-    var bounds := ReplayFinish.new()._replay_stage_bounds(1920.0)
+    var probe = ReplayFinish.new()
+    var bounds := probe._replay_stage_bounds(1920.0)
     stage.position.x = bounds.x
     stage.size.x = bounds.y - bounds.x
     track.size.x = maxf(120.0, bounds.x - 14.0 - track.position.x)
@@ -23,9 +24,10 @@ func _seed_replay_finish_preview() -> void:
     stage.add_theme_color_override("font_color", Color(_preview_replay_chapter_color.r, _preview_replay_chapter_color.g, _preview_replay_chapter_color.b, 0.94))
     _preview_set_alpha(_v179_panel, 0.0)
     if _preview_replay_playhead != null:
-        _preview_replay_playhead.position.x = track.position.x + ReplayFinish.new()._replay_playhead_x(_preview_replay_progress, track.size.x)
+        _preview_replay_playhead.position.x = track.position.x + probe._replay_playhead_x(_preview_replay_progress, track.size.x)
         _preview_replay_playhead.visible = true
         _preview_replay_playhead.modulate.a = 1.0
+    probe.free()
 
 func _process(delta: float) -> void:
     super._process(delta)
@@ -103,9 +105,9 @@ func _process(delta: float) -> void:
     _preview_replay_playhead.color = _preview_replay_chapter_color
     _preview_replay_playhead.z_index = ReplayFinish.REPLAY_TIMELINE_TOP_Z + 2
     add_child(_preview_replay_playhead)
+    probe.free()
     _seed_replay_finish_preview()
 
-    probe.free()
     print("REPLAY_PLAYHEAD_OK=1")
     print("REPLAY_CHAPTER_COLOR_OK=1")
     print("REPLAY_CAMERA_SAFE_AREA_OK=1")
