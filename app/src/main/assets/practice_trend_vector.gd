@@ -11,10 +11,16 @@ const PRACTICE_TREND_MIN_PIXELS := 5.0
 const PRACTICE_TREND_STATE_DEADBAND := 0.05
 const PRACTICE_TREND_WING_LENGTH := 6.5
 const PRACTICE_TREND_WING_HALF_WIDTH := 4.0
+const PRACTICE_RECENT_GROUP_SIZE := 3
+const PRACTICE_RECENT_RING_MIN_RADIUS := 8.0
+const PRACTICE_RECENT_RING_MAX_RADIUS := 22.0
+const PRACTICE_RECENT_RING_PADDING := 5.0
+const PRACTICE_RECENT_RING_SEGMENTS := 20
 
 var _practice_trend_line: Line2D
 var _practice_trend_head: Line2D
 var _practice_trend_label: Label
+var _practice_recent_ring: Line2D
 
 func _practice_trend_mean(samples: Array[Vector2], from_index: int, count: int) -> Vector2:
     if samples.is_empty() or count <= 0:
@@ -74,10 +80,37 @@ func _practice_trend_geometry(samples: Array[Vector2]) -> Dictionary:
         "right": base - normal * PRACTICE_TREND_WING_HALF_WIDTH
     }
 
+func _practice_recent_ring_geometry(samples: Array[Vector2]) -> Dictionary:
+    if samples.size() < PRACTICE_TREND_MIN_SAMPLES:
+        return {"visible": false}
+    var count := mini(PRACTICE_RECENT_GROUP_SIZE, samples.size())
+    var from_index := samples.size() - count
+    var recent := _practice_trend_mean(samples, from_index, count)
+    var center := _v179_plot_position(recent)
+    var max_distance := 0.0
+    for index in range(from_index, samples.size()):
+        max_distance = maxf(max_distance, _v179_plot_position(samples[index]).distance_to(center))
+    var radius := clampf(max_distance + PRACTICE_RECENT_RING_PADDING, PRACTICE_RECENT_RING_MIN_RADIUS, PRACTICE_RECENT_RING_MAX_RADIUS)
+    var points := PackedVector2Array()
+    for step in range(PRACTICE_RECENT_RING_SEGMENTS + 1):
+        var angle := TAU * float(step) / float(PRACTICE_RECENT_RING_SEGMENTS)
+        points.append(center + Vector2(cos(angle), sin(angle)) * radius)
+    return {"visible": true, "center": center, "radius": radius, "points": points}
+
 func _build_hud() -> void:
     super._build_hud()
     if _v179_plot == null or _v179_panel == null:
         return
+
+    _practice_recent_ring = Line2D.new()
+    _practice_recent_ring.name = "PracticeRecentConsistencyRing"
+    _practice_recent_ring.width = 1.5
+    _practice_recent_ring.default_color = Color(0.72, 0.90, 0.96, 0.78)
+    _practice_recent_ring.joint_mode = Line2D.LINE_JOINT_ROUND
+    _practice_recent_ring.begin_cap_mode = Line2D.LINE_CAP_ROUND
+    _practice_recent_ring.end_cap_mode = Line2D.LINE_CAP_ROUND
+    _practice_recent_ring.visible = false
+    _v179_plot.add_child(_practice_recent_ring)
 
     _practice_trend_line = Line2D.new()
     _practice_trend_line.name = "PracticeTrendVector"
@@ -108,14 +141,18 @@ func _build_hud() -> void:
     _practice_trend_refresh()
 
 func _practice_trend_refresh() -> void:
-    if _practice_trend_line == null or _practice_trend_head == null or _practice_trend_label == null:
+    if _practice_trend_line == null or _practice_trend_head == null or _practice_trend_label == null or _practice_recent_ring == null:
         return
     var geometry := _practice_trend_geometry(_v179_samples)
+    var recent_ring := _practice_recent_ring_geometry(_v179_samples)
     var state := str(geometry.get("state", "BUILDING"))
     var visible := bool(geometry.get("visible", false))
     _practice_trend_line.visible = visible
     _practice_trend_head.visible = visible
     _practice_trend_label.visible = _v179_samples.size() >= PRACTICE_TREND_MIN_SAMPLES
+    _practice_recent_ring.visible = bool(recent_ring.get("visible", false))
+    if _practice_recent_ring.visible:
+        _practice_recent_ring.points = recent_ring["points"]
 
     var color := Color(0.48, 0.82, 0.92, 0.86)
     if state == "TIGHTENING":
