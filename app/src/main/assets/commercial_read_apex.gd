@@ -17,7 +17,7 @@ func _read_apex_point(offset_m: float) -> Vector2:
     var curve := _v183_path(offset_m)
     if curve.is_empty():
         return V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
-    return curve[curve.size() / 2]
+    return curve[int(curve.size() / 2)]
 
 func _build_hud() -> void:
     super._build_hud()
