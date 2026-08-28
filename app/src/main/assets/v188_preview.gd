@@ -1,4 +1,4 @@
-extends "res://v196_shot_map_hierarchy.gd"
+extends "res://v197_shot_map_make_window.gd"
 
 var _preview_frames := 0
 var _capture_started := false
