@@ -89,8 +89,9 @@ func _process(delta: float) -> void:
             return
         _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
         _v171_replay_predicted = [Vector2(0.0, 1.0), Vector2(0.03, 3.0), Vector2(0.04, 5.0), Vector2(0.0, 6.5)]
-        _v171_replay_duration = 2.8
-        _v171_replay_remaining = 0.20
+        # Keep the synthetic replay alive long enough for the rendered regression frame.
+        _v171_replay_duration = 10.0
+        _v171_replay_remaining = 1.20
         var final_point := _v180_final_point()
         if final_point.distance_to(Vector2(0.05, 6.5)) > 0.001:
             push_error("Replay final-point regression")
