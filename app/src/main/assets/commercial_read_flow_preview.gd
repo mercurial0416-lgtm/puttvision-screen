@@ -10,6 +10,7 @@ var _preview_live_break_panel: Panel
 var _preview_live_break_value: Label
 var _preview_live_break_peak: Label
 var _preview_live_roll_pace: Label
+var _preview_live_break_trace: Line2D
 
 # Keep the rendered regression frame internally honest: the authoritative/base HUD and the
 # commercial green-read panel must describe the same slope. Previously the overview injected a
@@ -36,11 +37,29 @@ func _seed_live_break_preview() -> void:
         _preview_live_roll_pace.name = "PreviewLiveRollPace"
         _preview_live_break_value = _v174_text(_preview_live_break_panel, Vector2(20, 30), Vector2(250, 42), "R 12.4 cm", 24, Color("#f4f6f0"))
         _preview_live_break_peak = _v174_text(_preview_live_break_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 18.7 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
+        var zero := Line2D.new()
+        zero.name = "PreviewLiveBreakTraceZero"
+        zero.width = 1.0
+        zero.default_color = Color(0.48, 0.68, 0.72, 0.18)
+        zero.points = PackedVector2Array([Vector2(20, 81), Vector2(476, 81)])
+        _preview_live_break_panel.add_child(zero)
+        _preview_live_break_trace = Line2D.new()
+        _preview_live_break_trace.name = "PreviewLiveBreakTrace"
+        _preview_live_break_trace.width = 1.8
+        _preview_live_break_trace.default_color = Color(0.45, 0.86, 0.92, 0.82)
+        _preview_live_break_trace.joint_mode = Line2D.LINE_JOINT_ROUND
+        _preview_live_break_trace.begin_cap_mode = Line2D.LINE_CAP_ROUND
+        _preview_live_break_trace.end_cap_mode = Line2D.LINE_CAP_ROUND
+        _preview_live_break_panel.add_child(_preview_live_break_trace)
     _preview_live_break_panel.visible = true
     _preview_live_break_panel.modulate.a = 1.0
     _preview_live_roll_pace.text = "PACE 46% · SETTLING"
     _preview_live_break_value.text = "R 12.4 cm"
     _preview_live_break_peak.text = "PEAK 18.7 cm"
+    var preview_history := PackedFloat32Array([0.0, 0.8, 2.2, 4.8, 7.1, 10.0, 12.4, 15.8, 18.7])
+    var probe = FlowScene.new()
+    _preview_live_break_trace.points = probe._live_trace_points(preview_history)
+    probe.free()
 
 func _process(delta: float) -> void:
     super._process(delta)
@@ -149,13 +168,34 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(43)
         return false
+
+    var trace_history := PackedFloat32Array([-10.0, 0.0, 10.0])
+    var trace_points := probe._live_trace_points(trace_history)
+    if trace_points.size() != 3 or absf(trace_points[0].x - probe.LIVE_TRACE_LEFT) > 0.01 or absf(trace_points[2].x - probe.LIVE_TRACE_RIGHT) > 0.01:
+        push_error("Live break trace span regression")
+        probe.free()
+        get_tree().quit(44)
+        return false
+    if trace_points[0].y <= probe.LIVE_TRACE_CENTER_Y or absf(trace_points[1].y - probe.LIVE_TRACE_CENTER_Y) > 0.01 or trace_points[2].y >= probe.LIVE_TRACE_CENTER_Y:
+        push_error("Live break trace direction regression")
+        probe.free()
+        get_tree().quit(44)
+        return false
+    for i in range(probe.LIVE_TRACE_MAX_POINTS + 6):
+        probe._live_trace_push(float(i))
+    if probe._live_curve_history.size() != probe.LIVE_TRACE_MAX_POINTS:
+        push_error("Live break trace bounded-history regression")
+        probe.free()
+        get_tree().quit(44)
+        return false
+
     _seed_live_break_preview()
-    if _preview_live_break_panel == null or _preview_live_break_value == null or _preview_live_break_peak == null or _preview_live_roll_pace == null:
+    if _preview_live_break_panel == null or _preview_live_break_value == null or _preview_live_break_peak == null or _preview_live_roll_pace == null or _preview_live_break_trace == null:
         push_error("Live roll preview HUD missing")
         probe.free()
         get_tree().quit(42)
         return false
-    if _preview_live_break_value.text != "R 12.4 cm" or _preview_live_break_peak.text != "PEAK 18.7 cm" or _preview_live_roll_pace.text != "PACE 46% · SETTLING":
+    if _preview_live_break_value.text != "R 12.4 cm" or _preview_live_break_peak.text != "PEAK 18.7 cm" or _preview_live_roll_pace.text != "PACE 46% · SETTLING" or _preview_live_break_trace.points.size() < 5:
         push_error("Live roll meter HUD regression")
         probe.free()
         get_tree().quit(42)
@@ -239,6 +279,7 @@ func _run_apex_preview_regression() -> bool:
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
     print("LIVE_BREAK_METER_OK=1")
     print("LIVE_ROLL_PACE_OK=1")
+    print("LIVE_BREAK_TRACE_OK=1")
     print("SESSION_MAKE_WINDOW_OK=1")
     print("NEXT_REP_COACH_OK=1")
     print("REPLAY_READ_COMPARE_OK=1")
