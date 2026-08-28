@@ -105,6 +105,19 @@ func _run_apex_preview_regression() -> bool:
             cue.points = PackedVector2Array([left, tip, right])
             _v183_panel.add_child(cue)
 
+    probe._v179_samples = [Vector2(-8, -18), Vector2(-3, 10), Vector2(5, 22), Vector2(7, 6), Vector2(3, 14)]
+    if probe._v179_make_count() != 2 or probe._v179_make_rate_text() != "WINDOW 2/5":
+        push_error("Session make-window tally regression: %s" % probe._v179_make_rate_text())
+        probe.free()
+        get_tree().quit(40)
+        return false
+    probe._v179_samples = [Vector2(-5, -15), Vector2(5, 15), Vector2(5.01, 0), Vector2(0, 15.01)]
+    if probe._v179_make_count() != 2:
+        push_error("Session make-window boundary regression: %d" % probe._v179_make_count())
+        probe.free()
+        get_tree().quit(40)
+        return false
+
     if _v180_compare_chip == null or _v180_compare_primary == null or _v180_compare_secondary == null:
         push_error("Current TV preview missing replay read comparison HUD")
         probe.free()
@@ -130,6 +143,7 @@ func _run_apex_preview_regression() -> bool:
     print("COMMERCIAL_READ_FLOW_OK=1")
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
+    print("SESSION_MAKE_WINDOW_OK=1")
     print("REPLAY_READ_COMPARE_OK=1")
     print("REPLAY_FINISH_VERDICT_OK=1")
     return true
