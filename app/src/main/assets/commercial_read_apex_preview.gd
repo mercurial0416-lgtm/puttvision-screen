@@ -61,7 +61,7 @@ func _run_apex_preview_regression() -> bool:
         return false
     var mid := int(regression_curve.size() / 2)
     var corridor_width := left_edge[mid].distance_to(right_edge[mid])
-    if absf(corridor_width - READ_CORRIDOR_HALF_WIDTH * 2.0) > 0.35:
+    if absf(corridor_width - 13.0) > 0.35:
         push_error("Read corridor width regression")
         probe.free()
         get_tree().quit(32)
