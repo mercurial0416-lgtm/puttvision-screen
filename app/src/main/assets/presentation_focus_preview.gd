@@ -40,24 +40,43 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    if probe._focus_role_alpha("REPLAY", "letterbox") < 0.60:
+        push_error("Replay cinematic framing regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._focus_role_alpha("READY", "letterbox") > 0.01 or probe._focus_role_alpha("RESULT", "letterbox") > 0.01:
+        push_error("Replay letterbox leaks outside replay phase")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe.REPLAY_BAR_HEIGHT - 46.0) > 0.1:
+        push_error("Replay letterbox safe-height regression")
+        probe.free()
+        get_tree().quit(29)
+        return
 
-    # Render the result-focused hierarchy in the CI screenshot: coaching remains full-strength
-    # while setup telemetry recedes. This makes the behavior visually reviewable, not node-only.
-    var result_phase := "RESULT"
+    # Render replay-focused hierarchy in the CI screenshot: setup overlays recede while
+    # cinematic framing becomes visible around the active camera without touching physics.
+    var replay_phase := "REPLAY"
     var target_card := distance_label.get_parent() as CanvasItem if distance_label != null else null
     var telemetry_card := speed_label.get_parent() as CanvasItem if speed_label != null else null
     var break_card := _v174_break_value.get_parent() as CanvasItem if _v174_break_value != null else null
     var state_card := _v174_state_label.get_parent() as CanvasItem if _v174_state_label != null else null
-    _preview_set_alpha(target_card, probe._focus_role_alpha(result_phase, "target"))
-    _preview_set_alpha(telemetry_card, probe._focus_role_alpha(result_phase, "telemetry"))
-    _preview_set_alpha(break_card, probe._focus_role_alpha(result_phase, "break"))
-    _preview_set_alpha(state_card, probe._focus_role_alpha(result_phase, "state"))
-    _preview_set_alpha(_v176_panel, probe._focus_role_alpha(result_phase, "read"))
-    _preview_set_alpha(_v183_panel, probe._focus_role_alpha(result_phase, "read"))
-    _preview_set_alpha(_v177_panel, probe._focus_role_alpha(result_phase, "result"))
-    _preview_set_alpha(_v188_panel, probe._focus_role_alpha(result_phase, "result"))
-    probe.free()
+    _preview_set_alpha(target_card, probe._focus_role_alpha(replay_phase, "target"))
+    _preview_set_alpha(telemetry_card, probe._focus_role_alpha(replay_phase, "telemetry"))
+    _preview_set_alpha(break_card, probe._focus_role_alpha(replay_phase, "break"))
+    _preview_set_alpha(state_card, probe._focus_role_alpha(replay_phase, "state"))
+    _preview_set_alpha(_v176_panel, probe._focus_role_alpha(replay_phase, "read"))
+    _preview_set_alpha(_v183_panel, probe._focus_role_alpha(replay_phase, "read"))
+    _preview_set_alpha(_v177_panel, probe._focus_role_alpha(replay_phase, "result"))
+    _preview_set_alpha(_v188_panel, probe._focus_role_alpha(replay_phase, "result"))
+    probe._focus_build_letterbox()
+    _preview_set_alpha(probe._focus_letterbox_top, probe._focus_role_alpha(replay_phase, "letterbox"))
+    _preview_set_alpha(probe._focus_letterbox_bottom, probe._focus_role_alpha(replay_phase, "letterbox"))
+    add_child(probe)
     print("PRESENTATION_FOCUS_CHOREOGRAPHY_OK=1")
+    print("REPLAY_CINEMATIC_LETTERBOX_OK=1")
 
 func _preview_set_alpha(item: CanvasItem, alpha: float) -> void:
     if item == null:
