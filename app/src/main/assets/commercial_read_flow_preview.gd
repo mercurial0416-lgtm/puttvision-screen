@@ -23,6 +23,27 @@ func _run_apex_preview_regression() -> bool:
         return false
 
     var probe = FlowScene.new()
+    if probe._v174_direction(PREVIEW_SIDE_SLOPE) != "RIGHT" or probe._v183_break_text(PREVIEW_SIDE_SLOPE) != "BREAK  R 1.35%":
+        push_error("Positive side slope no longer labels the authoritative right break")
+        probe.free()
+        get_tree().quit(36)
+        return false
+    if probe._v174_direction(-PREVIEW_SIDE_SLOPE) != "LEFT" or probe._v183_break_text(-PREVIEW_SIDE_SLOPE) != "BREAK  L 1.35%":
+        push_error("Negative side slope no longer labels the authoritative left break")
+        probe.free()
+        get_tree().quit(36)
+        return false
+    if probe._v174_grade(PREVIEW_LONG_SLOPE) != "UPHILL" or probe._v183_grade_text(PREVIEW_LONG_SLOPE) != "GRADE  UP 0.55%":
+        push_error("Negative longitudinal slope no longer labels uphill consistently")
+        probe.free()
+        get_tree().quit(37)
+        return false
+    if probe._v174_grade(-PREVIEW_LONG_SLOPE) != "DOWNHILL" or probe._v183_grade_text(-PREVIEW_LONG_SLOPE) != "GRADE  DOWN 0.55%":
+        push_error("Positive longitudinal slope no longer labels downhill consistently")
+        probe.free()
+        get_tree().quit(37)
+        return false
+
     var previous_center: Vector2 = Vector2.ZERO
     for i in range(probe.READ_FLOW_FRACTIONS.size()):
         var fraction: float = probe.READ_FLOW_FRACTIONS[i]
@@ -64,4 +85,5 @@ func _run_apex_preview_regression() -> bool:
     probe.free()
     print("COMMERCIAL_READ_FLOW_OK=1")
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
+    print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
     return true
