@@ -18,6 +18,7 @@ var _v180_compare_was_active := false
 const V180_FOCUS_START := 0.72
 const V180_FOCUS_FULL := 0.90
 const V180_COMPARE_SAMPLES := 20
+const V180_FINISH_DEADBAND_CM := 2.0
 
 func _build_hud() -> void:
     super._build_hud()
@@ -41,7 +42,7 @@ func _build_hud() -> void:
     _v174_accent(_v180_compare_chip, Vector2(0, 0), Vector2(5, 112), Color("#73c2d4"))
     _v180_compare_title = _v174_text(_v180_compare_chip, Vector2(18, 9), Vector2(292, 20), "READ vs ROLL", 13, Color("#bfe9f1"))
     _v180_compare_primary = _v174_text(_v180_compare_chip, Vector2(18, 38), Vector2(292, 26), "PATH DEV --", 18, Color(0.94, 0.96, 0.95, 0.98), HORIZONTAL_ALIGNMENT_RIGHT)
-    _v180_compare_secondary = _v174_text(_v180_compare_chip, Vector2(18, 72), Vector2(292, 20), "ADVISOR / ACTUAL", 12, Color(0.65, 0.72, 0.70, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v180_compare_secondary = _v174_text(_v180_compare_chip, Vector2(18, 72), Vector2(292, 20), "FINISH VERDICT --", 12, Color(0.65, 0.72, 0.70, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
 
 func _v180_focus_amount(progress: float) -> float:
     return smoothstep(V180_FOCUS_START, V180_FOCUS_FULL, clampf(progress, 0.0, 1.0))
@@ -62,6 +63,24 @@ func _v180_distance_to_cup_cm(progress: float) -> float:
         return 0.0
     var current := _v175_trail_point(_v171_replay_actual, smoothstep(0.0, 1.0, progress))
     return current.distance_to(_v180_cup_point()) * 100.0
+
+func _v180_finish_verdict(actual: Vector2, predicted: Vector2, predicted_heading: Vector2) -> String:
+    var heading := predicted_heading.normalized()
+    if heading.length_squared() < 0.001:
+        heading = Vector2.UP
+    var right := Vector2(heading.y, -heading.x)
+    var miss := actual - predicted
+    var lateral_cm := miss.dot(right) * 100.0
+    var pace_cm := miss.dot(heading) * 100.0
+
+    var lateral := "ON LINE"
+    if absf(lateral_cm) >= V180_FINISH_DEADBAND_CM:
+        lateral = "%d cm %s" % [int(round(absf(lateral_cm))), "RIGHT" if lateral_cm > 0.0 else "LEFT"]
+
+    var pace := "PACE OK"
+    if absf(pace_cm) >= V180_FINISH_DEADBAND_CM:
+        pace = "%d cm %s" % [int(round(absf(pace_cm))), "LONG" if pace_cm > 0.0 else "SHORT"]
+    return "%s  ·  %s" % [lateral, pace]
 
 func _v180_refresh_compare() -> void:
     if _v180_compare_primary == null or _v180_compare_secondary == null:
@@ -84,10 +103,10 @@ func _v180_refresh_compare() -> void:
     var peak_cm := peak_dev * 100.0
     var actual_finish := _v171_replay_actual[_v171_replay_actual.size() - 1] as Vector2
     var predicted_finish := _v171_replay_predicted[_v171_replay_predicted.size() - 1] as Vector2
-    var finish_cm := actual_finish.distance_to(predicted_finish) * 100.0
+    var predicted_heading := _v175_trail_heading(_v171_replay_predicted, 0.965)
 
     _v180_compare_primary.text = "AVG %d cm  ·  PEAK %d cm" % [int(round(avg_cm)), int(round(peak_cm))]
-    _v180_compare_secondary.text = "FINISH Δ %d cm  ·  ADVISOR / ACTUAL" % int(round(finish_cm))
+    _v180_compare_secondary.text = _v180_finish_verdict(actual_finish, predicted_finish, predicted_heading)
 
 func _process(delta: float) -> void:
     super._process(delta)
