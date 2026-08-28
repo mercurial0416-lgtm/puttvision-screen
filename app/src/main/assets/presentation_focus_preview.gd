@@ -138,8 +138,8 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     label.z_index = 242
     add_child(label)
 
-    var track_left := side_inset + label_width
-    var track_width := max(1.0, 1920.0 - track_left - side_inset)
+    var track_left: float = side_inset + label_width
+    var track_width: float = maxf(1.0, 1920.0 - track_left - side_inset)
     var track := ColorRect.new()
     track.name = "PreviewReplayTimelineTrack"
     track.position = Vector2(track_left, 1080.0 - bar_height + 22.0)
@@ -151,7 +151,7 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     var fill := ColorRect.new()
     fill.name = "PreviewReplayTimelineFill"
     fill.position = track.position
-    fill.size = Vector2(track_width * clamp(progress, 0.0, 1.0), track_height)
+    fill.size = Vector2(track_width * clampf(progress, 0.0, 1.0), track_height)
     fill.color = Color(0.88, 0.95, 0.98, 0.94 * alpha)
     fill.z_index = 243
     add_child(fill)
