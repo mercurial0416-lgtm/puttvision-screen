@@ -1,7 +1,9 @@
 extends "res://commercial_read_flow_preview.gd"
 
 const ReplayPlayheadScene = preload("res://replay_playhead_polish.gd")
+const ReadLaunchScene = preload("res://read_launch_vector.gd")
 var _replay_playhead_checks_done := false
+var _read_launch_preview_added := false
 
 func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: float, side_inset: float, label_width: float, stage_width: float, track_height: float, chapter_start: float, chapter_full: float, stage_text: String) -> void:
     super._preview_add_replay_timeline(progress, alpha, bar_height, side_inset, label_width, stage_width, track_height, chapter_start, chapter_full, stage_text)
@@ -42,7 +44,43 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     playhead.z_index = 247
     add_child(playhead)
 
+func _preview_add_read_launch_vector() -> void:
+    if _v183_panel == null:
+        return
+    var probe = ReadLaunchScene.new()
+    var geometry := probe._read_launch_geometry(0.42)
+    var start: Vector2 = geometry["start"]
+    var tip: Vector2 = geometry["tip"]
+
+    var shaft := Line2D.new()
+    shaft.name = "PreviewCommercialReadLaunchShaft"
+    shaft.width = 2.7
+    shaft.default_color = Color(0.48, 0.91, 1.0, 0.94)
+    shaft.begin_cap_mode = Line2D.LINE_CAP_ROUND
+    shaft.end_cap_mode = Line2D.LINE_CAP_ROUND
+    shaft.points = PackedVector2Array([start, tip])
+    _v183_panel.add_child(shaft)
+
+    var head := Line2D.new()
+    head.name = "PreviewCommercialReadLaunchHead"
+    head.width = 2.7
+    head.default_color = Color(0.74, 0.96, 1.0, 0.98)
+    head.joint_mode = Line2D.LINE_JOINT_ROUND
+    head.begin_cap_mode = Line2D.LINE_CAP_ROUND
+    head.end_cap_mode = Line2D.LINE_CAP_ROUND
+    head.points = PackedVector2Array([geometry["left"], tip, geometry["right"]])
+    _v183_panel.add_child(head)
+
+    var badge_x := clampf(tip.x - 76.0, V183_MAP_ORIGIN.x + 4.0, V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - 70.0)
+    var badge_y := clampf(tip.y + 7.0, V183_MAP_ORIGIN.y + 4.0, V183_MAP_ORIGIN.y + V183_MAP_SIZE.y - 20.0)
+    var badge := _v174_text(_v183_panel, Vector2(badge_x, badge_y), Vector2(66, 17), "LAUNCH", 8, Color(0.70, 0.94, 1.0, 0.96), HORIZONTAL_ALIGNMENT_CENTER)
+    badge.name = "PreviewCommercialReadLaunchBadge"
+    probe.free()
+
 func _process(delta: float) -> void:
+    if not _read_launch_preview_added and _preview_frames >= 11:
+        _read_launch_preview_added = true
+        _preview_add_read_launch_vector()
     super._process(delta)
     if _replay_playhead_checks_done or _preview_frames < 15:
         return
@@ -86,6 +124,40 @@ func _process(delta: float) -> void:
         get_tree().quit(29)
         return
     probe.free()
+
+    var launch_probe = ReadLaunchScene.new()
+    var right_launch := launch_probe._read_launch_geometry(0.42)
+    var left_launch := launch_probe._read_launch_geometry(-0.42)
+    var right_start: Vector2 = right_launch["start"]
+    var right_tip: Vector2 = right_launch["tip"]
+    var left_start: Vector2 = left_launch["start"]
+    var left_tip: Vector2 = left_launch["tip"]
+    if right_tip.x <= right_start.x or left_tip.x >= left_start.x:
+        push_error("Read launch-vector side-direction regression")
+        launch_probe.free()
+        get_tree().quit(34)
+        return
+    if right_start.distance_to(right_tip) < 18.0:
+        push_error("Read launch-vector visibility length regression")
+        launch_probe.free()
+        get_tree().quit(34)
+        return
+    var right_left: Vector2 = right_launch["left"]
+    var right_right: Vector2 = right_launch["right"]
+    if absf(right_left.distance_to(right_right) - 9.2) > 0.35:
+        push_error("Read launch-vector arrowhead width regression")
+        launch_probe.free()
+        get_tree().quit(34)
+        return
+    var tangent: Vector2 = right_launch["tangent"]
+    if absf(tangent.length() - 1.0) > 0.01:
+        push_error("Read launch-vector tangent regression")
+        launch_probe.free()
+        get_tree().quit(34)
+        return
+    launch_probe.free()
+
     print("REPLAY_PLAYHEAD_VISIBILITY_OK=1")
     print("REPLAY_BLEND_LAYERING_OK=1")
     print("REPLAY_FINISH_ZONE_OK=1")
+    print("COMMERCIAL_READ_LAUNCH_VECTOR_OK=1")
