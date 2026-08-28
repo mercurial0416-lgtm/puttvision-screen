@@ -66,7 +66,7 @@ func _build_hud() -> void:
     # Dedicated live-break telemetry keeps the base GREEN READ card stable while the ball rolls.
     # It is derived only from bridge snapshots and is hidden outside the live shot, so Forward Mobile
     # pays no persistent drawing/animation cost and the authoritative solver remains untouched.
-    _live_curve_panel = _v174_panel(root, Vector2(1392, 160), Vector2(498, 92), Color(0.014, 0.021, 0.026, 0.88), Color(0.45, 0.72, 0.82, 0.22), 13)
+    _live_curve_panel = _v174_panel(root, Vector2(1392, 310), Vector2(498, 92), Color(0.014, 0.021, 0.026, 0.88), Color(0.45, 0.72, 0.82, 0.22), 13)
     _live_curve_panel.name = "LiveBreakMeter"
     _live_curve_panel.visible = false
     _v174_accent(_live_curve_panel, Vector2(0, 0), Vector2(6, 92), Color("#73c2d4"))
