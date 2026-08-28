@@ -5,6 +5,7 @@ const PREVIEW_SIDE_SLOPE := 1.35
 const PREVIEW_LONG_SLOPE := -0.55
 
 var _replay_compare_preview_ready := false
+var _live_break_preview_ready := false
 
 # Keep the rendered regression frame internally honest: the authoritative/base HUD and the
 # commercial green-read panel must describe the same slope. Previously the overview injected a
@@ -17,10 +18,15 @@ func _snapshot() -> Dictionary:
 
 func _process(delta: float) -> void:
     super._process(delta)
-    # The parent preview captures on a deferred frame. Hold the synthetic replay after all parent
-    # snapshot/focus choreography so the uploaded image proves this HUD is actually visible.
+    # The parent preview captures on a deferred frame. Hold synthetic presentation states after all
+    # parent snapshot/focus choreography so the uploaded image proves these HUDs are actually visible.
     if _replay_compare_preview_ready and _capture_started:
         _seed_replay_compare_preview()
+    if _live_break_preview_ready and _capture_started and _live_curve_panel != null:
+        _live_curve_panel.visible = true
+        _live_curve_panel.modulate.a = 1.0
+        _live_curve_value.text = "R 12.4 cm"
+        _live_curve_peak_label.text = "PEAK 18.7 cm"
 
 func _seed_replay_compare_preview() -> void:
     _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
@@ -105,6 +111,26 @@ func _run_apex_preview_regression() -> bool:
             cue.points = PackedVector2Array([left, tip, right])
             _v183_panel.add_child(cue)
 
+    if probe._live_curve_readout(0.0) != "CENTER" or probe._live_curve_readout(12.44) != "R 12.4 cm" or probe._live_curve_readout(-7.26) != "L 7.3 cm":
+        push_error("Live break direction/readout regression")
+        probe.free()
+        get_tree().quit(42)
+        return false
+    if _live_curve_panel == null or _live_curve_value == null or _live_curve_peak_label == null:
+        push_error("Live break meter HUD missing")
+        probe.free()
+        get_tree().quit(42)
+        return false
+    _live_curve_value.text = "R 12.4 cm"
+    _live_curve_peak_label.text = "PEAK 18.7 cm"
+    _live_curve_panel.visible = true
+    if _live_curve_value.text != "R 12.4 cm" or _live_curve_peak_label.text != "PEAK 18.7 cm":
+        push_error("Live break meter HUD regression")
+        probe.free()
+        get_tree().quit(42)
+        return false
+    _live_break_preview_ready = true
+
     _v179_samples = [Vector2(-8, -18), Vector2(-3, 10), Vector2(5, 22), Vector2(7, 6), Vector2(3, 14)]
     if _v179_make_count() != 2 or _v179_make_rate_text() != "WINDOW 2/5":
         push_error("Session make-window tally regression: %s" % _v179_make_rate_text())
@@ -180,6 +206,7 @@ func _run_apex_preview_regression() -> bool:
     print("COMMERCIAL_READ_FLOW_OK=1")
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
+    print("LIVE_BREAK_METER_OK=1")
     print("SESSION_MAKE_WINDOW_OK=1")
     print("NEXT_REP_COACH_OK=1")
     print("REPLAY_READ_COMPARE_OK=1")
