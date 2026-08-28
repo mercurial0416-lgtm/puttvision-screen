@@ -15,6 +15,9 @@ func _replay_chapter_color(progress: float) -> Color:
 func _replay_playhead_x(progress: float, track_width: float) -> float:
     return maxf(0.0, maxf(0.0, track_width) * clampf(progress, 0.0, 1.0) - REPLAY_PLAYHEAD_WIDTH * 0.5)
 
+func _replay_session_alpha(phase: String) -> float:
+    return 0.0 if phase == PHASE_REPLAY else 1.0
+
 func _focus_build_replay_timeline() -> void:
     super._focus_build_replay_timeline()
     if _focus_replay_track == null:
@@ -43,3 +46,7 @@ func _focus_update_replay_timeline() -> void:
     if _replay_playhead != null:
         _replay_playhead.position = Vector2(_replay_playhead_x(progress, _focus_replay_track.size.x), -4.0)
         _replay_playhead.color = chapter_color
+
+func _focus_apply_phase(phase: String, immediate: bool = false, delta: float = 0.0) -> void:
+    super._focus_apply_phase(phase, immediate, delta)
+    _focus_set_alpha(_v179_panel, _replay_session_alpha(phase), immediate, delta)
