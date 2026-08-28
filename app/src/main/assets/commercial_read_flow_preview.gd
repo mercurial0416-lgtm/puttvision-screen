@@ -117,11 +117,42 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(40)
         return false
+
+    _v179_samples = [Vector2(6, 18), Vector2(7, 16), Vector2(5, 14)]
+    if _v179_next_rep_text() != "NEXT · 6cm LEFT · SOFTER":
+        push_error("Next-rep right/long correction regression: %s" % _v179_next_rep_text())
+        probe.free()
+        get_tree().quit(41)
+        return false
+    _v179_samples = [Vector2(-6, -18), Vector2(-7, -16), Vector2(-5, -14)]
+    if _v179_next_rep_text() != "NEXT · 6cm RIGHT · FIRMER":
+        push_error("Next-rep left/short correction regression: %s" % _v179_next_rep_text())
+        probe.free()
+        get_tree().quit(41)
+        return false
+    _v179_samples = [Vector2(2, 8), Vector2(-2, -8), Vector2(0, 0)]
+    if _v179_next_rep_text() != "NEXT · HOLD LINE · HOLD PACE":
+        push_error("Next-rep deadband regression: %s" % _v179_next_rep_text())
+        probe.free()
+        get_tree().quit(41)
+        return false
+    _v179_samples = [Vector2(20, 12), Vector2(20, 12), Vector2(20, 12)]
+    if _v179_next_rep_text().find("9cm LEFT") < 0:
+        push_error("Next-rep correction clamp regression: %s" % _v179_next_rep_text())
+        probe.free()
+        get_tree().quit(41)
+        return false
+
     _v179_preview_seed()
     if _v179_window_label == null or _v179_window_label.text != "WINDOW 2/5" or _v179_plot == null or _v179_plot.get_node_or_null("MakeWindow") == null:
         push_error("Session make-window HUD regression")
         probe.free()
         get_tree().quit(40)
+        return false
+    if _v179_tendency_label == null or _v179_tendency_label.text != "NEXT · HOLD LINE · HOLD PACE":
+        push_error("Next-rep compact HUD regression: %s" % ("<missing>" if _v179_tendency_label == null else _v179_tendency_label.text))
+        probe.free()
+        get_tree().quit(41)
         return false
 
     if _v180_compare_chip == null or _v180_compare_primary == null or _v180_compare_secondary == null:
@@ -150,6 +181,7 @@ func _run_apex_preview_regression() -> bool:
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
     print("SESSION_MAKE_WINDOW_OK=1")
+    print("NEXT_REP_COACH_OK=1")
     print("REPLAY_READ_COMPARE_OK=1")
     print("REPLAY_FINISH_VERDICT_OK=1")
     return true

@@ -21,6 +21,9 @@ const V179_PACE_SCALE_CM := 70.0
 const V179_PLOT_SIZE := Vector2(300.0, 118.0)
 const V179_MAKE_LINE_CM := 5.0
 const V179_MAKE_PACE_CM := 15.0
+const V179_COACH_MIN_SAMPLES := 3
+const V179_COACH_LINE_DEADBAND_CM := 3.0
+const V179_COACH_PACE_DEADBAND_CM := 10.0
 
 func _v179_mean(axis: int) -> float:
     if _v179_samples.is_empty():
@@ -52,6 +55,26 @@ func _v179_make_rate_text() -> String:
     var count := _v179_make_count()
     return "WINDOW %d/%d" % [count, _v179_samples.size()]
 
+func _v179_next_rep_text() -> String:
+    if _v179_samples.size() < V179_COACH_MIN_SAMPLES:
+        return "NEXT · BUILD 3 SHOTS"
+
+    var line := _v179_mean(0)
+    var pace := _v179_mean(1)
+    var line_text := "HOLD LINE"
+    if line > V179_COACH_LINE_DEADBAND_CM:
+        line_text = "%dcm LEFT" % clampi(int(round(absf(line))), 3, 9)
+    elif line < -V179_COACH_LINE_DEADBAND_CM:
+        line_text = "%dcm RIGHT" % clampi(int(round(absf(line))), 3, 9)
+
+    var pace_text := "HOLD PACE"
+    if pace > V179_COACH_PACE_DEADBAND_CM:
+        pace_text = "SOFTER"
+    elif pace < -V179_COACH_PACE_DEADBAND_CM:
+        pace_text = "FIRMER"
+
+    return "NEXT · %s · %s" % [line_text, pace_text]
+
 func _v179_plot_position(sample: Vector2) -> Vector2:
     var nx: float = clampf(sample.x / V179_LINE_SCALE_CM, -1.0, 1.0)
     var ny: float = clampf(sample.y / V179_PACE_SCALE_CM, -1.0, 1.0)
@@ -79,7 +102,7 @@ func _build_hud() -> void:
     _v179_panel.visible = false
     _v174_accent(_v179_panel, Vector2(0, 0), Vector2(7, 210), Color("#76c7d7"))
     _v174_text(_v179_panel, Vector2(24, 12), Vector2(220, 22), "SESSION DISPERSION", 14, Color(0.77, 0.84, 0.84, 0.96))
-    _v179_tendency_label = _v174_text(_v179_panel, Vector2(250, 9), Vector2(280, 28), "BUILDING PATTERN", 13, Color("#f4dda0"), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v179_tendency_label = _v174_text(_v179_panel, Vector2(230, 9), Vector2(300, 28), "NEXT · BUILD 3 SHOTS", 12, Color("#f4dda0"), HORIZONTAL_ALIGNMENT_RIGHT)
 
     _v179_plot = Control.new()
     _v179_plot.position = Vector2(24, 50)
@@ -133,7 +156,7 @@ func _build_hud() -> void:
 func _v179_refresh() -> void:
     if _v179_panel == null:
         return
-    _v179_tendency_label.text = _v179_tendency()
+    _v179_tendency_label.text = _v179_next_rep_text()
     _v179_line_mean_label.text = "%+.0f cm" % _v179_mean(0)
     _v179_pace_mean_label.text = "%+.0f cm" % _v179_mean(1)
     if _v179_window_label != null:
