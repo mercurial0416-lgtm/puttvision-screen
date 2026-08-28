@@ -5,7 +5,9 @@ var _terrain_relief_checked := false
 
 func _process(delta: float) -> void:
     super._process(delta)
-    if _terrain_relief_checked or _preview_frames < 17:
+    # The inherited preview schedules its capture shortly afterwards. Keep this regression ahead of
+    # that boundary so a failed marker can never leave xvfb waiting on an already-finished frame.
+    if _terrain_relief_checked or _preview_frames < 11:
         return
     _terrain_relief_checked = true
 
