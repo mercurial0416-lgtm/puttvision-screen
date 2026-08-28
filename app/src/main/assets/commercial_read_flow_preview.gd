@@ -119,25 +119,25 @@ func _run_apex_preview_regression() -> bool:
         return false
 
     _v179_samples = [Vector2(6, 18), Vector2(7, 16), Vector2(5, 14)]
-    if _v179_next_rep_text() != "NEXT REP  •  START 6 CM LEFT  •  SOFTER PACE":
+    if _v179_next_rep_text() != "NEXT · 6cm LEFT · SOFTER":
         push_error("Next-rep right/long correction regression: %s" % _v179_next_rep_text())
         probe.free()
         get_tree().quit(41)
         return false
     _v179_samples = [Vector2(-6, -18), Vector2(-7, -16), Vector2(-5, -14)]
-    if _v179_next_rep_text() != "NEXT REP  •  START 6 CM RIGHT  •  FIRMER PACE":
+    if _v179_next_rep_text() != "NEXT · 6cm RIGHT · FIRMER":
         push_error("Next-rep left/short correction regression: %s" % _v179_next_rep_text())
         probe.free()
         get_tree().quit(41)
         return false
     _v179_samples = [Vector2(2, 8), Vector2(-2, -8), Vector2(0, 0)]
-    if _v179_next_rep_text() != "NEXT REP  •  HOLD LINE  •  HOLD PACE":
+    if _v179_next_rep_text() != "NEXT · HOLD LINE · HOLD PACE":
         push_error("Next-rep deadband regression: %s" % _v179_next_rep_text())
         probe.free()
         get_tree().quit(41)
         return false
     _v179_samples = [Vector2(20, 12), Vector2(20, 12), Vector2(20, 12)]
-    if _v179_next_rep_text().find("START 9 CM LEFT") < 0:
+    if _v179_next_rep_text().find("9cm LEFT") < 0:
         push_error("Next-rep correction clamp regression: %s" % _v179_next_rep_text())
         probe.free()
         get_tree().quit(41)
@@ -149,8 +149,8 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(40)
         return false
-    if _v179_next_rep_label == null or _v179_next_rep_label.text != "NEXT REP  •  HOLD LINE  •  HOLD PACE":
-        push_error("Next-rep HUD regression: %s" % ("<missing>" if _v179_next_rep_label == null else _v179_next_rep_label.text))
+    if _v179_tendency_label == null or _v179_tendency_label.text != "NEXT · HOLD LINE · HOLD PACE":
+        push_error("Next-rep compact HUD regression: %s" % ("<missing>" if _v179_tendency_label == null else _v179_tendency_label.text))
         probe.free()
         get_tree().quit(41)
         return false
