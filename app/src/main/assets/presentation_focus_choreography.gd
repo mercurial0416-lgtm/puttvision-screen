@@ -159,6 +159,7 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "state": return 1.0
                 "read": return 0.0
                 "result": return 0.0
+                "practice": return 0.42
                 "letterbox": return 0.10
                 "replay_timeline": return 0.0
         PHASE_REPLAY:
@@ -169,6 +170,7 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "state": return 1.0
                 "read": return 0.0
                 "result": return 0.0
+                "practice": return 0.0
                 "letterbox": return 0.68
                 "replay_timeline": return 1.0
         PHASE_RESULT:
@@ -179,6 +181,7 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "state": return 0.78
                 "read": return 0.0
                 "result": return 1.0
+                "practice": return 1.0
                 "letterbox": return 0.0
                 "replay_timeline": return 0.0
         _:
@@ -189,6 +192,7 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "state": return 1.0
                 "read": return 1.0
                 "result": return 1.0
+                "practice": return 1.0
                 "letterbox": return 0.0
                 "replay_timeline": return 0.0
     return 1.0
@@ -247,6 +251,8 @@ func _focus_apply_phase(phase: String, immediate: bool = false, delta: float = 0
     _focus_set_alpha(_v183_panel, _focus_role_alpha(phase, "read"), immediate, delta)
     _focus_set_alpha(_v177_panel, _focus_role_alpha(phase, "result"), immediate, delta)
     _focus_set_alpha(_v188_panel, _focus_role_alpha(phase, "result"), immediate, delta)
+    _focus_set_alpha(_v179_panel, _focus_role_alpha(phase, "practice"), immediate, delta)
+    _focus_set_alpha(_v191_bar, _focus_role_alpha(phase, "practice"), immediate, delta)
     _focus_set_alpha(_focus_letterbox_top, _focus_role_alpha(phase, "letterbox"), immediate, delta)
     _focus_set_alpha(_focus_letterbox_bottom, _focus_role_alpha(phase, "letterbox"), immediate, delta)
     _focus_set_alpha(_focus_replay_timeline, _focus_role_alpha(phase, "replay_timeline"), immediate, delta)
