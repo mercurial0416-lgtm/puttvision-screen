@@ -117,7 +117,9 @@ func _v174_direction(side: float) -> String:
 func _v174_grade(long_slope: float) -> String:
     if abs(long_slope) < 0.08:
         return "LEVEL"
-    return "UPHILL" if long_slope > 0.0 else "DOWNHILL"
+    # GreenSettings semantics: positive longitudinal slope falls toward the cup (downhill),
+    # negative rises toward the cup (uphill). Keep the human-readable HUD aligned with physics.
+    return "DOWNHILL" if long_slope > 0.0 else "UPHILL"
 
 func _update_hud(s: Dictionary, running: bool, holed: bool, lip_out: bool, speed: float) -> void:
     var remaining: float = max(0.0, float(s.get("distanceToCup", target_distance)))

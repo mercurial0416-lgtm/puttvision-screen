@@ -1,12 +1,49 @@
 extends "res://commercial_read_apex_preview.gd"
 
 const FlowScene = preload("res://commercial_read_flow.gd")
+const PREVIEW_SIDE_SLOPE := 1.35
+const PREVIEW_LONG_SLOPE := -0.55
+
+# Keep the rendered regression frame internally honest: the authoritative/base HUD and the
+# commercial green-read panel must describe the same slope. Previously the overview injected a
+# synthetic break while the base snapshot stayed flat, producing a misleading verification image.
+func _snapshot() -> Dictionary:
+    var s := super._snapshot()
+    s["sideSlope"] = PREVIEW_SIDE_SLOPE
+    s["longSlope"] = PREVIEW_LONG_SLOPE
+    return s
 
 func _run_apex_preview_regression() -> bool:
     if not super._run_apex_preview_regression():
         return false
 
+    if slope_label == null or slope_label.text.find("+1.35%") < 0 or slope_label.text.find("-0.55%") < 0:
+        push_error("Preview slope authority mismatch: %s" % ("<missing>" if slope_label == null else slope_label.text))
+        get_tree().quit(35)
+        return false
+
     var probe = FlowScene.new()
+    if probe._v174_direction(PREVIEW_SIDE_SLOPE) != "RIGHT" or probe._v183_break_text(PREVIEW_SIDE_SLOPE) != "BREAK  R 1.35%":
+        push_error("Positive side slope no longer labels the authoritative right break")
+        probe.free()
+        get_tree().quit(36)
+        return false
+    if probe._v174_direction(-PREVIEW_SIDE_SLOPE) != "LEFT" or probe._v183_break_text(-PREVIEW_SIDE_SLOPE) != "BREAK  L 1.35%":
+        push_error("Negative side slope no longer labels the authoritative left break")
+        probe.free()
+        get_tree().quit(36)
+        return false
+    if probe._v174_grade(PREVIEW_LONG_SLOPE) != "UPHILL" or probe._v183_grade_text(PREVIEW_LONG_SLOPE) != "GRADE  UP 0.55%":
+        push_error("Negative longitudinal slope no longer labels uphill consistently")
+        probe.free()
+        get_tree().quit(37)
+        return false
+    if probe._v174_grade(-PREVIEW_LONG_SLOPE) != "DOWNHILL" or probe._v183_grade_text(-PREVIEW_LONG_SLOPE) != "GRADE  DOWN 0.55%":
+        push_error("Positive longitudinal slope no longer labels downhill consistently")
+        probe.free()
+        get_tree().quit(37)
+        return false
+
     var previous_center: Vector2 = Vector2.ZERO
     for i in range(probe.READ_FLOW_FRACTIONS.size()):
         var fraction: float = probe.READ_FLOW_FRACTIONS[i]
@@ -47,4 +84,6 @@ func _run_apex_preview_regression() -> bool:
 
     probe.free()
     print("COMMERCIAL_READ_FLOW_OK=1")
+    print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
+    print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
     return true

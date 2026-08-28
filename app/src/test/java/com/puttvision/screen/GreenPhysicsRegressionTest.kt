@@ -41,6 +41,25 @@ class GreenPhysicsRegressionTest {
     }
 
     @Test
+    fun sideSlopeDirectionAndMagnitudeStayAuthoritative() {
+        val flat = roll(GreenSettings(stimpMeters = 2.8, holeDistanceM = 12.0), speed = 1.35)
+        val left = roll(GreenSettings(stimpMeters = 2.8, holeDistanceM = 12.0, sideSlopePct = -2.0), speed = 1.35)
+        val right = roll(GreenSettings(stimpMeters = 2.8, holeDistanceM = 12.0, sideSlopePct = 2.0), speed = 1.35)
+        assertTrue("left-lower slope must bend left", left.finishX < flat.finishX - 0.04)
+        assertTrue("right-lower slope must bend right", right.finishX > flat.finishX + 0.04)
+        assertTrue("opposite slopes should separate the finish by a visible amount", right.finishX - left.finishX > 0.10)
+    }
+
+    @Test
+    fun longitudinalSlopeChangesRollDistance() {
+        val uphill = roll(GreenSettings(stimpMeters = 2.8, holeDistanceM = 12.0, longSlopePct = -2.0), speed = 1.35)
+        val flat = roll(GreenSettings(stimpMeters = 2.8, holeDistanceM = 12.0), speed = 1.35)
+        val downhill = roll(GreenSettings(stimpMeters = 2.8, holeDistanceM = 12.0, longSlopePct = 2.0), speed = 1.35)
+        assertTrue("uphill must stop shorter than flat", uphill.finishY < flat.finishY - 0.04)
+        assertTrue("downhill must roll farther than flat", downhill.finishY > flat.finishY + 0.04)
+    }
+
+    @Test
     fun allPracticeTerrainProfilesRemainFinite() {
         for (profile in 0..23) {
             val result = roll(

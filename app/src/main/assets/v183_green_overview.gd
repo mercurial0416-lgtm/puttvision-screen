@@ -39,7 +39,9 @@ func _v183_path(offset_m: float) -> PackedVector2Array:
 func _v183_break_text(side_pct: float) -> String:
     if abs(side_pct) < 0.05:
         return "BREAK  STRAIGHT"
-    return "BREAK  %s %.2f%%" % [("L" if side_pct > 0.0 else "R"), abs(side_pct)]
+    # GreenSettings semantics describe the low side: positive means the right side is lower,
+    # therefore the ball's gravity break is right. Label BREAK by ball movement, not aim offset.
+    return "BREAK  %s %.2f%%" % [("R" if side_pct > 0.0 else "L"), abs(side_pct)]
 
 func _v183_grade_text(long_pct: float) -> String:
     if abs(long_pct) < 0.05:
