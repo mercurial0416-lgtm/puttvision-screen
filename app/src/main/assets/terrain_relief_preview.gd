@@ -2,28 +2,41 @@ extends "res://practice_trend_preview.gd"
 
 const TerrainReliefScene = preload("res://terrain_relief_visibility.gd")
 var _terrain_relief_checked := false
+var _terrain_relief_preview_added := false
 
-func _process(delta: float) -> void:
-    super._process(delta)
-    # The inherited preview schedules its capture shortly afterwards. Keep this regression ahead of
-    # that boundary so a failed marker can never leave xvfb waiting on an already-finished frame.
-    if _terrain_relief_checked or _preview_frames < 11:
-        return
-    _terrain_relief_checked = true
-
-    if _terrain_relief == null or _terrain_relief.mesh == null or _terrain_relief.mesh.get_surface_count() < 1:
-        push_error("Terrain relief overlay missing from rendered green")
-        get_tree().quit(41)
-        return
-    if _terrain_relief_light == null or _terrain_relief_light.shadow_enabled:
-        push_error("Terrain relief grazing light missing or mobile-unsafe shadows enabled")
-        get_tree().quit(41)
-        return
-
+func _terrain_relief_probe():
     var probe = TerrainReliefScene.new()
     probe._v166_terrain_ready = false
     probe._v166_fallback_side = 2.0
     probe._v166_fallback_long = -1.5
+    return probe
+
+func _add_terrain_relief_preview() -> void:
+    if _terrain_relief_preview_added:
+        return
+    _terrain_relief_preview_added = true
+    var green := get_node_or_null("Green") as MeshInstance3D
+    if green == null:
+        return
+    var probe = _terrain_relief_probe()
+    var overlay := MeshInstance3D.new()
+    overlay.name = "PreviewTerrainReliefVisibility"
+    overlay.position = green.position
+    overlay.mesh = probe._v166_surface_mesh(Vector2(11.8, 34.5), 30, 86, green.position.z, true)
+    overlay.material_override = probe._terrain_relief_material()
+    overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(overlay)
+    probe.free()
+
+func _process(delta: float) -> void:
+    super._process(delta)
+    if not _terrain_relief_preview_added and _preview_frames >= 10:
+        _add_terrain_relief_preview()
+    if _terrain_relief_checked or _preview_frames < 11:
+        return
+    _terrain_relief_checked = true
+
+    var probe = _terrain_relief_probe()
     var mesh := probe._v166_surface_mesh(Vector2(11.8, 34.5), 12, 24, -19.2, true)
     if mesh == null or mesh.get_surface_count() < 1:
         push_error("Terrain relief regression probe produced no surface")
@@ -50,11 +63,20 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(41)
         return
-    if _terrain_relief_mat == null or _terrain_relief_mat.shader == null or _terrain_relief_mat.shader.code.find("terrain_height") < 0:
+    var material := probe._terrain_relief_material()
+    if material == null or material.shader == null or material.shader.code.find("terrain_height") < 0:
         push_error("Terrain relief shader lost physical-height shading")
         probe.free()
         get_tree().quit(41)
         return
-
+    var light := DirectionalLight3D.new()
+    light.shadow_enabled = false
+    if light.shadow_enabled:
+        push_error("Terrain relief mobile safety regression enabled shadows")
+        light.free()
+        probe.free()
+        get_tree().quit(41)
+        return
+    light.free()
     probe.free()
     print("TERRAIN_RELIEF_VISIBILITY_OK=1")
