@@ -4,6 +4,7 @@ const ReplayFinish = preload("res://replay_playhead_finish.gd")
 var _replay_playhead_checks_done := false
 var _preview_replay_playhead: ColorRect
 var _preview_replay_chapter_color := Color.WHITE
+var _preview_replay_progress := 0.78
 
 func _seed_replay_finish_preview() -> void:
     var track := get_node_or_null("PreviewReplayTimelineTrack") as ColorRect
@@ -11,12 +12,18 @@ func _seed_replay_finish_preview() -> void:
     var stage := get_node_or_null("PreviewReplayCameraStage") as Label
     if track == null or fill == null or stage == null:
         return
+    var bounds := ReplayFinish.new()._replay_stage_bounds(1920.0)
+    stage.position.x = bounds.x
+    stage.size.x = bounds.y - bounds.x
+    track.size.x = maxf(120.0, bounds.x - 14.0 - track.position.x)
+    fill.size.x = track.size.x * _preview_replay_progress
     fill.z_index = ReplayFinish.REPLAY_TIMELINE_TOP_Z
     stage.z_index = ReplayFinish.REPLAY_TIMELINE_TOP_Z
     fill.color = Color(_preview_replay_chapter_color.r, _preview_replay_chapter_color.g, _preview_replay_chapter_color.b, 0.94)
     stage.add_theme_color_override("font_color", Color(_preview_replay_chapter_color.r, _preview_replay_chapter_color.g, _preview_replay_chapter_color.b, 0.94))
     _preview_set_alpha(_v179_panel, 0.0)
     if _preview_replay_playhead != null:
+        _preview_replay_playhead.position.x = track.position.x + ReplayFinish.new()._replay_playhead_x(_preview_replay_progress, track.size.x)
         _preview_replay_playhead.visible = true
         _preview_replay_playhead.modulate.a = 1.0
 
@@ -66,14 +73,19 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    var safe_bounds := probe._replay_stage_bounds(1920.0)
+    if absf(safe_bounds.x - 958.0) > 0.01 or absf(safe_bounds.y - 1100.0) > 0.01:
+        push_error("Replay camera safe-area regression")
+        probe.free()
+        get_tree().quit(29)
+        return
     if probe._replay_session_alpha("REPLAY") > 0.01 or probe._replay_session_alpha("READY") < 0.99:
         push_error("Replay practice-panel declutter regression")
         probe.free()
         get_tree().quit(29)
         return
 
-    var preview_progress := 0.78
-    _preview_replay_chapter_color = probe._replay_chapter_color(preview_progress)
+    _preview_replay_chapter_color = probe._replay_chapter_color(_preview_replay_progress)
     var track := get_node_or_null("PreviewReplayTimelineTrack") as ColorRect
     var fill := get_node_or_null("PreviewReplayTimelineFill") as ColorRect
     var stage := get_node_or_null("PreviewReplayCameraStage") as Label
@@ -86,7 +98,7 @@ func _process(delta: float) -> void:
     _preview_replay_playhead = ColorRect.new()
     _preview_replay_playhead.name = "PreviewReplayCurrentPlayhead"
     _preview_replay_playhead.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _preview_replay_playhead.position = Vector2(track.position.x + probe._replay_playhead_x(preview_progress, track.size.x), track.position.y - 4.0)
+    _preview_replay_playhead.position = Vector2(track.position.x + probe._replay_playhead_x(_preview_replay_progress, track.size.x), track.position.y - 4.0)
     _preview_replay_playhead.size = Vector2(probe.REPLAY_PLAYHEAD_WIDTH, probe.REPLAY_PLAYHEAD_HEIGHT)
     _preview_replay_playhead.color = _preview_replay_chapter_color
     _preview_replay_playhead.z_index = ReplayFinish.REPLAY_TIMELINE_TOP_Z + 2
@@ -96,4 +108,5 @@ func _process(delta: float) -> void:
     probe.free()
     print("REPLAY_PLAYHEAD_OK=1")
     print("REPLAY_CHAPTER_COLOR_OK=1")
+    print("REPLAY_CAMERA_SAFE_AREA_OK=1")
     print("REPLAY_PRACTICE_DECLUTTER_OK=1")
