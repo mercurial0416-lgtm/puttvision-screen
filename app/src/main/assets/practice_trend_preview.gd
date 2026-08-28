@@ -15,6 +15,16 @@ func _add_trend_visual() -> void:
     _v179_panel.visible = true
 
     var probe = PracticeTrendScene.new()
+    var ring := probe._practice_recent_ring_geometry(_v179_samples)
+    if bool(ring.get("visible", false)):
+        var ring_line := Line2D.new()
+        ring_line.name = "PreviewPracticeRecentConsistencyRing"
+        ring_line.width = 1.5
+        ring_line.default_color = Color(0.72, 0.90, 0.96, 0.78)
+        ring_line.joint_mode = Line2D.LINE_JOINT_ROUND
+        ring_line.points = ring["points"]
+        _v179_plot.add_child(ring_line)
+
     var geometry := probe._practice_trend_geometry(_v179_samples)
     if bool(geometry.get("visible", false)):
         var line := Line2D.new()
@@ -57,10 +67,20 @@ func _process(delta: float) -> void:
     assert(bool(result.get("visible", false)))
     assert(float(result.get("recent_error", 99.0)) < float(result.get("early_error", 0.0)))
 
+    var ring := probe._practice_recent_ring_geometry(_preview_trend_samples())
+    assert(bool(ring.get("visible", false)))
+    assert(float(ring.get("radius", 0.0)) >= probe.PRACTICE_RECENT_RING_MIN_RADIUS)
+    assert(float(ring.get("radius", 99.0)) <= probe.PRACTICE_RECENT_RING_MAX_RADIUS)
+    var ring_points: PackedVector2Array = ring["points"]
+    assert(ring_points.size() == probe.PRACTICE_RECENT_RING_SEGMENTS + 1)
+    assert(ring_points[0].distance_to(ring_points[ring_points.size() - 1]) < 0.01)
+
     var drifting: Array[Vector2] = [Vector2(4, 7), Vector2(8, 15), Vector2(17, 34), Vector2(20, 42)]
     assert(str(probe._practice_trend_geometry(drifting).get("state", "")) == "DRIFTING")
 
     var building: Array[Vector2] = [Vector2(10, 20), Vector2(8, 16), Vector2(6, 12)]
     assert(not bool(probe._practice_trend_geometry(building).get("visible", true)))
+    assert(not bool(probe._practice_recent_ring_geometry(building).get("visible", true)))
     probe.free()
     print("PRACTICE_TREND_VECTOR_OK=1")
+    print("PRACTICE_RECENT_CONSISTENCY_RING_OK=1")
