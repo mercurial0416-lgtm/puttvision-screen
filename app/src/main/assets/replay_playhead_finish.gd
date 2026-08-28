@@ -5,6 +5,7 @@ extends "res://commercial_read_flow.gd"
 const REPLAY_PLAYHEAD_WIDTH := 6.0
 const REPLAY_PLAYHEAD_HEIGHT := 11.0
 const REPLAY_TIMELINE_TOP_Z := 300
+const REPLAY_STAGE_SAFE_RIGHT_INSET := 820.0
 const REPLAY_TRAIL_COLOR := Color(0.78, 0.91, 0.98, 0.96)
 const REPLAY_CUP_COLOR := Color(0.96, 0.79, 0.38, 0.98)
 
@@ -19,10 +20,22 @@ func _replay_playhead_x(progress: float, track_width: float) -> float:
 func _replay_session_alpha(phase: String) -> float:
     return 0.0 if phase == PHASE_REPLAY else 1.0
 
+func _replay_stage_bounds(view_width: float) -> Vector2:
+    var right := maxf(REPLAY_TIMELINE_SIDE_INSET + REPLAY_TIMELINE_LABEL_WIDTH + REPLAY_TIMELINE_STAGE_WIDTH + 40.0, view_width - REPLAY_STAGE_SAFE_RIGHT_INSET)
+    return Vector2(right - REPLAY_TIMELINE_STAGE_WIDTH, right)
+
 func _focus_build_replay_timeline() -> void:
     super._focus_build_replay_timeline()
     if _focus_replay_timeline != null:
         _focus_replay_timeline.z_index = REPLAY_TIMELINE_TOP_Z
+    if _focus_replay_stage_label != null:
+        var bounds := _replay_stage_bounds(1920.0)
+        _focus_replay_stage_label.anchor_left = 0.0
+        _focus_replay_stage_label.anchor_right = 0.0
+        _focus_replay_stage_label.offset_left = bounds.x
+        _focus_replay_stage_label.offset_right = bounds.y
+    if _focus_replay_track != null:
+        _focus_replay_track.offset_right = -REPLAY_STAGE_SAFE_RIGHT_INSET - 14.0
     if _focus_replay_track == null:
         return
     _replay_playhead = ColorRect.new()
