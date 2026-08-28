@@ -72,7 +72,9 @@ func _build_hud() -> void:
     _v174_accent(_live_curve_panel, Vector2(0, 0), Vector2(6, 92), Color("#73c2d4"))
     _v174_text(_live_curve_panel, Vector2(20, 8), Vector2(170, 22), "LIVE BREAK", 13, Color("#bfe9f1"))
     _live_curve_value = _v174_text(_live_curve_panel, Vector2(20, 30), Vector2(250, 42), "CENTER", 24, Color("#f4f6f0"))
+    _live_curve_value.name = "LiveBreakValue"
     _live_curve_peak_label = _v174_text(_live_curve_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 0.0 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
+    _live_curve_peak_label.name = "LiveBreakPeak"
 
 func _refresh_read_flow() -> void:
     if _v183_panel == null:
