@@ -16,17 +16,32 @@ func _snapshot() -> Dictionary:
     s["longSlope"] = PREVIEW_LONG_SLOPE
     return s
 
+func _live_break_preview_nodes() -> Dictionary:
+    var panel := get_node_or_null("V174BroadcastHUD/V174HUDRoot/LiveBreakMeter") as Panel
+    if panel == null:
+        return {"panel": null, "value": null, "peak": null}
+    return {
+        "panel": panel,
+        "value": panel.get_node_or_null("LiveBreakValue") as Label,
+        "peak": panel.get_node_or_null("LiveBreakPeak") as Label
+    }
+
 func _process(delta: float) -> void:
     super._process(delta)
     # The parent preview captures on a deferred frame. Hold synthetic presentation states after all
     # parent snapshot/focus choreography so the uploaded image proves these HUDs are actually visible.
     if _replay_compare_preview_ready and _capture_started:
         _seed_replay_compare_preview()
-    if _live_break_preview_ready and _capture_started and _live_curve_panel != null:
-        _live_curve_panel.visible = true
-        _live_curve_panel.modulate.a = 1.0
-        _live_curve_value.text = "R 12.4 cm"
-        _live_curve_peak_label.text = "PEAK 18.7 cm"
+    if _live_break_preview_ready and _capture_started:
+        var live := _live_break_preview_nodes()
+        var panel := live["panel"] as Panel
+        var value := live["value"] as Label
+        var peak := live["peak"] as Label
+        if panel != null and value != null and peak != null:
+            panel.visible = true
+            panel.modulate.a = 1.0
+            value.text = "R 12.4 cm"
+            peak.text = "PEAK 18.7 cm"
 
 func _seed_replay_compare_preview() -> void:
     _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
@@ -116,15 +131,19 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(42)
         return false
-    if _live_curve_panel == null or _live_curve_value == null or _live_curve_peak_label == null:
+    var live := _live_break_preview_nodes()
+    var live_panel := live["panel"] as Panel
+    var live_value := live["value"] as Label
+    var live_peak := live["peak"] as Label
+    if live_panel == null or live_value == null or live_peak == null:
         push_error("Live break meter HUD missing")
         probe.free()
         get_tree().quit(42)
         return false
-    _live_curve_value.text = "R 12.4 cm"
-    _live_curve_peak_label.text = "PEAK 18.7 cm"
-    _live_curve_panel.visible = true
-    if _live_curve_value.text != "R 12.4 cm" or _live_curve_peak_label.text != "PEAK 18.7 cm":
+    live_value.text = "R 12.4 cm"
+    live_peak.text = "PEAK 18.7 cm"
+    live_panel.visible = true
+    if live_value.text != "R 12.4 cm" or live_peak.text != "PEAK 18.7 cm":
         push_error("Live break meter HUD regression")
         probe.free()
         get_tree().quit(42)
