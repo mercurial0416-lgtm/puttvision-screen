@@ -40,6 +40,11 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    if probe._replay_session_alpha("REPLAY") > 0.01 or probe._replay_session_alpha("READY") < 0.99:
+        push_error("Replay practice-panel declutter regression")
+        probe.free()
+        get_tree().quit(29)
+        return
 
     var preview_progress := 0.78
     var chapter_color: Color = probe._replay_chapter_color(preview_progress)
@@ -54,6 +59,7 @@ func _process(delta: float) -> void:
 
     fill.color = Color(chapter_color.r, chapter_color.g, chapter_color.b, 0.94)
     stage.add_theme_color_override("font_color", Color(chapter_color.r, chapter_color.g, chapter_color.b, 0.94))
+    _preview_set_alpha(_v179_panel, probe._replay_session_alpha("REPLAY"))
 
     var playhead := ColorRect.new()
     playhead.name = "PreviewReplayCurrentPlayhead"
@@ -67,3 +73,4 @@ func _process(delta: float) -> void:
     probe.free()
     print("REPLAY_PLAYHEAD_OK=1")
     print("REPLAY_CHAPTER_COLOR_OK=1")
+    print("REPLAY_PRACTICE_DECLUTTER_OK=1")
