@@ -13,7 +13,7 @@ const PHASE_RESULT := "RESULT"
 const REPLAY_BAR_HEIGHT := 46.0
 const REPLAY_TIMELINE_SIDE_INSET := 28.0
 const REPLAY_TIMELINE_LABEL_WIDTH := 122.0
-const REPLAY_TIMELINE_STAGE_WIDTH := 106.0
+const REPLAY_TIMELINE_STAGE_WIDTH := 142.0
 const REPLAY_TIMELINE_TRACK_HEIGHT := 3.0
 # Matches the existing cinematic cup-focus handoff without changing camera or shot logic.
 const REPLAY_CUP_CHAPTER_START := 0.72
@@ -88,7 +88,7 @@ func _focus_build_replay_timeline() -> void:
     _focus_replay_stage_label.offset_right = -REPLAY_TIMELINE_SIDE_INSET
     _focus_replay_stage_label.offset_top = 12.0
     _focus_replay_stage_label.offset_bottom = 36.0
-    _focus_replay_stage_label.text = "TRAIL CAM"
+    _focus_replay_stage_label.text = "TRAIL CAM · 0.0s"
     _focus_replay_stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     _focus_replay_stage_label.add_theme_font_size_override("font_size", 13)
     _focus_replay_stage_label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.88, 0.94))
@@ -182,6 +182,12 @@ func _focus_replay_progress(remaining: float, duration: float) -> float:
 func _focus_replay_stage(progress: float) -> String:
     return "CUP CAM" if clampf(progress, 0.0, 1.0) >= REPLAY_CUP_CHAPTER_START else "TRAIL CAM"
 
+func _focus_replay_status(progress: float, remaining: float) -> String:
+    var stage := _focus_replay_stage(progress)
+    if not is_finite(remaining):
+        return stage
+    return "%s · %.1fs" % [stage, maxf(0.0, remaining)]
+
 func _focus_update_replay_timeline() -> void:
     if _focus_replay_track == null or _focus_replay_fill == null:
         return
@@ -191,7 +197,7 @@ func _focus_update_replay_timeline() -> void:
     if _focus_replay_chapter_marker != null:
         _focus_replay_chapter_marker.position = Vector2(maxf(0.0, track_width * REPLAY_CUP_CHAPTER_START - 1.0), -4.0)
     if _focus_replay_stage_label != null:
-        _focus_replay_stage_label.text = _focus_replay_stage(progress)
+        _focus_replay_stage_label.text = _focus_replay_status(progress, _v171_replay_remaining)
 
 func _focus_set_alpha(item: CanvasItem, target: float, immediate: bool, delta: float = 0.0) -> void:
     if item == null:
