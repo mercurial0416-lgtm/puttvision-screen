@@ -21,8 +21,6 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     finish_zone.z_index = 245
     add_child(finish_zone)
 
-    # Re-overlay the blend segment above the progress fill so the camera handoff remains legible
-    # after playback crosses the first handoff marker.
     var blend_left := track_left + track_width * clampf(chapter_start, 0.0, 1.0)
     var blend_right := track_left + track_width * clampf(chapter_full, 0.0, 1.0)
     var blend_overlay := ColorRect.new()
@@ -70,11 +68,6 @@ func _preview_add_read_launch_vector() -> void:
     head.end_cap_mode = Line2D.LINE_CAP_ROUND
     head.points = PackedVector2Array([geometry["left"], tip, geometry["right"]])
     _v183_panel.add_child(head)
-
-    var badge_x := clampf(tip.x - 76.0, V183_MAP_ORIGIN.x + 4.0, V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - 70.0)
-    var badge_y := clampf(tip.y + 7.0, V183_MAP_ORIGIN.y + 4.0, V183_MAP_ORIGIN.y + V183_MAP_SIZE.y - 20.0)
-    var badge := _v174_text(_v183_panel, Vector2(badge_x, badge_y), Vector2(66, 17), "LAUNCH", 8, Color(0.70, 0.94, 1.0, 0.96), HORIZONTAL_ALIGNMENT_CENTER)
-    badge.name = "PreviewCommercialReadLaunchBadge"
     probe.free()
 
 func _process(delta: float) -> void:
