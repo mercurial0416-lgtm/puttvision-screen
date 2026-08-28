@@ -10,6 +10,15 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     var track_width: float = maxf(1.0, 1920.0 - track_left - side_inset - stage_width - 14.0)
     var x := track_left + track_width * clampf(progress, 0.0, 1.0)
 
+    var finish_width := track_width * 0.12
+    var finish_zone := ColorRect.new()
+    finish_zone.name = "PreviewReplayFinishZone"
+    finish_zone.position = Vector2(track_left + track_width - finish_width, 1080.0 - bar_height + 22.0)
+    finish_zone.size = Vector2(finish_width, track_height)
+    finish_zone.color = Color(0.66, 0.92, 0.78, 0.18 * alpha)
+    finish_zone.z_index = 245
+    add_child(finish_zone)
+
     # Re-overlay the blend segment above the progress fill so the camera handoff remains legible
     # after playback crosses the first handoff marker.
     var blend_left := track_left + track_width * clampf(chapter_start, 0.0, 1.0)
@@ -65,6 +74,18 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    var finish_geometry := probe._replay_finish_zone_geometry(100.0)
+    if absf(finish_geometry.x - 88.0) > 0.001 or absf(finish_geometry.y - 12.0) > 0.001:
+        push_error("Replay finish-zone geometry regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._replay_finish_zone_geometry(-1.0) != Vector2.ZERO:
+        push_error("Replay finish-zone invalid width guard regression")
+        probe.free()
+        get_tree().quit(29)
+        return
     probe.free()
     print("REPLAY_PLAYHEAD_VISIBILITY_OK=1")
     print("REPLAY_BLEND_LAYERING_OK=1")
+    print("REPLAY_FINISH_ZONE_OK=1")

@@ -4,8 +4,11 @@ extends "res://commercial_read_flow.gd"
 # GreenTerrain, GreenReadAdvisor, aiming, scoring, or camera timing.
 const REPLAY_PLAYHEAD_SIZE := 9.0
 const REPLAY_PLAYHEAD_ALPHA := 0.98
+const REPLAY_FINISH_ZONE_FRACTION := 0.12
+const REPLAY_FINISH_ZONE_ALPHA := 0.18
 
 var _replay_playhead: ColorRect
+var _replay_finish_zone: ColorRect
 
 func _build_hud() -> void:
     super._build_hud()
@@ -23,6 +26,15 @@ func _build_hud() -> void:
     if _focus_replay_chapter_end_marker != null:
         _focus_replay_chapter_end_marker.z_index = 2
 
+    # A subtle final-window band makes the replay read like a broadcast timeline: the viewer can
+    # anticipate the cup-focus payoff without adding labels or touching replay timing.
+    _replay_finish_zone = ColorRect.new()
+    _replay_finish_zone.name = "ReplayFinishZone"
+    _replay_finish_zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _replay_finish_zone.color = Color(0.66, 0.92, 0.78, REPLAY_FINISH_ZONE_ALPHA)
+    _replay_finish_zone.z_index = 1
+    _focus_replay_track.add_child(_replay_finish_zone)
+
     _replay_playhead = ColorRect.new()
     _replay_playhead.name = "ReplayTimelinePlayhead"
     _replay_playhead.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -38,12 +50,26 @@ func _replay_playhead_x(progress: float, track_width: float) -> float:
         return 0.0
     return clampf(progress, 0.0, 1.0) * track_width
 
+func _replay_finish_zone_geometry(track_width: float) -> Vector2:
+    if not is_finite(track_width) or track_width <= 0.0:
+        return Vector2.ZERO
+    var width := track_width * clampf(REPLAY_FINISH_ZONE_FRACTION, 0.0, 0.5)
+    return Vector2(track_width - width, width)
+
 func _focus_update_replay_timeline() -> void:
     super._focus_update_replay_timeline()
-    if _replay_playhead == null or _focus_replay_track == null:
+    if _focus_replay_track == null:
         return
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
     var track_width := maxf(0.0, _focus_replay_track.size.x)
+
+    if _replay_finish_zone != null:
+        var finish_geometry := _replay_finish_zone_geometry(track_width)
+        _replay_finish_zone.position = Vector2(finish_geometry.x, 0.0)
+        _replay_finish_zone.size = Vector2(finish_geometry.y, REPLAY_TIMELINE_TRACK_HEIGHT)
+
+    if _replay_playhead == null:
+        return
     var x := _replay_playhead_x(progress, track_width)
     _replay_playhead.position = Vector2(
         x - REPLAY_PLAYHEAD_SIZE * 0.5,
