@@ -94,6 +94,7 @@ jobs:
           grep -q 'PRACTICE_DISPERSION_ENVELOPE_OK=1' "$PREVIEW_LOG"
           grep -q 'PRACTICE_BIAS_VECTOR_OK=1' "$PREVIEW_LOG"
           grep -q 'SHOT_MAP_HIERARCHY_OK=1' "$PREVIEW_LOG"
+          grep -q 'COMMERCIAL_READ_CORRIDOR_OK=1' "$PREVIEW_LOG"
           if grep -Eiq 'SCRIPT ERROR|Parse Error|Invalid assignment|Invalid call|Cannot assign|push_error' "$PREVIEW_LOG"; then
             echo "V143 preview regression detected a GDScript error" >&2
             exit 1

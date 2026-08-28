@@ -1,12 +1,17 @@
 extends "res://presentation_focus_choreography.gd"
 
-# Presentation-only read apex cue. The marker is derived from the existing recommended read path
-# already produced by GreenReadAdvisor/presentation fallback and never feeds values back into
-# Android physics, GreenTerrain, or GreenReadAdvisor.
+# Presentation-only read apex cue + path corridor. Everything is derived from the existing
+# recommended read path and never feeds values back into Android physics, GreenTerrain,
+# GreenReadAdvisor, aiming, or scoring.
 
 var _read_apex_ring: Line2D
 var _read_apex_leader: Line2D
 var _read_apex_badge: Label
+var _read_corridor_fill: Polygon2D
+var _read_corridor_left: Line2D
+var _read_corridor_right: Line2D
+
+const READ_CORRIDOR_HALF_WIDTH := 6.5
 
 func _read_apex_descriptor(offset_m: float) -> String:
     if absf(offset_m) < 0.03:
@@ -19,10 +24,53 @@ func _read_apex_point(offset_m: float) -> Vector2:
         return V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
     return curve[int(curve.size() / 2)]
 
+func _read_corridor_edges(curve: PackedVector2Array, half_width: float = READ_CORRIDOR_HALF_WIDTH) -> Array[PackedVector2Array]:
+    var left := PackedVector2Array()
+    var right := PackedVector2Array()
+    if curve.size() < 2:
+        return [left, right]
+    for i in range(curve.size()):
+        var prev: Vector2 = curve[maxi(0, i - 1)]
+        var next: Vector2 = curve[mini(curve.size() - 1, i + 1)]
+        var tangent := (next - prev).normalized()
+        if tangent.length_squared() < 0.5:
+            tangent = Vector2.UP
+        var normal := Vector2(-tangent.y, tangent.x)
+        left.append(curve[i] + normal * half_width)
+        right.append(curve[i] - normal * half_width)
+    return [left, right]
+
+func _read_corridor_polygon(left: PackedVector2Array, right: PackedVector2Array) -> PackedVector2Array:
+    var polygon := PackedVector2Array()
+    for p in left:
+        polygon.append(p)
+    for i in range(right.size() - 1, -1, -1):
+        polygon.append(right[i])
+    return polygon
+
 func _build_hud() -> void:
     super._build_hud()
     if _v183_panel == null:
         return
+
+    _read_corridor_fill = Polygon2D.new()
+    _read_corridor_fill.name = "CommercialReadCorridorFill"
+    _read_corridor_fill.color = Color(1.0, 0.79, 0.28, 0.075)
+    _v183_panel.add_child(_read_corridor_fill)
+    if _v183_path_line != null:
+        _v183_panel.move_child(_read_corridor_fill, _v183_path_line.get_index())
+
+    _read_corridor_left = Line2D.new()
+    _read_corridor_left.name = "CommercialReadCorridorLeft"
+    _read_corridor_left.width = 1.1
+    _read_corridor_left.default_color = Color(1.0, 0.82, 0.34, 0.36)
+    _v183_panel.add_child(_read_corridor_left)
+
+    _read_corridor_right = Line2D.new()
+    _read_corridor_right.name = "CommercialReadCorridorRight"
+    _read_corridor_right.width = 1.1
+    _read_corridor_right.default_color = Color(1.0, 0.82, 0.34, 0.36)
+    _v183_panel.add_child(_read_corridor_right)
 
     _read_apex_ring = Line2D.new()
     _read_apex_ring.name = "CommercialReadApexRing"
@@ -47,6 +95,23 @@ func _build_hud() -> void:
         HORIZONTAL_ALIGNMENT_CENTER
     )
     _read_apex_badge.name = "CommercialReadApexBadge"
+
+func _refresh_read_corridor() -> void:
+    if _read_corridor_fill == null or _v183_panel == null:
+        return
+    var visible := _v183_panel.visible
+    _read_corridor_fill.visible = visible
+    _read_corridor_left.visible = visible
+    _read_corridor_right.visible = visible
+    if not visible:
+        return
+    var curve := _v183_path(_v165_recommended_offset)
+    var edges := _read_corridor_edges(curve)
+    var left: PackedVector2Array = edges[0]
+    var right: PackedVector2Array = edges[1]
+    _read_corridor_fill.polygon = _read_corridor_polygon(left, right)
+    _read_corridor_left.points = left
+    _read_corridor_right.points = right
 
 func _refresh_read_apex() -> void:
     if _read_apex_ring == null or _v183_panel == null:
@@ -76,4 +141,5 @@ func _refresh_read_apex() -> void:
 
 func _v183_update(s: Dictionary, force_visible: bool = false) -> void:
     super._v183_update(s, force_visible)
+    _refresh_read_corridor()
     _refresh_read_apex()
