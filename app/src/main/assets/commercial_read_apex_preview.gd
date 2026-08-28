@@ -4,13 +4,19 @@ const ApexScene = preload("res://commercial_read_apex.gd")
 var _apex_preview_done := false
 
 func _process(delta: float) -> void:
-    # The inherited preview captures at frame 14, so run the new regression first while the
-    # frame counter is still 11. This guarantees the actual apex cue is present in the CI PNG.
+    # The inherited preview captures at frame 14, so build the apex cue first. The inherited
+    # presentation-focus regression then intentionally fades read panels for its replay check;
+    # restore only this panel after super() so the deferred screenshot still proves apex layout.
     if not _apex_preview_done and _preview_frames >= 11:
         _apex_preview_done = true
         if not _run_apex_preview_regression():
             return
     super._process(delta)
+    if _apex_preview_done and _capture_started and _v183_panel != null:
+        var panel_modulate := _v183_panel.modulate
+        panel_modulate.a = 1.0
+        _v183_panel.modulate = panel_modulate
+        _v183_panel.visible = true
 
 func _run_apex_preview_regression() -> bool:
     var probe = ApexScene.new()
@@ -38,8 +44,6 @@ func _run_apex_preview_regression() -> bool:
         get_tree().quit(31)
         return false
 
-    # Force a representative pre-shot read into the screenshot so CI catches overlap/placement
-    # regressions instead of validating only invisible helper math.
     _v165_recommended_offset = 0.42
     _v183_update({"distanceToCup": 4.2, "sideSlope": 1.35, "longSlope": -0.55}, true)
     if _v183_panel == null:
@@ -47,11 +51,6 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(31)
         return false
-
-    var panel_modulate := _v183_panel.modulate
-    panel_modulate.a = 1.0
-    _v183_panel.modulate = panel_modulate
-    _v183_panel.visible = true
 
     var apex := probe._read_apex_point(_v165_recommended_offset)
     var ring := Line2D.new()
