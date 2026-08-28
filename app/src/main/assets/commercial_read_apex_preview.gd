@@ -4,9 +4,9 @@ const ApexScene = preload("res://commercial_read_apex.gd")
 var _apex_preview_done := false
 
 func _process(delta: float) -> void:
-    # The inherited preview captures at frame 14, so build the apex cue first. The inherited
+    # The inherited preview captures at frame 14, so build the apex/corridor cues first. The inherited
     # presentation-focus regression then intentionally fades read panels for its replay check;
-    # restore only this panel after super() so the deferred screenshot still proves apex layout.
+    # restore only this panel after super() so the deferred screenshot still proves read layout.
     if not _apex_preview_done and _preview_frames >= 11:
         _apex_preview_done = true
         if not _run_apex_preview_regression():
@@ -44,6 +44,34 @@ func _run_apex_preview_regression() -> bool:
         get_tree().quit(31)
         return false
 
+    var regression_curve := probe._v183_path(0.42)
+    var regression_edges := probe._read_corridor_edges(regression_curve)
+    var left_edge: PackedVector2Array = regression_edges[0]
+    var right_edge: PackedVector2Array = regression_edges[1]
+    var corridor_polygon := probe._read_corridor_polygon(left_edge, right_edge)
+    if left_edge.size() != regression_curve.size() or right_edge.size() != regression_curve.size():
+        push_error("Read corridor point-count regression")
+        probe.free()
+        get_tree().quit(32)
+        return false
+    if corridor_polygon.size() != regression_curve.size() * 2:
+        push_error("Read corridor polygon regression")
+        probe.free()
+        get_tree().quit(32)
+        return false
+    var mid := int(regression_curve.size() / 2)
+    var corridor_width := left_edge[mid].distance_to(right_edge[mid])
+    if absf(corridor_width - READ_CORRIDOR_HALF_WIDTH * 2.0) > 0.35:
+        push_error("Read corridor width regression")
+        probe.free()
+        get_tree().quit(32)
+        return false
+    if left_edge[0].distance_to(right_edge[0]) < 10.0 or left_edge[-1].distance_to(right_edge[-1]) < 10.0:
+        push_error("Read corridor endpoint collapse regression")
+        probe.free()
+        get_tree().quit(32)
+        return false
+
     _v165_recommended_offset = 0.42
     _v183_update({"distanceToCup": 4.2, "sideSlope": 1.35, "longSlope": -0.55}, true)
     if _v183_panel == null:
@@ -51,6 +79,24 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(31)
         return false
+
+    var preview_curve := _v183_path(_v165_recommended_offset)
+    var preview_edges := probe._read_corridor_edges(preview_curve)
+    var preview_fill := Polygon2D.new()
+    preview_fill.name = "PreviewCommercialReadCorridorFill"
+    preview_fill.polygon = probe._read_corridor_polygon(preview_edges[0], preview_edges[1])
+    preview_fill.color = Color(1.0, 0.79, 0.28, 0.075)
+    _v183_panel.add_child(preview_fill)
+    if _v183_path_line != null:
+        _v183_panel.move_child(preview_fill, _v183_path_line.get_index())
+
+    for spec in [["PreviewCommercialReadCorridorLeft", preview_edges[0]], ["PreviewCommercialReadCorridorRight", preview_edges[1]]]:
+        var edge := Line2D.new()
+        edge.name = spec[0]
+        edge.width = 1.1
+        edge.default_color = Color(1.0, 0.82, 0.34, 0.36)
+        edge.points = spec[1]
+        _v183_panel.add_child(edge)
 
     var apex := probe._read_apex_point(_v165_recommended_offset)
     var ring := Line2D.new()
@@ -75,6 +121,7 @@ func _run_apex_preview_regression() -> bool:
     _v183_panel.add_child(leader)
 
     probe.free()
+    print("COMMERCIAL_READ_CORRIDOR_OK=1")
     print("COMMERCIAL_READ_APEX_OK=1")
     print("COMMERCIAL_READ_APEX_PREVIEW_OK=1")
     return true
