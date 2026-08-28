@@ -12,6 +12,7 @@ const PHASE_REPLAY := "REPLAY"
 const PHASE_RESULT := "RESULT"
 
 var _focus_phase := PHASE_READY
+var _focus_running := false
 var _focus_target_card: CanvasItem
 var _focus_telemetry_card: CanvasItem
 var _focus_break_card: CanvasItem
@@ -89,10 +90,13 @@ func _focus_apply_phase(phase: String, immediate: bool = false, delta: float = 0
     _focus_set_alpha(_v188_panel, _focus_role_alpha(phase, "result"), immediate, delta)
 
 func _focus_current_phase() -> String:
-    var running := _last_running
     var replaying := _v171_replay_remaining > 0.0
     var showing_result := _v177_panel != null and _v177_panel.visible
-    return _focus_phase_for(running, replaying, showing_result)
+    return _focus_phase_for(_focus_running, replaying, showing_result)
+
+func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
+    super._apply_snapshot(s, immediate, delta)
+    _focus_running = bool(s.get("running", false))
 
 func _process(delta: float) -> void:
     super._process(delta)
