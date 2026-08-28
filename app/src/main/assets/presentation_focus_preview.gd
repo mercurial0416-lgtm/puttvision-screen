@@ -35,6 +35,11 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    if probe._focus_role_alpha("REPLAY", "practice") > 0.01:
+        push_error("Replay practice HUD can occlude cinematic timeline")
+        probe.free()
+        get_tree().quit(29)
+        return
     if probe._focus_role_alpha("RESULT", "result") < 0.99:
         push_error("Presentation focus result package regression")
         probe.free()
@@ -141,8 +146,8 @@ func _process(delta: float) -> void:
         get_tree().quit(29)
         return
 
-    # Render replay-focused hierarchy in the CI screenshot: setup overlays recede while
-    # cinematic framing, playback progress, camera blend state, and time-to-finish remain legible.
+    # Render replay-focused hierarchy in the CI screenshot: setup and practice overlays recede
+    # while cinematic framing, playback progress, camera blend state, and time-to-finish stay clear.
     var replay_phase := "REPLAY"
     var target_card := distance_label.get_parent() as CanvasItem if distance_label != null else null
     var telemetry_card := speed_label.get_parent() as CanvasItem if speed_label != null else null
@@ -156,6 +161,8 @@ func _process(delta: float) -> void:
     _preview_set_alpha(_v183_panel, probe._focus_role_alpha(replay_phase, "read"))
     _preview_set_alpha(_v177_panel, probe._focus_role_alpha(replay_phase, "result"))
     _preview_set_alpha(_v188_panel, probe._focus_role_alpha(replay_phase, "result"))
+    _preview_set_alpha(_v179_panel, probe._focus_role_alpha(replay_phase, "practice"))
+    _preview_set_alpha(_v191_bar, probe._focus_role_alpha(replay_phase, "practice"))
     _preview_add_letterbox(probe.REPLAY_BAR_HEIGHT, probe._focus_role_alpha(replay_phase, "letterbox"))
     var preview_progress := 0.78
     var preview_remaining := 0.62
@@ -166,6 +173,7 @@ func _process(delta: float) -> void:
     print("REPLAY_TIMELINE_OK=1")
     print("REPLAY_CAMERA_CHAPTER_OK=1")
     print("REPLAY_CAMERA_BLEND_OK=1")
+    print("REPLAY_PRACTICE_DECLUTTER_OK=1")
     print("REPLAY_TIMECODE_OK=1")
 
 func _preview_add_letterbox(height: float, alpha: float) -> void:
