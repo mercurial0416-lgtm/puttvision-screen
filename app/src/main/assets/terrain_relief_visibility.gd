@@ -7,7 +7,6 @@ extends "res://practice_trend_vector.gd"
 const RELIEF_GREEN_SIZE := Vector2(11.8, 34.5)
 const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
-const RELIEF_SURFACE_LIFT := 0.0016
 
 var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
@@ -21,29 +20,30 @@ render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;
 
 varying float terrain_height;
 varying float slope_pct;
+varying vec2 local_slope;
 
 void vertex() {
     terrain_height = (COLOR.r - 0.5) * 4.0;
-    vec2 local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
+    local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
     slope_pct = length(local_slope);
     VERTEX.y += 0.0016;
 }
 
 void fragment() {
-    // A soft elevation wash plus broad 10 cm contour sheen. It is intentionally subtle enough
-    // to remain turf, but strong enough that a 1-2% plane no longer reads as dead flat on a TV.
-    float active = smoothstep(0.18, 0.85, slope_pct);
+    // Natural macro relief: a continuous high/low wash plus a tiny slope-facing response.
+    // No repeated contour bands, no geometry exaggeration, and no physics feedback.
+    float active = smoothstep(0.18, 0.90, slope_pct);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
-    float contour_wave = 0.5 + 0.5 * sin(terrain_height * 62.831853);
-    float contour_soft = smoothstep(0.24, 0.78, contour_wave);
+    vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
+    float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
 
-    vec3 low_green = vec3(0.055, 0.145, 0.072);
-    vec3 high_green = vec3(0.205, 0.300, 0.112);
+    vec3 low_green = vec3(0.045, 0.115, 0.055);
+    vec3 high_green = vec3(0.205, 0.285, 0.115);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
-    relief_color *= mix(0.94, 1.07, contour_soft);
+    relief_color *= 1.0 + facing * 0.045;
 
     ALBEDO = relief_color;
-    ALPHA = active * (0.075 + 0.035 * abs(height_bias) + 0.040 * contour_soft);
+    ALPHA = active * (0.082 + 0.052 * abs(height_bias));
 }
 """
     var material := ShaderMaterial.new()
@@ -73,7 +73,7 @@ func _build_environment() -> void:
     _terrain_relief_light = DirectionalLight3D.new()
     _terrain_relief_light.name = "TerrainReliefGrazingLight"
     _terrain_relief_light.light_color = Color("#f4e6bf")
-    _terrain_relief_light.light_energy = 0.24
+    _terrain_relief_light.light_energy = 0.28
     _terrain_relief_light.shadow_enabled = false
     _terrain_relief_light.rotation_degrees = Vector3(-21.0, 68.0, 0.0)
     add_child(_terrain_relief_light)
