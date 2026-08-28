@@ -13,7 +13,10 @@ const PHASE_RESULT := "RESULT"
 const REPLAY_BAR_HEIGHT := 46.0
 const REPLAY_TIMELINE_SIDE_INSET := 28.0
 const REPLAY_TIMELINE_LABEL_WIDTH := 122.0
+const REPLAY_TIMELINE_STAGE_WIDTH := 106.0
 const REPLAY_TIMELINE_TRACK_HEIGHT := 3.0
+# Matches the existing cinematic cup-focus handoff without changing camera or shot logic.
+const REPLAY_CUP_CHAPTER_START := 0.72
 
 var _focus_phase := PHASE_READY
 var _focus_running := false
@@ -27,6 +30,8 @@ var _focus_replay_timeline: Control
 var _focus_replay_track: ColorRect
 var _focus_replay_fill: ColorRect
 var _focus_replay_label: Label
+var _focus_replay_stage_label: Label
+var _focus_replay_chapter_marker: ColorRect
 
 func _build_hud() -> void:
     super._build_hud()
@@ -75,12 +80,26 @@ func _focus_build_replay_timeline() -> void:
     _focus_replay_label.add_theme_color_override("font_color", Color(0.84, 0.90, 0.94, 0.96))
     _focus_replay_timeline.add_child(_focus_replay_label)
 
+    _focus_replay_stage_label = Label.new()
+    _focus_replay_stage_label.name = "ReplayCameraStage"
+    _focus_replay_stage_label.anchor_left = 1.0
+    _focus_replay_stage_label.anchor_right = 1.0
+    _focus_replay_stage_label.offset_left = -REPLAY_TIMELINE_SIDE_INSET - REPLAY_TIMELINE_STAGE_WIDTH
+    _focus_replay_stage_label.offset_right = -REPLAY_TIMELINE_SIDE_INSET
+    _focus_replay_stage_label.offset_top = 12.0
+    _focus_replay_stage_label.offset_bottom = 36.0
+    _focus_replay_stage_label.text = "TRAIL CAM"
+    _focus_replay_stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    _focus_replay_stage_label.add_theme_font_size_override("font_size", 13)
+    _focus_replay_stage_label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.88, 0.94))
+    _focus_replay_timeline.add_child(_focus_replay_stage_label)
+
     _focus_replay_track = ColorRect.new()
     _focus_replay_track.name = "ReplayTimelineTrack"
     _focus_replay_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _focus_replay_track.anchor_right = 1.0
     _focus_replay_track.offset_left = REPLAY_TIMELINE_SIDE_INSET + REPLAY_TIMELINE_LABEL_WIDTH
-    _focus_replay_track.offset_right = -REPLAY_TIMELINE_SIDE_INSET
+    _focus_replay_track.offset_right = -REPLAY_TIMELINE_SIDE_INSET - REPLAY_TIMELINE_STAGE_WIDTH - 14.0
     _focus_replay_track.offset_top = 22.0
     _focus_replay_track.offset_bottom = 22.0 + REPLAY_TIMELINE_TRACK_HEIGHT
     _focus_replay_track.color = Color(0.28, 0.34, 0.38, 0.42)
@@ -93,6 +112,14 @@ func _focus_build_replay_timeline() -> void:
     _focus_replay_fill.size = Vector2(0.0, REPLAY_TIMELINE_TRACK_HEIGHT)
     _focus_replay_fill.color = Color(0.88, 0.95, 0.98, 0.94)
     _focus_replay_track.add_child(_focus_replay_fill)
+
+    _focus_replay_chapter_marker = ColorRect.new()
+    _focus_replay_chapter_marker.name = "ReplayCupCameraMarker"
+    _focus_replay_chapter_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _focus_replay_chapter_marker.position = Vector2.ZERO
+    _focus_replay_chapter_marker.size = Vector2(2.0, 11.0)
+    _focus_replay_chapter_marker.color = Color(0.90, 0.78, 0.40, 0.90)
+    _focus_replay_track.add_child(_focus_replay_chapter_marker)
 
 func _focus_phase_for(running: bool, replaying: bool, showing_result: bool) -> String:
     if running:
@@ -152,11 +179,19 @@ func _focus_replay_progress(remaining: float, duration: float) -> float:
         return 0.0
     return clamp(1.0 - max(0.0, remaining) / duration, 0.0, 1.0)
 
+func _focus_replay_stage(progress: float) -> String:
+    return "CUP CAM" if clampf(progress, 0.0, 1.0) >= REPLAY_CUP_CHAPTER_START else "TRAIL CAM"
+
 func _focus_update_replay_timeline() -> void:
     if _focus_replay_track == null or _focus_replay_fill == null:
         return
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
-    _focus_replay_fill.size = Vector2(max(0.0, _focus_replay_track.size.x * progress), REPLAY_TIMELINE_TRACK_HEIGHT)
+    var track_width := maxf(0.0, _focus_replay_track.size.x)
+    _focus_replay_fill.size = Vector2(track_width * progress, REPLAY_TIMELINE_TRACK_HEIGHT)
+    if _focus_replay_chapter_marker != null:
+        _focus_replay_chapter_marker.position = Vector2(maxf(0.0, track_width * REPLAY_CUP_CHAPTER_START - 1.0), -4.0)
+    if _focus_replay_stage_label != null:
+        _focus_replay_stage_label.text = _focus_replay_stage(progress)
 
 func _focus_set_alpha(item: CanvasItem, target: float, immediate: bool, delta: float = 0.0) -> void:
     if item == null:
