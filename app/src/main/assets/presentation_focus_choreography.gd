@@ -11,6 +11,9 @@ const PHASE_ROLL := "ROLL"
 const PHASE_REPLAY := "REPLAY"
 const PHASE_RESULT := "RESULT"
 const REPLAY_BAR_HEIGHT := 46.0
+const REPLAY_TIMELINE_SIDE_INSET := 28.0
+const REPLAY_TIMELINE_LABEL_WIDTH := 122.0
+const REPLAY_TIMELINE_TRACK_HEIGHT := 3.0
 
 var _focus_phase := PHASE_READY
 var _focus_running := false
@@ -20,6 +23,10 @@ var _focus_break_card: CanvasItem
 var _focus_state_card: CanvasItem
 var _focus_letterbox_top: ColorRect
 var _focus_letterbox_bottom: ColorRect
+var _focus_replay_timeline: Control
+var _focus_replay_track: ColorRect
+var _focus_replay_fill: ColorRect
+var _focus_replay_label: Label
 
 func _build_hud() -> void:
     super._build_hud()
@@ -28,6 +35,7 @@ func _build_hud() -> void:
     _focus_break_card = _v174_break_value.get_parent() as CanvasItem if _v174_break_value != null else null
     _focus_state_card = _v174_state_label.get_parent() as CanvasItem if _v174_state_label != null else null
     _focus_build_letterbox()
+    _focus_build_replay_timeline()
     _focus_apply_phase(PHASE_READY, true)
 
 func _focus_build_letterbox() -> void:
@@ -49,6 +57,43 @@ func _focus_build_letterbox() -> void:
     _focus_letterbox_bottom.z_index = 240
     add_child(_focus_letterbox_bottom)
 
+func _focus_build_replay_timeline() -> void:
+    _focus_replay_timeline = Control.new()
+    _focus_replay_timeline.name = "ReplayTimeline"
+    _focus_replay_timeline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _focus_replay_timeline.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+    _focus_replay_timeline.offset_top = -REPLAY_BAR_HEIGHT
+    _focus_replay_timeline.z_index = 242
+    add_child(_focus_replay_timeline)
+
+    _focus_replay_label = Label.new()
+    _focus_replay_label.name = "ReplayTimelineLabel"
+    _focus_replay_label.position = Vector2(REPLAY_TIMELINE_SIDE_INSET, 12.0)
+    _focus_replay_label.size = Vector2(REPLAY_TIMELINE_LABEL_WIDTH, 24.0)
+    _focus_replay_label.text = "SHOT REPLAY"
+    _focus_replay_label.add_theme_font_size_override("font_size", 14)
+    _focus_replay_label.add_theme_color_override("font_color", Color(0.84, 0.90, 0.94, 0.96))
+    _focus_replay_timeline.add_child(_focus_replay_label)
+
+    _focus_replay_track = ColorRect.new()
+    _focus_replay_track.name = "ReplayTimelineTrack"
+    _focus_replay_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _focus_replay_track.anchor_right = 1.0
+    _focus_replay_track.offset_left = REPLAY_TIMELINE_SIDE_INSET + REPLAY_TIMELINE_LABEL_WIDTH
+    _focus_replay_track.offset_right = -REPLAY_TIMELINE_SIDE_INSET
+    _focus_replay_track.offset_top = 22.0
+    _focus_replay_track.offset_bottom = 22.0 + REPLAY_TIMELINE_TRACK_HEIGHT
+    _focus_replay_track.color = Color(0.28, 0.34, 0.38, 0.42)
+    _focus_replay_timeline.add_child(_focus_replay_track)
+
+    _focus_replay_fill = ColorRect.new()
+    _focus_replay_fill.name = "ReplayTimelineFill"
+    _focus_replay_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _focus_replay_fill.position = Vector2.ZERO
+    _focus_replay_fill.size = Vector2(0.0, REPLAY_TIMELINE_TRACK_HEIGHT)
+    _focus_replay_fill.color = Color(0.88, 0.95, 0.98, 0.94)
+    _focus_replay_track.add_child(_focus_replay_fill)
+
 func _focus_phase_for(running: bool, replaying: bool, showing_result: bool) -> String:
     if running:
         return PHASE_ROLL
@@ -69,6 +114,7 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "read": return 0.0
                 "result": return 0.0
                 "letterbox": return 0.10
+                "replay_timeline": return 0.0
         PHASE_REPLAY:
             match role:
                 "target": return 0.40
@@ -78,6 +124,7 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "read": return 0.0
                 "result": return 0.0
                 "letterbox": return 0.68
+                "replay_timeline": return 1.0
         PHASE_RESULT:
             match role:
                 "target": return 0.52
@@ -87,6 +134,7 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "read": return 0.0
                 "result": return 1.0
                 "letterbox": return 0.0
+                "replay_timeline": return 0.0
         _:
             match role:
                 "target": return 1.0
@@ -96,7 +144,19 @@ func _focus_role_alpha(phase: String, role: String) -> float:
                 "read": return 1.0
                 "result": return 1.0
                 "letterbox": return 0.0
+                "replay_timeline": return 0.0
     return 1.0
+
+func _focus_replay_progress(remaining: float, duration: float) -> float:
+    if not is_finite(remaining) or not is_finite(duration) or duration <= 0.001:
+        return 0.0
+    return clamp(1.0 - max(0.0, remaining) / duration, 0.0, 1.0)
+
+func _focus_update_replay_timeline() -> void:
+    if _focus_replay_track == null or _focus_replay_fill == null:
+        return
+    var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
+    _focus_replay_fill.size = Vector2(max(0.0, _focus_replay_track.size.x * progress), REPLAY_TIMELINE_TRACK_HEIGHT)
 
 func _focus_set_alpha(item: CanvasItem, target: float, immediate: bool, delta: float = 0.0) -> void:
     if item == null:
@@ -117,6 +177,7 @@ func _focus_apply_phase(phase: String, immediate: bool = false, delta: float = 0
     _focus_set_alpha(_v188_panel, _focus_role_alpha(phase, "result"), immediate, delta)
     _focus_set_alpha(_focus_letterbox_top, _focus_role_alpha(phase, "letterbox"), immediate, delta)
     _focus_set_alpha(_focus_letterbox_bottom, _focus_role_alpha(phase, "letterbox"), immediate, delta)
+    _focus_set_alpha(_focus_replay_timeline, _focus_role_alpha(phase, "replay_timeline"), immediate, delta)
 
 func _focus_current_phase() -> String:
     var replaying := _v171_replay_remaining > 0.0
@@ -129,4 +190,5 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
 
 func _process(delta: float) -> void:
     super._process(delta)
+    _focus_update_replay_timeline()
     _focus_apply_phase(_focus_current_phase(), false, delta)

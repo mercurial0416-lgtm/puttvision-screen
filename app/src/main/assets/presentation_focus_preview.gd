@@ -55,9 +55,39 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    if probe._focus_role_alpha("REPLAY", "replay_timeline") < 0.99:
+        push_error("Replay timeline is not visible during replay")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._focus_role_alpha("READY", "replay_timeline") > 0.01 or probe._focus_role_alpha("RESULT", "replay_timeline") > 0.01:
+        push_error("Replay timeline leaks outside replay phase")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe._focus_replay_progress(2.8, 2.8)) > 0.001:
+        push_error("Replay timeline start progress regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe._focus_replay_progress(1.4, 2.8) - 0.5) > 0.001:
+        push_error("Replay timeline midpoint regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe._focus_replay_progress(-0.2, 2.8) - 1.0) > 0.001:
+        push_error("Replay timeline completion clamp regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe._focus_replay_progress(1.0, 0.0)) > 0.001:
+        push_error("Replay timeline invalid-duration guard regression")
+        probe.free()
+        get_tree().quit(29)
+        return
 
     # Render replay-focused hierarchy in the CI screenshot: setup overlays recede while
-    # cinematic framing becomes visible around the active camera without touching physics.
+    # cinematic framing and a restrained playback timeline become visible without touching physics.
     var replay_phase := "REPLAY"
     var target_card := distance_label.get_parent() as CanvasItem if distance_label != null else null
     var telemetry_card := speed_label.get_parent() as CanvasItem if speed_label != null else null
@@ -72,9 +102,11 @@ func _process(delta: float) -> void:
     _preview_set_alpha(_v177_panel, probe._focus_role_alpha(replay_phase, "result"))
     _preview_set_alpha(_v188_panel, probe._focus_role_alpha(replay_phase, "result"))
     _preview_add_letterbox(probe.REPLAY_BAR_HEIGHT, probe._focus_role_alpha(replay_phase, "letterbox"))
+    _preview_add_replay_timeline(0.58, probe._focus_role_alpha(replay_phase, "replay_timeline"), probe.REPLAY_BAR_HEIGHT, probe.REPLAY_TIMELINE_SIDE_INSET, probe.REPLAY_TIMELINE_LABEL_WIDTH, probe.REPLAY_TIMELINE_TRACK_HEIGHT)
     probe.free()
     print("PRESENTATION_FOCUS_CHOREOGRAPHY_OK=1")
     print("REPLAY_CINEMATIC_LETTERBOX_OK=1")
+    print("REPLAY_TIMELINE_OK=1")
 
 func _preview_add_letterbox(height: float, alpha: float) -> void:
     var top := ColorRect.new()
@@ -94,6 +126,35 @@ func _preview_add_letterbox(height: float, alpha: float) -> void:
     bottom.color = Color(0.012, 0.018, 0.024, alpha)
     bottom.z_index = 240
     add_child(bottom)
+
+func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: float, side_inset: float, label_width: float, track_height: float) -> void:
+    var label := Label.new()
+    label.name = "PreviewReplayTimelineLabel"
+    label.position = Vector2(side_inset, 1080.0 - bar_height + 12.0)
+    label.size = Vector2(label_width, 24.0)
+    label.text = "SHOT REPLAY"
+    label.add_theme_font_size_override("font_size", 14)
+    label.add_theme_color_override("font_color", Color(0.84, 0.90, 0.94, alpha))
+    label.z_index = 242
+    add_child(label)
+
+    var track_left: float = side_inset + label_width
+    var track_width: float = maxf(1.0, 1920.0 - track_left - side_inset)
+    var track := ColorRect.new()
+    track.name = "PreviewReplayTimelineTrack"
+    track.position = Vector2(track_left, 1080.0 - bar_height + 22.0)
+    track.size = Vector2(track_width, track_height)
+    track.color = Color(0.28, 0.34, 0.38, 0.42 * alpha)
+    track.z_index = 242
+    add_child(track)
+
+    var fill := ColorRect.new()
+    fill.name = "PreviewReplayTimelineFill"
+    fill.position = track.position
+    fill.size = Vector2(track_width * clampf(progress, 0.0, 1.0), track_height)
+    fill.color = Color(0.88, 0.95, 0.98, 0.94 * alpha)
+    fill.z_index = 243
+    add_child(fill)
 
 func _preview_set_alpha(item: CanvasItem, alpha: float) -> void:
     if item == null:
