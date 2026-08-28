@@ -6,6 +6,11 @@ extends "res://commercial_read_apex.gd"
 const READ_FLOW_FRACTIONS := [0.40, 0.60, 0.78]
 const READ_FLOW_TIP_LENGTH := 4.8
 const READ_FLOW_WING_HALF_WIDTH := 3.4
+const LIVE_TRACE_MAX_POINTS := 28
+const LIVE_TRACE_LEFT := 20.0
+const LIVE_TRACE_RIGHT := 476.0
+const LIVE_TRACE_CENTER_Y := 81.0
+const LIVE_TRACE_AMPLITUDE := 6.0
 
 var _read_flow_cues: Array[Line2D] = []
 var _live_curve_was_running := false
@@ -17,6 +22,9 @@ var _live_curve_peak_label: Label
 var _live_curve_pace_label: Label
 var _live_curve_peak_cm := 0.0
 var _live_curve_launch_speed := 0.0
+var _live_curve_trace: Line2D
+var _live_curve_zero: Line2D
+var _live_curve_history := PackedFloat32Array()
 
 func _read_flow_geometry(offset_m: float, fraction: float) -> Dictionary:
     var curve := _v183_path(offset_m)
@@ -80,6 +88,22 @@ func _build_hud() -> void:
     _live_curve_peak_label = _v174_text(_live_curve_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 0.0 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
     _live_curve_peak_label.name = "LiveBreakPeak"
 
+    _live_curve_zero = Line2D.new()
+    _live_curve_zero.name = "LiveBreakTraceZero"
+    _live_curve_zero.width = 1.0
+    _live_curve_zero.default_color = Color(0.48, 0.68, 0.72, 0.18)
+    _live_curve_zero.points = PackedVector2Array([Vector2(LIVE_TRACE_LEFT, LIVE_TRACE_CENTER_Y), Vector2(LIVE_TRACE_RIGHT, LIVE_TRACE_CENTER_Y)])
+    _live_curve_panel.add_child(_live_curve_zero)
+
+    _live_curve_trace = Line2D.new()
+    _live_curve_trace.name = "LiveBreakTrace"
+    _live_curve_trace.width = 1.8
+    _live_curve_trace.default_color = Color(0.45, 0.86, 0.92, 0.82)
+    _live_curve_trace.joint_mode = Line2D.LINE_JOINT_ROUND
+    _live_curve_trace.begin_cap_mode = Line2D.LINE_CAP_ROUND
+    _live_curve_trace.end_cap_mode = Line2D.LINE_CAP_ROUND
+    _live_curve_panel.add_child(_live_curve_trace)
+
 func _refresh_read_flow() -> void:
     if _v183_panel == null:
         return
@@ -112,10 +136,32 @@ func _live_pace_readout(current_speed: float, launch_speed: float) -> String:
         phase = "SETTLING"
     return "PACE %d%% · %s" % [int(round(ratio * 100.0)), phase]
 
+func _live_trace_points(history: PackedFloat32Array) -> PackedVector2Array:
+    var points := PackedVector2Array()
+    if history.is_empty():
+        return points
+    var peak := 5.0
+    for value in history:
+        peak = maxf(peak, absf(value))
+    var count := history.size()
+    for i in range(count):
+        var t := 1.0 if count == 1 else float(i) / float(count - 1)
+        var x := lerpf(LIVE_TRACE_LEFT, LIVE_TRACE_RIGHT, t)
+        var y := LIVE_TRACE_CENTER_Y - clampf(history[i] / peak, -1.0, 1.0) * LIVE_TRACE_AMPLITUDE
+        points.append(Vector2(x, y))
+    return points
+
+func _live_trace_push(cross_track_cm: float) -> void:
+    _live_curve_history.append(cross_track_cm)
+    while _live_curve_history.size() > LIVE_TRACE_MAX_POINTS:
+        _live_curve_history.remove_at(0)
+    if _live_curve_trace != null:
+        _live_curve_trace.points = _live_trace_points(_live_curve_history)
+
 # Make the authoritative roll response obvious without touching physics. During a live roll the
-# dedicated meter reports current/peak cross-track curve plus speed decay from the measured launch.
-# All values are derived only from bridge x/y/vx/vy snapshots; nothing feeds back into GreenTerrain,
-# GreenReadAdvisor, scoring, aim, or Android physics.
+# dedicated meter reports current/peak cross-track curve, speed decay, and a bounded mini trace of
+# the curve history from bridge snapshots; nothing feeds back into GreenTerrain, GreenReadAdvisor,
+# scoring, aim, or Android physics.
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
     var running := bool(s.get("running", false))
@@ -125,6 +171,9 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         _live_curve_forward = velocity.normalized() if velocity.length_squared() > 0.0001 else Vector2.UP
         _live_curve_peak_cm = 0.0
         _live_curve_launch_speed = velocity.length()
+        _live_curve_history.clear()
+        if _live_curve_trace != null:
+            _live_curve_trace.clear_points()
 
     if _live_curve_panel != null:
         _live_curve_panel.visible = running
@@ -134,6 +183,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
         var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
         _live_curve_peak_cm = maxf(_live_curve_peak_cm, absf(cross_track_cm))
+        _live_trace_push(cross_track_cm)
         if _live_curve_value != null:
             _live_curve_value.text = _live_curve_readout(cross_track_cm)
         if _live_curve_peak_label != null:
