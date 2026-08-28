@@ -4,6 +4,7 @@ extends "res://commercial_read_flow.gd"
 # GreenReadAdvisor output, camera timing, scoring, or bridge data.
 const REPLAY_PLAYHEAD_WIDTH := 6.0
 const REPLAY_PLAYHEAD_HEIGHT := 11.0
+const REPLAY_TIMELINE_TOP_Z := 300
 const REPLAY_TRAIL_COLOR := Color(0.78, 0.91, 0.98, 0.96)
 const REPLAY_CUP_COLOR := Color(0.96, 0.79, 0.38, 0.98)
 
@@ -20,6 +21,8 @@ func _replay_session_alpha(phase: String) -> float:
 
 func _focus_build_replay_timeline() -> void:
     super._focus_build_replay_timeline()
+    if _focus_replay_timeline != null:
+        _focus_replay_timeline.z_index = REPLAY_TIMELINE_TOP_Z
     if _focus_replay_track == null:
         return
     _replay_playhead = ColorRect.new()
