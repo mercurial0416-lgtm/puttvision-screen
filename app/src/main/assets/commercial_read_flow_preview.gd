@@ -27,7 +27,7 @@ func _seed_live_break_preview() -> void:
     if root == null:
         return
     if _preview_live_break_panel == null:
-        _preview_live_break_panel = _v174_panel(root, Vector2(1392, 160), Vector2(498, 92), Color(0.014, 0.021, 0.026, 0.88), Color(0.45, 0.72, 0.82, 0.22), 13)
+        _preview_live_break_panel = _v174_panel(root, Vector2(1392, 310), Vector2(498, 92), Color(0.014, 0.021, 0.026, 0.88), Color(0.45, 0.72, 0.82, 0.22), 13)
         _preview_live_break_panel.name = "PreviewLiveBreakMeter"
         _v174_accent(_preview_live_break_panel, Vector2(0, 0), Vector2(6, 92), Color("#73c2d4"))
         _v174_text(_preview_live_break_panel, Vector2(20, 8), Vector2(170, 22), "LIVE BREAK", 13, Color("#bfe9f1"))
