@@ -14,7 +14,9 @@ var _live_curve_forward := Vector2.UP
 var _live_curve_panel: Panel
 var _live_curve_value: Label
 var _live_curve_peak_label: Label
+var _live_curve_pace_label: Label
 var _live_curve_peak_cm := 0.0
+var _live_curve_launch_speed := 0.0
 
 func _read_flow_geometry(offset_m: float, fraction: float) -> Dictionary:
     var curve := _v183_path(offset_m)
@@ -63,7 +65,7 @@ func _build_hud() -> void:
     if root == null:
         return
 
-    # Dedicated live-break telemetry keeps the base GREEN READ card stable while the ball rolls.
+    # Dedicated live-roll telemetry keeps the base GREEN READ card stable while the ball rolls.
     # It is derived only from bridge snapshots and is hidden outside the live shot, so Forward Mobile
     # pays no persistent drawing/animation cost and the authoritative solver remains untouched.
     _live_curve_panel = _v174_panel(root, Vector2(1392, 310), Vector2(498, 92), Color(0.014, 0.021, 0.026, 0.88), Color(0.45, 0.72, 0.82, 0.22), 13)
@@ -71,6 +73,8 @@ func _build_hud() -> void:
     _live_curve_panel.visible = false
     _v174_accent(_live_curve_panel, Vector2(0, 0), Vector2(6, 92), Color("#73c2d4"))
     _v174_text(_live_curve_panel, Vector2(20, 8), Vector2(170, 22), "LIVE BREAK", 13, Color("#bfe9f1"))
+    _live_curve_pace_label = _v174_text(_live_curve_panel, Vector2(190, 8), Vector2(286, 22), "PACE --", 12, Color(0.68, 0.82, 0.82, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
+    _live_curve_pace_label.name = "LiveRollPace"
     _live_curve_value = _v174_text(_live_curve_panel, Vector2(20, 30), Vector2(250, 42), "CENTER", 24, Color("#f4f6f0"))
     _live_curve_value.name = "LiveBreakValue"
     _live_curve_peak_label = _v174_text(_live_curve_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 0.0 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
@@ -97,18 +101,30 @@ func _live_curve_readout(cross_track_cm: float) -> String:
         return "CENTER"
     return "%s %.1f cm" % ["R" if cross_track_cm > 0.0 else "L", absf(cross_track_cm)]
 
+func _live_pace_readout(current_speed: float, launch_speed: float) -> String:
+    if launch_speed <= 0.001:
+        return "PACE --"
+    var ratio := clampf(current_speed / launch_speed, 0.0, 1.0)
+    var phase := "ROLLING"
+    if ratio < 0.35:
+        phase = "DYING"
+    elif ratio < 0.72:
+        phase = "SETTLING"
+    return "PACE %d%% · %s" % [int(round(ratio * 100.0)), phase]
+
 # Make the authoritative roll response obvious without touching physics. During a live roll the
-# dedicated meter reports current and peak cross-track curve from the measured launch line. This is
-# derived only from bridge x/y/vx/vy snapshots, so users can read slope response at a glance without
-# mutating GreenTerrain / GreenReadAdvisor or crowding the static slope card with changing text.
+# dedicated meter reports current/peak cross-track curve plus speed decay from the measured launch.
+# All values are derived only from bridge x/y/vx/vy snapshots; nothing feeds back into GreenTerrain,
+# GreenReadAdvisor, scoring, aim, or Android physics.
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
     var running := bool(s.get("running", false))
+    var velocity := Vector2(float(s.get("vx", 0.0)), float(s.get("vy", 0.0)))
     if running and not _live_curve_was_running:
         _live_curve_origin = Vector2(float(s.get("startX", 0.0)), float(s.get("startY", 0.0)))
-        var velocity := Vector2(float(s.get("vx", 0.0)), float(s.get("vy", 0.0)))
         _live_curve_forward = velocity.normalized() if velocity.length_squared() > 0.0001 else Vector2.UP
         _live_curve_peak_cm = 0.0
+        _live_curve_launch_speed = velocity.length()
 
     if _live_curve_panel != null:
         _live_curve_panel.visible = running
@@ -122,5 +138,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
             _live_curve_value.text = _live_curve_readout(cross_track_cm)
         if _live_curve_peak_label != null:
             _live_curve_peak_label.text = "PEAK %.1f cm" % _live_curve_peak_cm
+        if _live_curve_pace_label != null:
+            _live_curve_pace_label.text = _live_pace_readout(velocity.length(), _live_curve_launch_speed)
 
     _live_curve_was_running = running
