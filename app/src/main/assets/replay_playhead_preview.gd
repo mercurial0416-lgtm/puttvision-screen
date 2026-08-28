@@ -11,8 +11,6 @@ func _seed_replay_finish_preview() -> void:
     var stage := get_node_or_null("PreviewReplayCameraStage") as Label
     if track == null or fill == null or stage == null:
         return
-    if _focus_replay_timeline != null:
-        _focus_replay_timeline.z_index = ReplayFinish.REPLAY_TIMELINE_TOP_Z
     fill.z_index = ReplayFinish.REPLAY_TIMELINE_TOP_Z
     stage.z_index = ReplayFinish.REPLAY_TIMELINE_TOP_Z
     fill.color = Color(_preview_replay_chapter_color.r, _preview_replay_chapter_color.g, _preview_replay_chapter_color.b, 0.94)
