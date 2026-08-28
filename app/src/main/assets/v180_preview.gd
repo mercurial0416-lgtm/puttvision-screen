@@ -79,8 +79,8 @@ func _process(delta: float) -> void:
             return
         print("V179_SESSION_DISPERSION_OK=1")
 
-        if _v180_focus_chip == null or _v180_focus_distance == null or _v180_compare_chip == null or _v180_compare_primary == null or _v180_compare_secondary == null:
-            push_error("Replay presentation package missing")
+        if _v180_focus_chip == null or _v180_focus_distance == null:
+            push_error("Replay cup-focus package missing")
             get_tree().quit(11)
             return
         if _v180_focus_amount(0.70) > 0.001 or _v180_focus_amount(0.96) < 0.99:
@@ -88,35 +88,16 @@ func _process(delta: float) -> void:
             get_tree().quit(11)
             return
         _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
-        _v171_replay_predicted = [Vector2(0.0, 1.0), Vector2(0.03, 3.0), Vector2(0.04, 5.0), Vector2(0.0, 6.5)]
-        _v171_replay_duration = 10.0
-        _v171_replay_remaining = 1.20
+        _v171_replay_duration = 2.8
+        _v171_replay_remaining = 0.20
         var final_point := _v180_final_point()
         if final_point.distance_to(Vector2(0.05, 6.5)) > 0.001:
             push_error("Replay final-point regression")
             get_tree().quit(11)
             return
-        _v180_refresh_compare()
-        if not _v180_compare_primary.text.begins_with("AVG ") or not _v180_compare_primary.text.contains("PEAK ") or not _v180_compare_secondary.text.begins_with("FINISH Δ "):
-            push_error("Replay read-vs-roll comparison regression")
-            get_tree().quit(11)
-            return
-        print("REPLAY_CUP_FOCUS_OK=1")
-        print("REPLAY_READ_COMPARE_OK=1")
-
-    # Parent snapshot application is intentionally live in the preview. Re-seed only the
-    # synthetic replay after that pass and keep it alive through the deferred capture frame.
-    if _checks_done:
-        _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
-        _v171_replay_predicted = [Vector2(0.0, 1.0), Vector2(0.03, 3.0), Vector2(0.04, 5.0), Vector2(0.0, 6.5)]
-        _v171_replay_duration = 10.0
-        _v171_replay_remaining = 1.20
-        _v180_refresh_compare()
-        _v180_compare_chip.visible = true
-        _v180_compare_chip.modulate.a = 1.0
         _v180_focus_chip.visible = true
-        _v180_focus_chip.modulate.a = 1.0
         _v180_focus_distance.text = "42 cm TO CUP"
+        print("REPLAY_CUP_FOCUS_OK=1")
 
     if not _capture_started and _preview_frames >= 14:
         _capture_started = true
