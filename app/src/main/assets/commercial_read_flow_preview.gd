@@ -5,6 +5,10 @@ const PREVIEW_SIDE_SLOPE := 1.35
 const PREVIEW_LONG_SLOPE := -0.55
 
 var _replay_compare_preview_ready := false
+var _live_break_preview_ready := false
+var _preview_live_break_panel: Panel
+var _preview_live_break_value: Label
+var _preview_live_break_peak: Label
 
 # Keep the rendered regression frame internally honest: the authoritative/base HUD and the
 # commercial green-read panel must describe the same slope. Previously the overview injected a
@@ -15,12 +19,33 @@ func _snapshot() -> Dictionary:
     s["longSlope"] = PREVIEW_LONG_SLOPE
     return s
 
+func _seed_live_break_preview() -> void:
+    var layer := get_node_or_null("V174BroadcastHUD") as CanvasLayer
+    if layer == null:
+        return
+    var root := layer.get_node_or_null("V174HUDRoot") as Control
+    if root == null:
+        return
+    if _preview_live_break_panel == null:
+        _preview_live_break_panel = _v174_panel(root, Vector2(1392, 310), Vector2(498, 92), Color(0.014, 0.021, 0.026, 0.88), Color(0.45, 0.72, 0.82, 0.22), 13)
+        _preview_live_break_panel.name = "PreviewLiveBreakMeter"
+        _v174_accent(_preview_live_break_panel, Vector2(0, 0), Vector2(6, 92), Color("#73c2d4"))
+        _v174_text(_preview_live_break_panel, Vector2(20, 8), Vector2(170, 22), "LIVE BREAK", 13, Color("#bfe9f1"))
+        _preview_live_break_value = _v174_text(_preview_live_break_panel, Vector2(20, 30), Vector2(250, 42), "R 12.4 cm", 24, Color("#f4f6f0"))
+        _preview_live_break_peak = _v174_text(_preview_live_break_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 18.7 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
+    _preview_live_break_panel.visible = true
+    _preview_live_break_panel.modulate.a = 1.0
+    _preview_live_break_value.text = "R 12.4 cm"
+    _preview_live_break_peak.text = "PEAK 18.7 cm"
+
 func _process(delta: float) -> void:
     super._process(delta)
-    # The parent preview captures on a deferred frame. Hold the synthetic replay after all parent
-    # snapshot/focus choreography so the uploaded image proves this HUD is actually visible.
+    # The parent preview captures on a deferred frame. Hold synthetic presentation states after all
+    # parent snapshot/focus choreography so the uploaded image proves these HUDs are actually visible.
     if _replay_compare_preview_ready and _capture_started:
         _seed_replay_compare_preview()
+    if _live_break_preview_ready and _capture_started:
+        _seed_live_break_preview()
 
 func _seed_replay_compare_preview() -> void:
     _v171_replay_actual = [Vector2(0.0, 1.0), Vector2(0.08, 3.0), Vector2(0.12, 5.0), Vector2(0.05, 6.5)]
@@ -105,6 +130,24 @@ func _run_apex_preview_regression() -> bool:
             cue.points = PackedVector2Array([left, tip, right])
             _v183_panel.add_child(cue)
 
+    if probe._live_curve_readout(0.0) != "CENTER" or probe._live_curve_readout(12.44) != "R 12.4 cm" or probe._live_curve_readout(-7.26) != "L 7.3 cm":
+        push_error("Live break direction/readout regression")
+        probe.free()
+        get_tree().quit(42)
+        return false
+    _seed_live_break_preview()
+    if _preview_live_break_panel == null or _preview_live_break_value == null or _preview_live_break_peak == null:
+        push_error("Live break preview HUD missing")
+        probe.free()
+        get_tree().quit(42)
+        return false
+    if _preview_live_break_value.text != "R 12.4 cm" or _preview_live_break_peak.text != "PEAK 18.7 cm":
+        push_error("Live break meter HUD regression")
+        probe.free()
+        get_tree().quit(42)
+        return false
+    _live_break_preview_ready = true
+
     _v179_samples = [Vector2(-8, -18), Vector2(-3, 10), Vector2(5, 22), Vector2(7, 6), Vector2(3, 14)]
     if _v179_make_count() != 2 or _v179_make_rate_text() != "WINDOW 2/5":
         push_error("Session make-window tally regression: %s" % _v179_make_rate_text())
@@ -180,6 +223,7 @@ func _run_apex_preview_regression() -> bool:
     print("COMMERCIAL_READ_FLOW_OK=1")
     print("GREEN_SLOPE_PREVIEW_AUTHORITY_OK=1")
     print("GREEN_SLOPE_LABEL_SEMANTICS_OK=1")
+    print("LIVE_BREAK_METER_OK=1")
     print("SESSION_MAKE_WINDOW_OK=1")
     print("NEXT_REP_COACH_OK=1")
     print("REPLAY_READ_COMPARE_OK=1")
