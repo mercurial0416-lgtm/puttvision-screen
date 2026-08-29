@@ -18,6 +18,14 @@ func _process(delta: float) -> void:
     assert((halfway["point"] as Vector2).distance_to(Vector2(0, 4.5)) < 0.01)
     assert((halfway["tangent"] as Vector2).distance_to(Vector2.DOWN) < 0.01)
 
+    # The launch cue uses the same traveled-distance sampler. At 18% of this ten-unit path its tip
+    # belongs 0.8 units into the long horizontal segment; the old raw-index method picked the dense
+    # early sample instead and pointed the arrow in the wrong visual direction.
+    var launch_path := PackedVector2Array([Vector2(0, 0), Vector2(0, 1), Vector2(9, 1)])
+    var launch_sample := probe._read_path_sample(launch_path, probe.READ_LAUNCH_FRACTION)
+    assert((launch_sample["point"] as Vector2).distance_to(Vector2(0.8, 1.0)) < 0.01)
+    assert((launch_sample["tangent"] as Vector2).distance_to(Vector2.RIGHT) < 0.01)
+
     # A bent path must choose the tangent of the segment containing the requested traveled distance,
     # rather than inheriting a neighboring dense sample's direction.
     var bent := PackedVector2Array([Vector2(0, 0), Vector2(0, 1), Vector2(8, 1)])
