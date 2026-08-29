@@ -100,7 +100,7 @@ func _process(delta: float) -> void:
 
     var probe = ReplayPlayheadScene.new()
     var rotated_half_extent := probe._replay_playhead_half_extent(100.0)
-    var expected_rotated_half_extent := probe.REPLAY_PLAYHEAD_SIZE / sqrt(2.0)
+    var expected_rotated_half_extent: float = 6.363961030678928
     if absf(rotated_half_extent - expected_rotated_half_extent) > 0.001:
         push_error("Replay rotated playhead extent regression")
         probe.free()
