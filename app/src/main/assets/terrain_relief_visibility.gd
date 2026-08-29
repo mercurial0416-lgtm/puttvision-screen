@@ -12,6 +12,14 @@ var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
 var _terrain_relief_light: DirectionalLight3D
 
+func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m: float) -> float:
+    # A crown peak or bowl floor is physically important even though its instantaneous local
+    # slope approaches zero. Keep a restrained height-driven floor so macro relief does not
+    # visually disappear at exactly those turning points.
+    var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
+    var elevation_signal := smoothstep(0.035, 0.14, absf(terrain_height_m))
+    return maxf(slope_signal, elevation_signal * 0.48)
+
 func _terrain_relief_material() -> ShaderMaterial:
     var shader := Shader.new()
     shader.code = """
@@ -30,9 +38,13 @@ void vertex() {
 }
 
 void fragment() {
-    // Natural macro relief: a continuous high/low wash plus a tiny slope-facing response.
-    // No repeated contour bands, no geometry exaggeration, and no physics feedback.
-    float active = smoothstep(0.18, 0.90, slope_pct);
+    // Preserve relief continuity through crown peaks and bowl floors. Local slope naturally
+    // approaches zero at those turning points, but the authoritative physical elevation still
+    // carries useful shape information. The height signal is intentionally capped well below
+    // the slope response so flat baseline turf stays quiet instead of looking heat-mapped.
+    float slope_signal = smoothstep(0.18, 0.90, slope_pct);
+    float elevation_signal = smoothstep(0.035, 0.14, abs(terrain_height));
+    float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
@@ -40,7 +52,7 @@ void fragment() {
     vec3 low_green = vec3(0.045, 0.115, 0.055);
     vec3 high_green = vec3(0.205, 0.285, 0.115);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
-    relief_color *= 1.0 + facing * 0.045;
+    relief_color *= 1.0 + facing * 0.045 * slope_signal;
 
     ALBEDO = relief_color;
     ALPHA = active * (0.082 + 0.052 * abs(height_bias));
