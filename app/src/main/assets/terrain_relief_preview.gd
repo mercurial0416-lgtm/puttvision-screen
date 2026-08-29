@@ -5,6 +5,7 @@ const RELIEF_PREVIEW_SIDE := 1.35
 const RELIEF_PREVIEW_LONG := -0.55
 var _terrain_relief_checked := false
 var _terrain_relief_preview_added := false
+var _green_fall_line_checked := false
 
 func _terrain_relief_probe():
     var probe = TerrainReliefScene.new()
@@ -30,10 +31,58 @@ func _add_terrain_relief_preview() -> void:
     add_child(overlay)
     probe.free()
 
+func _check_green_fall_line_geometry() -> bool:
+    var flat := _v183_fall_line_geometry(0.0, 0.0)
+    if bool(flat.get("visible", true)):
+        push_error("Green overview fall line should hide on level terrain")
+        return false
+
+    var side := _v183_fall_line_geometry(1.4, 0.0)
+    var side_shaft: PackedVector2Array = side.get("shaft", PackedVector2Array())
+    if not bool(side.get("visible", false)) or side_shaft.size() != 2:
+        push_error("Green overview side-slope fall line missing")
+        return false
+    var side_delta := side_shaft[1] - side_shaft[0]
+    if side_delta.x <= 0.0 or absf(side_delta.y) > 0.01:
+        push_error("Green overview side-slope direction regressed")
+        return false
+
+    var down := _v183_fall_line_geometry(0.0, 1.4)
+    var down_shaft: PackedVector2Array = down.get("shaft", PackedVector2Array())
+    if down_shaft.size() != 2:
+        push_error("Green overview longitudinal fall line missing")
+        return false
+    var down_delta := down_shaft[1] - down_shaft[0]
+    if down_delta.y >= 0.0 or absf(down_delta.x) > 0.01:
+        push_error("Green overview downhill direction regressed")
+        return false
+
+    var mixed := _v183_fall_line_geometry(-1.1, -0.8)
+    var mixed_shaft: PackedVector2Array = mixed.get("shaft", PackedVector2Array())
+    var left_head: PackedVector2Array = mixed.get("left", PackedVector2Array())
+    var right_head: PackedVector2Array = mixed.get("right", PackedVector2Array())
+    if mixed_shaft.size() != 2 or left_head.size() != 2 or right_head.size() != 2:
+        push_error("Green overview fall-line arrowhead geometry missing")
+        return false
+    var mixed_delta := mixed_shaft[1] - mixed_shaft[0]
+    if mixed_delta.x >= 0.0 or mixed_delta.y <= 0.0:
+        push_error("Green overview mixed fall line lost a slope axis")
+        return false
+    if left_head[1].distance_to(mixed_shaft[1]) > 0.01 or right_head[1].distance_to(mixed_shaft[1]) > 0.01:
+        push_error("Green overview fall-line arrowhead detached from shaft")
+        return false
+    return true
+
 func _process(delta: float) -> void:
     super._process(delta)
     if not _terrain_relief_preview_added and _preview_frames >= 10:
         _add_terrain_relief_preview()
+    if not _green_fall_line_checked and _preview_frames >= 11:
+        _green_fall_line_checked = true
+        if not _check_green_fall_line_geometry():
+            get_tree().quit(42)
+            return
+        print("GREEN_FALL_LINE_GEOMETRY_OK=1")
     if _terrain_relief_checked or _preview_frames < 11:
         return
     _terrain_relief_checked = true
