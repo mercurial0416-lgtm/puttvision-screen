@@ -82,11 +82,13 @@ func _replay_playhead_half_extent(track_width: float) -> float:
 func _replay_playhead_x(progress: float, track_width: float) -> float:
     if not is_finite(progress) or not is_finite(track_width) or track_width <= 0.0:
         return 0.0
-    # The playhead is a square rotated 45 degrees. Keep its rotated AABB inside the track rather
-    # than reserving only the unrotated 4.5 px half-size, which still clipped the diamond corners.
+    # Keep the playhead spatially truthful to the same progress coordinate used by the fill and
+    # camera chapter markers. The previous implementation remapped the *entire* 0..1 interval into
+    # the inset-safe width, so a 72% camera handoff rendered the diamond several pixels before the
+    # actual 72% marker. Clamp only when the diamond would physically clip at either endpoint.
     var half_extent := _replay_playhead_half_extent(track_width)
-    var usable_width := maxf(0.0, track_width - half_extent * 2.0)
-    return half_extent + clampf(progress, 0.0, 1.0) * usable_width
+    var true_x := clampf(progress, 0.0, 1.0) * track_width
+    return clampf(true_x, half_extent, maxf(half_extent, track_width - half_extent))
 
 func _replay_finish_zone_geometry(track_width: float) -> Vector2:
     if not is_finite(track_width) or track_width <= 0.0:
