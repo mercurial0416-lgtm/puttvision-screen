@@ -1,9 +1,10 @@
 extends "res://practice_ring_boundary_finish.gd"
 
 # Presentation-only green-read landmark spacing. Recommended-read samples are authoritative input;
-# this layer only positions the existing apex, start gate and directional flow cues by traveled path
-# length rather than raw sample index. That keeps the read visually truthful when curve samples are
-# unevenly spaced without touching Android V135-V137, GreenTerrain, GreenReadAdvisor, aim or scoring.
+# this layer only positions the existing apex, start gate, launch vector and directional flow cues by
+# traveled path length rather than raw sample index. That keeps the read visually truthful when curve
+# samples are unevenly spaced without touching Android V135-V137, GreenTerrain, GreenReadAdvisor,
+# aim or scoring.
 const READ_SPATIAL_EPSILON := 0.0001
 
 func _read_path_sample(curve: PackedVector2Array, fraction: float) -> Dictionary:
@@ -45,6 +46,33 @@ func _read_apex_point(offset_m: float) -> Vector2:
     if curve.is_empty():
         return V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
     return _read_path_sample(curve, 0.5)["point"] as Vector2
+
+func _read_launch_geometry(offset_m: float) -> Dictionary:
+    var curve := _v183_path(offset_m)
+    if curve.size() < 3:
+        return super._read_launch_geometry(offset_m)
+
+    # The launch cue used to choose its tip from a raw sample index while the other read landmarks
+    # already used traveled distance. Uneven solver samples could therefore make the launch arrow
+    # visually too short/long and point along a dense neighboring segment. Use the same spatial
+    # sampler for a coherent, truthful commercial read overlay.
+    var sample := _read_path_sample(curve, READ_LAUNCH_FRACTION)
+    var start: Vector2 = curve[0]
+    var tip: Vector2 = sample["point"]
+    var tangent: Vector2 = sample["tangent"]
+    if tangent.length_squared() < 0.5:
+        tangent = (tip - start).normalized()
+    if tangent.length_squared() < 0.5:
+        tangent = Vector2.UP
+    var normal := Vector2(-tangent.y, tangent.x)
+    var base := tip - tangent * READ_LAUNCH_WING_LENGTH
+    return {
+        "start": start,
+        "tip": tip,
+        "left": base + normal * READ_LAUNCH_WING_HALF_WIDTH,
+        "right": base - normal * READ_LAUNCH_WING_HALF_WIDTH,
+        "tangent": tangent
+    }
 
 func _read_start_gate_geometry(offset_m: float) -> Dictionary:
     var curve := _v183_path(offset_m)
