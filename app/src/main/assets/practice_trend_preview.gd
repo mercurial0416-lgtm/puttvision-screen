@@ -75,6 +75,17 @@ func _process(delta: float) -> void:
     assert(ring_points.size() == probe.PRACTICE_RECENT_RING_SEGMENTS + 1)
     assert(ring_points[0].distance_to(ring_points[ring_points.size() - 1]) < 0.01)
 
+    var edge_samples: Array[Vector2] = [Vector2(28, 62), Vector2(30, 68), Vector2(30, 70), Vector2(30, 70)]
+    var edge_ring := probe._practice_recent_ring_geometry(edge_samples)
+    assert(bool(edge_ring.get("visible", false)))
+    var edge_points: PackedVector2Array = edge_ring["points"]
+    assert(edge_points.size() == probe.PRACTICE_RECENT_RING_SEGMENTS + 1)
+    for point in edge_points:
+        assert(point.x >= probe.PRACTICE_RECENT_RING_EDGE_INSET - 0.01)
+        assert(point.y >= probe.PRACTICE_RECENT_RING_EDGE_INSET - 0.01)
+        assert(point.x <= probe.V179_PLOT_SIZE.x - probe.PRACTICE_RECENT_RING_EDGE_INSET + 0.01)
+        assert(point.y <= probe.V179_PLOT_SIZE.y - probe.PRACTICE_RECENT_RING_EDGE_INSET + 0.01)
+
     var drifting: Array[Vector2] = [Vector2(4, 7), Vector2(8, 15), Vector2(17, 34), Vector2(20, 42)]
     assert(str(probe._practice_trend_geometry(drifting).get("state", "")) == "DRIFTING")
 
@@ -84,3 +95,4 @@ func _process(delta: float) -> void:
     probe.free()
     print("PRACTICE_TREND_VECTOR_OK=1")
     print("PRACTICE_RECENT_CONSISTENCY_RING_OK=1")
+    print("PRACTICE_RECENT_RING_EDGE_SAFE_OK=1")
