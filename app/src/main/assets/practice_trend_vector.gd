@@ -7,6 +7,8 @@ extends "res://read_launch_vector.gd"
 
 const PRACTICE_TREND_MIN_SAMPLES := 4
 const PRACTICE_TREND_GROUP_SIZE := 2
+const PRACTICE_TREND_STABLE_GROUP_SIZE := 3
+const PRACTICE_TREND_STABLE_MIN_SAMPLES := 6
 const PRACTICE_TREND_MIN_PIXELS := 5.0
 const PRACTICE_TREND_STATE_DEADBAND := 0.05
 const PRACTICE_TREND_WING_LENGTH := 6.5
@@ -52,21 +54,28 @@ func _practice_group_spread(samples: Array[Vector2], from_index: int, count: int
         total += Vector2(delta.x / V179_LINE_SCALE_CM, delta.y / V179_PACE_SCALE_CM).length()
     return total / float(finish - start)
 
+func _practice_trend_group_size(samples: Array[Vector2]) -> int:
+    # Two-shot windows keep the first useful result responsive at four/five samples. Once the
+    # session has enough history, three-shot windows damp a single miss from flipping the coaching
+    # state while staying bounded and cheap on Forward Mobile.
+    return PRACTICE_TREND_STABLE_GROUP_SIZE if samples.size() >= PRACTICE_TREND_STABLE_MIN_SAMPLES else PRACTICE_TREND_GROUP_SIZE
+
 func _practice_trend_geometry(samples: Array[Vector2]) -> Dictionary:
     if samples.size() < PRACTICE_TREND_MIN_SAMPLES:
         return {"visible": false, "state": "BUILDING"}
 
+    var group_size := _practice_trend_group_size(samples)
     var early_from := 0
-    var recent_from := samples.size() - PRACTICE_TREND_GROUP_SIZE
-    var early := _practice_trend_mean(samples, early_from, PRACTICE_TREND_GROUP_SIZE)
-    var recent := _practice_trend_mean(samples, recent_from, PRACTICE_TREND_GROUP_SIZE)
+    var recent_from := samples.size() - group_size
+    var early := _practice_trend_mean(samples, early_from, group_size)
+    var recent := _practice_trend_mean(samples, recent_from, group_size)
     var start := _v179_plot_position(early)
     var tip := _v179_plot_position(recent)
     var delta := tip - start
     var early_error := _practice_trend_error(early)
     var recent_error := _practice_trend_error(recent)
-    var early_spread := _practice_group_spread(samples, early_from, PRACTICE_TREND_GROUP_SIZE)
-    var recent_spread := _practice_group_spread(samples, recent_from, PRACTICE_TREND_GROUP_SIZE)
+    var early_spread := _practice_group_spread(samples, early_from, group_size)
+    var recent_spread := _practice_group_spread(samples, recent_from, group_size)
     var spread_improvement := early_spread - recent_spread
 
     # The arrow already communicates centroid drift. The text must describe consistency, so base
@@ -81,6 +90,7 @@ func _practice_trend_geometry(samples: Array[Vector2]) -> Dictionary:
     var result := {
         "visible": delta.length() >= PRACTICE_TREND_MIN_PIXELS,
         "state": state,
+        "group_size": group_size,
         "early_error": early_error,
         "recent_error": recent_error,
         "early_spread": early_spread,
