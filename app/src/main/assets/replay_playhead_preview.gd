@@ -121,6 +121,18 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    # Interior progress must remain on the exact same coordinate system as the fill/chapter markers.
+    # The old safe-width remap moved these handoff points inward even though no clipping was possible.
+    if absf(probe._replay_playhead_x(probe.REPLAY_CUP_CHAPTER_START, 100.0) - 72.0) > 0.001:
+        push_error("Replay playhead blend-handoff timeline truth regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe._replay_playhead_x(probe.REPLAY_CUP_CHAPTER_FULL, 100.0) - 90.0) > 0.001:
+        push_error("Replay playhead cup-handoff timeline truth regression")
+        probe.free()
+        get_tree().quit(29)
+        return
     if absf(probe._replay_playhead_x(-0.4, 100.0) - expected_rotated_half_extent) > 0.001:
         push_error("Replay playhead lower rotated-edge containment regression")
         probe.free()
@@ -243,6 +255,7 @@ func _process(delta: float) -> void:
 
     print("REPLAY_PLAYHEAD_VISIBILITY_OK=1")
     print("REPLAY_PLAYHEAD_ROTATED_EDGE_CONTAINMENT_OK=1")
+    print("REPLAY_PLAYHEAD_TIMELINE_TRUTH_OK=1")
     print("REPLAY_BLEND_LAYERING_OK=1")
     print("REPLAY_FINISH_ZONE_OK=1")
     print("REPLAY_CHAPTER_CLARITY_OK=1")
