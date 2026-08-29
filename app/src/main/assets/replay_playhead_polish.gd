@@ -9,6 +9,9 @@ const REPLAY_FINISH_ZONE_FRACTION := 0.12
 const REPLAY_FINISH_ZONE_ALPHA := 0.18
 const REPLAY_CHAPTER_FONT_SIZE := 10
 const REPLAY_CHAPTER_LABEL_Y := 27.0
+const REPLAY_CHAPTER_ABBREV_MIN_WIDTH := 16.0
+const REPLAY_CHAPTER_TEXT_CHAR_WIDTH := 6.4
+const REPLAY_CHAPTER_TEXT_PADDING := 8.0
 
 var _replay_playhead: ColorRect
 var _replay_finish_zone: ColorRect
@@ -52,7 +55,7 @@ func _build_hud() -> void:
     _focus_replay_track.add_child(_replay_playhead)
 
     # Commercial replay systems benefit from chapter context, not just a moving playhead. These
-    # labels explain the visual handoff at a glance while staying tiny enough for Forward Mobile.
+    # labels explain the visual handoff at a glance while adapting cleanly to narrow mobile tracks.
     _replay_roll_label = _replay_build_chapter_label("ROLL", Color(0.70, 0.80, 0.84, 0.72))
     _replay_blend_label = _replay_build_chapter_label("BLEND", Color(0.90, 0.78, 0.40, 0.82))
     _replay_cup_label = _replay_build_chapter_label("CUP", Color(0.70, 0.92, 0.80, 0.82))
@@ -62,6 +65,7 @@ func _replay_build_chapter_label(text_value: String, tint: Color) -> Label:
     label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     label.text = text_value
     label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
     label.add_theme_font_size_override("font_size", REPLAY_CHAPTER_FONT_SIZE)
     label.add_theme_color_override("font_color", tint)
     label.z_index = 4
@@ -101,10 +105,21 @@ func _replay_chapter_geometry(track_width: float) -> Dictionary:
         "cup": Vector2(cup_start, maxf(0.0, track_width - cup_start))
     }
 
-func _replay_place_chapter_label(label: Label, segment: Vector2) -> void:
+func _replay_chapter_label_text(full_text: String, segment_width: float) -> String:
+    if not is_finite(segment_width) or segment_width < REPLAY_CHAPTER_ABBREV_MIN_WIDTH:
+        return ""
+    var full_min_width := float(full_text.length()) * REPLAY_CHAPTER_TEXT_CHAR_WIDTH + REPLAY_CHAPTER_TEXT_PADDING
+    if segment_width >= full_min_width:
+        return full_text
+    return full_text.substr(0, 1)
+
+func _replay_place_chapter_label(label: Label, segment: Vector2, full_text: String) -> void:
     if label == null or _focus_replay_track == null:
         return
     var track_global_x := _focus_replay_track.position.x
+    var display_text := _replay_chapter_label_text(full_text, segment.y)
+    label.visible = not display_text.is_empty()
+    label.text = display_text
     label.position = Vector2(track_global_x + segment.x, REPLAY_CHAPTER_LABEL_Y)
     label.size = Vector2(segment.y, 14.0)
 
@@ -121,9 +136,9 @@ func _focus_update_replay_timeline() -> void:
         _replay_finish_zone.size = Vector2(finish_geometry.y, REPLAY_TIMELINE_TRACK_HEIGHT)
 
     var chapters := _replay_chapter_geometry(track_width)
-    _replay_place_chapter_label(_replay_roll_label, chapters["roll"])
-    _replay_place_chapter_label(_replay_blend_label, chapters["blend"])
-    _replay_place_chapter_label(_replay_cup_label, chapters["cup"])
+    _replay_place_chapter_label(_replay_roll_label, chapters["roll"], "ROLL")
+    _replay_place_chapter_label(_replay_blend_label, chapters["blend"], "BLEND")
+    _replay_place_chapter_label(_replay_cup_label, chapters["cup"], "CUP")
 
     if _replay_playhead == null:
         return
