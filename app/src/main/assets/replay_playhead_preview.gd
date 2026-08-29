@@ -99,18 +99,25 @@ func _process(delta: float) -> void:
     _replay_playhead_checks_done = true
 
     var probe = ReplayPlayheadScene.new()
+    var rotated_half_extent := probe._replay_playhead_half_extent(100.0)
+    var expected_rotated_half_extent: float = 6.363961030678928
+    if absf(rotated_half_extent - expected_rotated_half_extent) > 0.001:
+        push_error("Replay rotated playhead extent regression")
+        probe.free()
+        get_tree().quit(29)
+        return
     if absf(probe._replay_playhead_x(0.50, 100.0) - 50.0) > 0.001:
         push_error("Replay playhead midpoint regression")
         probe.free()
         get_tree().quit(29)
         return
-    if absf(probe._replay_playhead_x(-0.4, 100.0) - 4.5) > 0.001:
-        push_error("Replay playhead lower edge containment regression")
+    if absf(probe._replay_playhead_x(-0.4, 100.0) - expected_rotated_half_extent) > 0.001:
+        push_error("Replay playhead lower rotated-edge containment regression")
         probe.free()
         get_tree().quit(29)
         return
-    if absf(probe._replay_playhead_x(1.4, 100.0) - 95.5) > 0.001:
-        push_error("Replay playhead upper edge containment regression")
+    if absf(probe._replay_playhead_x(1.4, 100.0) - (100.0 - expected_rotated_half_extent)) > 0.001:
+        push_error("Replay playhead upper rotated-edge containment regression")
         probe.free()
         get_tree().quit(29)
         return
@@ -119,8 +126,13 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
-    if absf(probe._replay_playhead_x(NAN, 100.0)) > 0.001:
-        push_error("Replay playhead invalid progress guard regression")
+    if absf(probe._replay_playhead_half_extent(6.0) - 3.0) > 0.001:
+        push_error("Replay playhead narrow-track rotated extent regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe._replay_playhead_x(NAN, 100.0)) > 0.001 or absf(probe._replay_playhead_half_extent(NAN)) > 0.001:
+        push_error("Replay playhead invalid input guard regression")
         probe.free()
         get_tree().quit(29)
         return
@@ -200,7 +212,7 @@ func _process(delta: float) -> void:
     launch_probe.free()
 
     print("REPLAY_PLAYHEAD_VISIBILITY_OK=1")
-    print("REPLAY_PLAYHEAD_EDGE_CONTAINMENT_OK=1")
+    print("REPLAY_PLAYHEAD_ROTATED_EDGE_CONTAINMENT_OK=1")
     print("REPLAY_BLEND_LAYERING_OK=1")
     print("REPLAY_FINISH_ZONE_OK=1")
     print("REPLAY_CHAPTER_CLARITY_OK=1")

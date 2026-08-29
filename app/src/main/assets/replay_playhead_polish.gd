@@ -3,6 +3,7 @@ extends "res://commercial_read_flow.gd"
 # Presentation-only replay timeline polish. This layer never mutates shot state, Android physics,
 # GreenTerrain, GreenReadAdvisor, aiming, scoring, or camera timing.
 const REPLAY_PLAYHEAD_SIZE := 9.0
+const REPLAY_PLAYHEAD_ROTATION_DEG := 45.0
 const REPLAY_PLAYHEAD_ALPHA := 0.98
 const REPLAY_FINISH_ZONE_FRACTION := 0.12
 const REPLAY_FINISH_ZONE_ALPHA := 0.18
@@ -45,7 +46,7 @@ func _build_hud() -> void:
     _replay_playhead.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _replay_playhead.size = Vector2(REPLAY_PLAYHEAD_SIZE, REPLAY_PLAYHEAD_SIZE)
     _replay_playhead.pivot_offset = _replay_playhead.size * 0.5
-    _replay_playhead.rotation_degrees = 45.0
+    _replay_playhead.rotation_degrees = REPLAY_PLAYHEAD_ROTATION_DEG
     _replay_playhead.color = Color(0.96, 0.99, 1.0, REPLAY_PLAYHEAD_ALPHA)
     _replay_playhead.z_index = 3
     _focus_replay_track.add_child(_replay_playhead)
@@ -67,12 +68,21 @@ func _replay_build_chapter_label(text_value: String, tint: Color) -> Label:
     _focus_replay_timeline.add_child(label)
     return label
 
+func _replay_playhead_half_extent(track_width: float) -> float:
+    if not is_finite(track_width) or track_width <= 0.0:
+        return 0.0
+    var radians := deg_to_rad(REPLAY_PLAYHEAD_ROTATION_DEG)
+    var rotated_half_extent := REPLAY_PLAYHEAD_SIZE * 0.5 * (absf(cos(radians)) + absf(sin(radians)))
+    return minf(rotated_half_extent, track_width * 0.5)
+
 func _replay_playhead_x(progress: float, track_width: float) -> float:
     if not is_finite(progress) or not is_finite(track_width) or track_width <= 0.0:
         return 0.0
-    var half_size := minf(REPLAY_PLAYHEAD_SIZE * 0.5, track_width * 0.5)
-    var usable_width := maxf(0.0, track_width - half_size * 2.0)
-    return half_size + clampf(progress, 0.0, 1.0) * usable_width
+    # The playhead is a square rotated 45 degrees. Keep its rotated AABB inside the track rather
+    # than reserving only the unrotated 4.5 px half-size, which still clipped the diamond corners.
+    var half_extent := _replay_playhead_half_extent(track_width)
+    var usable_width := maxf(0.0, track_width - half_extent * 2.0)
+    return half_extent + clampf(progress, 0.0, 1.0) * usable_width
 
 func _replay_finish_zone_geometry(track_width: float) -> Vector2:
     if not is_finite(track_width) or track_width <= 0.0:
