@@ -4,6 +4,8 @@ extends "res://v174_broadcast_hud.gd"
 # GreenReadAdvisor stay authoritative. This layer turns the existing V171 trail replay into a
 # broadcast-style moving camera with explicit replay progress and shot-trace labeling.
 
+const V175_REPLAY_TRACK_WIDTH := 634.0
+
 var _v175_replay_panel: Panel
 var _v175_replay_title: Label
 var _v175_replay_detail: Label
@@ -30,7 +32,7 @@ func _build_hud() -> void:
 
     _v175_replay_track = ColorRect.new()
     _v175_replay_track.position = Vector2(22, 52)
-    _v175_replay_track.size = Vector2(634, 6)
+    _v175_replay_track.size = Vector2(V175_REPLAY_TRACK_WIDTH, 6)
     _v175_replay_track.color = Color(0.82, 0.85, 0.80, 0.16)
     _v175_replay_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v175_replay_panel.add_child(_v175_replay_track)
@@ -52,10 +54,20 @@ func _build_hud() -> void:
     _v174_text(_v175_replay_panel, Vector2(22, 62), Vector2(120, 18), "START", 11, Color(0.70, 0.74, 0.71, 0.86))
     _v174_text(_v175_replay_panel, Vector2(536, 62), Vector2(120, 18), "FINISH", 11, Color(0.70, 0.74, 0.71, 0.86), HORIZONTAL_ALIGNMENT_RIGHT)
 
-func _v175_replay_progress() -> float:
-    if _v171_replay_duration <= 0.001:
+func _v175_progress_from_times(remaining: float, duration: float) -> float:
+    if not is_finite(remaining) or not is_finite(duration):
+        return 0.0
+    if duration <= 0.001:
         return 1.0
-    return clamp(1.0 - _v171_replay_remaining / _v171_replay_duration, 0.0, 1.0)
+    return clampf(1.0 - maxf(0.0, remaining) / duration, 0.0, 1.0)
+
+func _v175_replay_progress() -> float:
+    return _v175_progress_from_times(_v171_replay_remaining, _v171_replay_duration)
+
+func _v175_replay_track_fill_width(progress: float) -> float:
+    if not is_finite(progress):
+        return 0.0
+    return V175_REPLAY_TRACK_WIDTH * clampf(progress, 0.0, 1.0)
 
 func _v175_trail_point(points: Array, progress: float) -> Vector2:
     if points.is_empty():
@@ -89,10 +101,11 @@ func _process(delta: float) -> void:
         return
 
     var progress: float = _v175_replay_progress()
-    var eased: float = smoothstep(0.0, 1.0, progress)
-    var width: float = 634.0 * eased
+    # Keep the HUD on the real replay clock. Camera easing below is intentional choreography,
+    # but easing the progress bar made its position disagree with the numeric percentage.
+    var width: float = _v175_replay_track_fill_width(progress)
     _v175_replay_fill.size.x = width
-    _v175_replay_marker.position.x = 22.0 + max(0.0, width - 1.5)
+    _v175_replay_marker.position.x = 22.0 + maxf(0.0, width - 1.5)
     _v175_replay_detail.text = "%3d%%  •  ACTUAL BALL LINE" % int(round(progress * 100.0))
 
 func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_to_cup: float, immediate: bool, delta: float) -> void:
