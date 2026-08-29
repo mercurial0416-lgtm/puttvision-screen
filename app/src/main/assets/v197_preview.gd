@@ -20,12 +20,20 @@ func _process(delta: float) -> void:
         push_error("Shot map make-window scale regression")
         get_tree().quit(28)
         return
-    if not _v197_inside_make_window(9.0, 22.0):
-        push_error("Shot map make-window inclusive boundary regression")
+    if not _v197_inside_make_window(8.99, 21.99):
+        push_error("Shot map make-window inner boundary regression")
         get_tree().quit(28)
         return
-    if _v197_inside_make_window(9.1, 22.0) or _v197_inside_make_window(9.0, 22.1):
-        push_error("Shot map make-window threshold regression")
+    if _v197_inside_make_window(9.0, 0.0) or _v197_inside_make_window(0.0, 22.0):
+        push_error("Shot map make-window boundary must match debrief coach")
+        get_tree().quit(28)
+        return
+    if _v177_coach(9.0, 0.0, false, false) == "GOOD WINDOW  •  REPEAT THE STROKE":
+        push_error("Debrief line boundary agreement regression")
+        get_tree().quit(28)
+        return
+    if _v177_coach(0.0, 22.0, false, false) == "GOOD WINDOW  •  REPEAT THE STROKE":
+        push_error("Debrief pace boundary agreement regression")
         get_tree().quit(28)
         return
 
@@ -36,7 +44,7 @@ func _process(delta: float) -> void:
         get_tree().quit(28)
         return
     if fill_points[2].distance_to(Vector2(expected_x, expected_y)) > 0.01:
-        push_error("Shot map make-window visual boundary disagrees with verdict")
+        push_error("Shot map make-window visual boundary disagrees with threshold")
         get_tree().quit(28)
         return
     if outline_points[0] != outline_points[4]:
@@ -54,9 +62,9 @@ func _process(delta: float) -> void:
         get_tree().quit(28)
         return
 
-    _v188_refresh(9.1, 20.0, true)
+    _v188_refresh(9.0, 20.0, true)
     if _v196_center_legend.text != "OUTSIDE MAKE WINDOW":
-        push_error("Shot map make-window miss feedback regression")
+        push_error("Shot map make-window boundary miss feedback regression")
         get_tree().quit(28)
         return
     if _v197_make_outline.default_color != V197_MISS_OUTLINE:
