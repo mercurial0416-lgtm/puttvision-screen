@@ -1,7 +1,7 @@
 extends "res://v196_shot_map_hierarchy.gd"
 
-# Presentation-only SHOT MAP make window. The debrief acceptance rule is axis-aligned
-# (line +/-9 cm AND pace +/-22 cm), so the visual window must be the same rectangle.
+# Presentation-only SHOT MAP make window. The debrief coach treats the threshold itself as
+# corrective (line >= 9 cm OR pace >= 22 cm), so the visual verdict uses the same strict window.
 # This layer never feeds back into physics, terrain, green read, aiming, or scoring.
 
 var _v197_make_fill: Polygon2D
@@ -80,4 +80,4 @@ func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) ->
         )
 
 func _v197_inside_make_window(line_delta_cm: float, pace_delta_cm: float) -> bool:
-    return absf(line_delta_cm) <= V197_LINE_WINDOW_CM and absf(pace_delta_cm) <= V197_PACE_WINDOW_CM
+    return absf(line_delta_cm) < V197_LINE_WINDOW_CM and absf(pace_delta_cm) < V197_PACE_WINDOW_CM
