@@ -6,10 +6,12 @@ var _replay_transition_cues_checked := false
 func _process(delta: float) -> void:
     super._process(delta)
 
-    # Keep the representative transition cue visible in the uploaded rendered preview after parent
-    # synthetic-state updates have run, so CI proves the premium replay handoff is actually legible.
-    if _capture_started and _focus_replay_stage_label != null:
-        _focus_replay_stage_label.text = "BLEND · →CUP 0.3s"
+    # Preview scripts mirror production through a separate inheritance chain, so resolve the actual
+    # rendered replay label by node name instead of reaching across that script boundary directly.
+    if _capture_started:
+        var replay_stage := find_child("ReplayCameraStage", true, false) as Label
+        if replay_stage != null:
+            replay_stage.text = "BLEND · →CUP 0.3s"
 
     if _replay_transition_cues_checked:
         return
