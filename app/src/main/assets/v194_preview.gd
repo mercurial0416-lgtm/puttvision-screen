@@ -43,6 +43,35 @@ func _process(delta: float) -> void:
         get_tree().quit(25)
         return
 
+    # A biased group used to let the statistical ellipse cross the visible shot-map plot boundary.
+    # Keep the true centroid but require every rendered envelope vertex to stay inside the plot.
+    _v179_samples = [
+        Vector2(20.0, 44.0),
+        Vector2(24.0, 54.0),
+        Vector2(28.0, 62.0),
+        Vector2(30.0, 68.0)
+    ]
+    _v188_refresh(30.0, 68.0, true)
+    _v179_refresh()
+    var edge_mean := _v194_mean_sample()
+    var edge_center := _v188_point(edge_mean.x, edge_mean.y)
+    if _v194_centroid.position.distance_to(edge_center) > 0.2:
+        push_error("Session grouping edge guard moved the statistical centroid")
+        get_tree().quit(25)
+        return
+    if not _v194_envelope.visible or _v194_envelope.points.size() != V194_ENVELOPE_SEGMENTS + 1:
+        push_error("Session grouping edge envelope unexpectedly hidden")
+        get_tree().quit(25)
+        return
+    var plot_min := V188_CENTER - Vector2(V188_RADIUS, V188_RADIUS) + Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
+    var plot_max := V188_CENTER + Vector2(V188_RADIUS, V188_RADIUS) - Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
+    for local_point in _v194_envelope.points:
+        var point := _v194_envelope.position + local_point
+        if point.x < plot_min.x - 0.01 or point.y < plot_min.y - 0.01 or point.x > plot_max.x + 0.01 or point.y > plot_max.y + 0.01:
+            push_error("Session grouping envelope escaped shot-map bounds")
+            get_tree().quit(25)
+            return
+
     _v179_samples = [Vector2(3.0, 4.0), Vector2(4.0, 6.0)]
     _v188_refresh(4.0, 6.0, true)
     _v179_refresh()
@@ -61,3 +90,4 @@ func _process(delta: float) -> void:
     _v188_refresh(3.0, 14.0, true)
     _v179_refresh()
     print("PRACTICE_DISPERSION_ENVELOPE_OK=1")
+    print("PRACTICE_DISPERSION_ENVELOPE_EDGE_SAFE_OK=1")
