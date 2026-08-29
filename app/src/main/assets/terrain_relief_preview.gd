@@ -125,6 +125,38 @@ func _check_live_break_distance_axis() -> bool:
     probe.free()
     return ok
 
+func _check_live_break_frame_path_distance() -> bool:
+    var probe = FlowScene.new()
+    var p0 := Vector2(0.0, 0.0)
+    var p1 := Vector2(0.015, 0.012)
+    var p2 := Vector2(0.030, 0.0)
+    var start_distance := probe._live_trace_accumulate_travel(p0)
+    var accept_start := probe._live_trace_accept_sample(p0)
+    var mid_distance := probe._live_trace_accumulate_travel(p1)
+    var accept_mid := probe._live_trace_accept_sample(p1)
+    var end_distance := probe._live_trace_accumulate_travel(p2)
+    var accept_end := probe._live_trace_accept_sample(p2)
+    var expected_path := p0.distance_to(p1) + p1.distance_to(p2)
+    var collapsed_chord := p0.distance_to(p2)
+    var ok := true
+    if absf(start_distance) > 0.0001 or not accept_start:
+        push_error("Live break frame-path initial sample regression")
+        ok = false
+    elif mid_distance <= 0.0 or accept_mid:
+        push_error("Live break frame-path gate no longer preserves sub-threshold travel")
+        ok = false
+    elif not accept_end:
+        push_error("Live break frame-path endpoint should pass trace gate")
+        ok = false
+    elif absf(end_distance - expected_path) > 0.0001:
+        push_error("Live break travel no longer accumulates every bridge-frame segment")
+        ok = false
+    elif end_distance - collapsed_chord < 0.005:
+        push_error("Live break travel collapsed curved frame path into a chord")
+        ok = false
+    probe.free()
+    return ok
+
 func _process(delta: float) -> void:
     super._process(delta)
     if not _terrain_relief_preview_added and _preview_frames >= 10:
@@ -146,7 +178,11 @@ func _process(delta: float) -> void:
         if not _check_live_break_distance_axis():
             get_tree().quit(44)
             return
+        if not _check_live_break_frame_path_distance():
+            get_tree().quit(45)
+            return
         print("LIVE_BREAK_DISTANCE_AXIS_OK=1")
+        print("LIVE_BREAK_FRAME_PATH_DISTANCE_OK=1")
     if _terrain_relief_checked or _preview_frames < 11:
         return
     _terrain_relief_checked = true
