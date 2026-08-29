@@ -1,4 +1,4 @@
-extends "res://practice_trend_preview.gd"
+extends "res://replay_progress_regression.gd"
 
 const TerrainReliefScene = preload("res://terrain_relief_visibility.gd")
 const RELIEF_PREVIEW_SIDE := 1.35
