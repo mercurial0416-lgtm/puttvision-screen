@@ -2,7 +2,6 @@ extends "res://practice_trend_preview.gd"
 
 const TerrainReliefScene = preload("res://terrain_relief_visibility.gd")
 const CinematicReplayScene = preload("res://v175_cinematic_replay.gd")
-const FlowScene = preload("res://commercial_read_flow.gd")
 const RELIEF_PREVIEW_SIDE := 1.35
 const RELIEF_PREVIEW_LONG := -0.55
 const REPLAY_TRACK_WIDTH := 634.0
