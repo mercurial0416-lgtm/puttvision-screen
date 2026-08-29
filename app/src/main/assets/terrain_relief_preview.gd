@@ -125,6 +125,24 @@ func _check_live_break_distance_axis() -> bool:
     probe.free()
     return ok
 
+func _check_live_break_single_sample_anchor() -> bool:
+    var probe = FlowScene.new()
+    var history := PackedFloat32Array([7.5])
+    var distances := PackedFloat32Array([0.0])
+    var points := probe._live_trace_points_with_distance(history, distances)
+    var ok := true
+    if points.size() != 1:
+        push_error("Live break first-sample trace point count regression")
+        ok = false
+    elif absf(points[0].x - probe.LIVE_TRACE_LEFT) > 0.01:
+        push_error("Live break first sample no longer anchors at trace origin")
+        ok = false
+    elif absf(points[0].x - probe.LIVE_TRACE_RIGHT) < 1.0:
+        push_error("Live break first sample popped to right edge")
+        ok = false
+    probe.free()
+    return ok
+
 func _check_live_break_frame_path_distance() -> bool:
     var probe = FlowScene.new()
     var p0 := Vector2(0.0, 0.0)
@@ -178,10 +196,14 @@ func _process(delta: float) -> void:
         if not _check_live_break_distance_axis():
             get_tree().quit(44)
             return
+        if not _check_live_break_single_sample_anchor():
+            get_tree().quit(46)
+            return
         if not _check_live_break_frame_path_distance():
             get_tree().quit(45)
             return
         print("LIVE_BREAK_DISTANCE_AXIS_OK=1")
+        print("LIVE_BREAK_FIRST_SAMPLE_ANCHOR_OK=1")
         print("LIVE_BREAK_FRAME_PATH_DISTANCE_OK=1")
     if _terrain_relief_checked or _preview_frames < 11:
         return
