@@ -16,6 +16,7 @@ const PRACTICE_RECENT_RING_MIN_RADIUS := 8.0
 const PRACTICE_RECENT_RING_MAX_RADIUS := 22.0
 const PRACTICE_RECENT_RING_PADDING := 5.0
 const PRACTICE_RECENT_RING_SEGMENTS := 20
+const PRACTICE_RECENT_RING_EDGE_INSET := 1.0
 
 var _practice_trend_line: Line2D
 var _practice_trend_head: Line2D
@@ -90,7 +91,14 @@ func _practice_recent_ring_geometry(samples: Array[Vector2]) -> Dictionary:
     var max_distance := 0.0
     for index in range(from_index, samples.size()):
         max_distance = maxf(max_distance, _v179_plot_position(samples[index]).distance_to(center))
-    var radius := clampf(max_distance + PRACTICE_RECENT_RING_PADDING, PRACTICE_RECENT_RING_MIN_RADIUS, PRACTICE_RECENT_RING_MAX_RADIUS)
+    var desired_radius := clampf(max_distance + PRACTICE_RECENT_RING_PADDING, PRACTICE_RECENT_RING_MIN_RADIUS, PRACTICE_RECENT_RING_MAX_RADIUS)
+    var edge_radius := minf(
+        minf(center.x, V179_PLOT_SIZE.x - center.x),
+        minf(center.y, V179_PLOT_SIZE.y - center.y)
+    ) - PRACTICE_RECENT_RING_EDGE_INSET
+    var radius := minf(desired_radius, maxf(0.0, edge_radius))
+    if radius <= 0.0:
+        return {"visible": false}
     var points := PackedVector2Array()
     for step in range(PRACTICE_RECENT_RING_SEGMENTS + 1):
         var angle := TAU * float(step) / float(PRACTICE_RECENT_RING_SEGMENTS)
