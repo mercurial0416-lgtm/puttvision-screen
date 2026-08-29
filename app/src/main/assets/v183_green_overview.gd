@@ -7,6 +7,8 @@ var _v183_panel: Panel
 var _v183_path_line: Line2D
 var _v183_center_line: Line2D
 var _v183_break_arrow: Line2D
+var _v183_break_arrow_left: Line2D
+var _v183_break_arrow_right: Line2D
 var _v183_ball: Polygon2D
 var _v183_cup: Polygon2D
 var _v183_distance_label: Label
@@ -16,6 +18,11 @@ var _v183_preview_force_visible := false
 
 const V183_MAP_ORIGIN := Vector2(34.0, 48.0)
 const V183_MAP_SIZE := Vector2(248.0, 136.0)
+const V183_FALL_LINE_DEADBAND := 0.08
+const V183_FALL_LINE_MIN_LENGTH := 20.0
+const V183_FALL_LINE_MAX_LENGTH := 48.0
+const V183_FALL_LINE_HEAD_LENGTH := 8.0
+const V183_FALL_LINE_HEAD_WIDTH := 5.0
 
 func _v183_circle(radius: float, segments: int = 20) -> PackedVector2Array:
     var out := PackedVector2Array()
@@ -47,6 +54,33 @@ func _v183_grade_text(long_pct: float) -> String:
     if abs(long_pct) < 0.05:
         return "GRADE  LEVEL"
     return "GRADE  %s %.2f%%" % [("DOWN" if long_pct > 0.0 else "UP"), abs(long_pct)]
+
+# Returns presentation-only fall-line geometry in panel coordinates. X follows the authoritative
+# side slope sign (positive = right side low); positive longitudinal slope is downhill toward the
+# cup, which is upward on this top-down map. This fixes the old horizontal-only cue that silently
+# discarded the longitudinal component while claiming to show the fall line.
+func _v183_fall_line_geometry(side_pct: float, long_pct: float) -> Dictionary:
+    var slope := Vector2(side_pct, -long_pct)
+    var magnitude := slope.length()
+    if magnitude < V183_FALL_LINE_DEADBAND:
+        return {"visible": false, "shaft": PackedVector2Array(), "left": PackedVector2Array(), "right": PackedVector2Array()}
+
+    var direction := slope / magnitude
+    var strength := clampf(magnitude / 3.0, 0.0, 1.0)
+    var length_px := lerpf(V183_FALL_LINE_MIN_LENGTH, V183_FALL_LINE_MAX_LENGTH, strength)
+    var center := V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
+    var tail := center - direction * length_px * 0.42
+    var tip := center + direction * length_px * 0.58
+    var back := -direction
+    var normal := Vector2(-direction.y, direction.x)
+    var left_tip := tip + back * V183_FALL_LINE_HEAD_LENGTH + normal * V183_FALL_LINE_HEAD_WIDTH
+    var right_tip := tip + back * V183_FALL_LINE_HEAD_LENGTH - normal * V183_FALL_LINE_HEAD_WIDTH
+    return {
+        "visible": true,
+        "shaft": PackedVector2Array([tail, tip]),
+        "left": PackedVector2Array([left_tip, tip]),
+        "right": PackedVector2Array([right_tip, tip])
+    }
 
 func _build_hud() -> void:
     super._build_hud()
@@ -108,9 +142,22 @@ func _build_hud() -> void:
     _v183_panel.add_child(_v183_cup)
 
     _v183_break_arrow = Line2D.new()
-    _v183_break_arrow.width = 2.0
+    _v183_break_arrow.name = "FallLineShaft"
+    _v183_break_arrow.width = 2.4
     _v183_break_arrow.default_color = Color("#76d7b6")
     _v183_panel.add_child(_v183_break_arrow)
+
+    _v183_break_arrow_left = Line2D.new()
+    _v183_break_arrow_left.name = "FallLineHeadLeft"
+    _v183_break_arrow_left.width = 2.4
+    _v183_break_arrow_left.default_color = Color("#76d7b6")
+    _v183_panel.add_child(_v183_break_arrow_left)
+
+    _v183_break_arrow_right = Line2D.new()
+    _v183_break_arrow_right.name = "FallLineHeadRight"
+    _v183_break_arrow_right.width = 2.4
+    _v183_break_arrow_right.default_color = Color("#76d7b6")
+    _v183_panel.add_child(_v183_break_arrow_right)
 
     _v183_break_label = _v174_text(_v183_panel, Vector2(20, 198), Vector2(148, 20), "BREAK  STRAIGHT", 11, Color(0.72, 0.90, 0.84, 0.96))
     _v183_grade_label = _v174_text(_v183_panel, Vector2(170, 198), Vector2(148, 20), "GRADE  LEVEL", 11, Color(0.72, 0.90, 0.84, 0.96), HORIZONTAL_ALIGNMENT_RIGHT)
@@ -147,10 +194,15 @@ func _v183_update(s: Dictionary, force_visible: bool = false) -> void:
     _v183_break_label.text = _v183_break_text(side_pct)
     _v183_grade_label.text = _v183_grade_text(long_pct)
 
-    var center := V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
-    var dx := clampf(side_pct / 3.0, -1.0, 1.0) * 44.0
-    _v183_break_arrow.points = PackedVector2Array([center - Vector2(dx * 0.45, 0.0), center + Vector2(dx * 0.55, 0.0)])
-    _v183_break_arrow.visible = abs(side_pct) >= 0.08
+    var fall_line := _v183_fall_line_geometry(side_pct, long_pct)
+    var fall_visible := bool(fall_line.get("visible", false))
+    _v183_break_arrow.visible = fall_visible
+    _v183_break_arrow_left.visible = fall_visible
+    _v183_break_arrow_right.visible = fall_visible
+    if fall_visible:
+        _v183_break_arrow.points = fall_line["shaft"] as PackedVector2Array
+        _v183_break_arrow_left.points = fall_line["left"] as PackedVector2Array
+        _v183_break_arrow_right.points = fall_line["right"] as PackedVector2Array
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
