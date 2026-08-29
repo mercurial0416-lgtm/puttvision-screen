@@ -42,7 +42,7 @@ func _process(delta: float) -> void:
 
     # Regression: never reduce the radius just to keep the circle inside the chart. The visible
     # arc must preserve the true requested scale and every rendered point must remain on that arc.
-    var old_edge_capacity := minf(
+    var old_edge_capacity: float = minf(
         minf(edge_center.x, probe.V179_PLOT_SIZE.x - edge_center.x),
         minf(edge_center.y, probe.V179_PLOT_SIZE.y - edge_center.y)
     ) - probe.PRACTICE_RECENT_RING_EDGE_INSET
