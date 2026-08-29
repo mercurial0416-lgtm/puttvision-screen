@@ -17,13 +17,13 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
-    fun terrainReliefUsesDirectionalHillshadeWithoutGeometryExaggeration() {
+    fun terrainReliefUsesTvReadableDirectionalHillshadeWithoutGeometryExaggeration() {
         val script = asset("terrain_relief_visibility.gd")
 
         assertTrue(script.contains("signed_hillshade"))
         assertTrue(script.contains("hillshade_exposure"))
-        assertTrue(script.contains("mix(0.84, 1.16"))
-        assertTrue(script.contains("ALPHA = active * (0.125 + 0.070 * abs(height_bias))"))
+        assertTrue(script.contains("mix(0.68, 1.32"))
+        assertTrue(script.contains("ALPHA = active * (0.235 + 0.115 * abs(height_bias))"))
         assertTrue(script.contains("VERTEX.y += 0.0016"))
 
         assertFalse(script.contains("contour_wave"))
