@@ -67,6 +67,7 @@ func _process(delta: float) -> void:
     var result := probe._practice_trend_geometry(_preview_trend_samples())
     assert(str(result.get("state", "")) == "TIGHTENING")
     assert(bool(result.get("visible", false)))
+    assert(int(result.get("group_size", 0)) == probe.PRACTICE_TREND_GROUP_SIZE)
     assert(float(result.get("recent_spread", 99.0)) < float(result.get("early_spread", 0.0)))
     # Regression: consistency and aim bias are independent. A tighter recent group must stay
     # TIGHTENING even when its centroid is farther from center than the early group.
@@ -77,6 +78,24 @@ func _process(delta: float) -> void:
     assert(str(widening_result.get("state", "")) == "WIDENING")
     assert(float(widening_result.get("recent_spread", 0.0)) > float(widening_result.get("early_spread", 99.0)))
     assert(float(widening_result.get("recent_error", 99.0)) < float(widening_result.get("early_error", 0.0)))
+
+    # A six-shot session should use stable three-shot windows. The final miss would make a noisy
+    # two-shot comparison look WIDENING, while the broader recent group is still tighter overall.
+    var sx := probe.V179_LINE_SCALE_CM
+    var stable_noise: Array[Vector2] = [
+        Vector2(-1.5 * sx, 0.0),
+        Vector2(0.0, 0.0),
+        Vector2(1.5 * sx, 0.0),
+        Vector2(0.0, 0.0),
+        Vector2(0.1 * sx, 0.0),
+        Vector2(1.8 * sx, 0.0)
+    ]
+    var stable_result := probe._practice_trend_geometry(stable_noise)
+    assert(int(stable_result.get("group_size", 0)) == probe.PRACTICE_TREND_STABLE_GROUP_SIZE)
+    assert(str(stable_result.get("state", "")) == "TIGHTENING")
+    var noisy_two_shot_early := probe._practice_group_spread(stable_noise, 0, probe.PRACTICE_TREND_GROUP_SIZE)
+    var noisy_two_shot_recent := probe._practice_group_spread(stable_noise, stable_noise.size() - probe.PRACTICE_TREND_GROUP_SIZE, probe.PRACTICE_TREND_GROUP_SIZE)
+    assert(noisy_two_shot_recent > noisy_two_shot_early + probe.PRACTICE_TREND_STATE_DEADBAND)
 
     var ring := probe._practice_recent_ring_geometry(_preview_trend_samples())
     assert(bool(ring.get("visible", false)))
@@ -106,5 +125,6 @@ func _process(delta: float) -> void:
     probe.free()
     print("PRACTICE_TREND_VECTOR_OK=1")
     print("PRACTICE_TREND_DISPERSION_SEMANTICS_OK=1")
+    print("PRACTICE_TREND_STABLE_WINDOW_OK=1")
     print("PRACTICE_RECENT_CONSISTENCY_RING_OK=1")
     print("PRACTICE_RECENT_RING_EDGE_SAFE_OK=1")
