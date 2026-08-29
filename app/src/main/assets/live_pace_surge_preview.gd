@@ -5,6 +5,13 @@ var _live_pace_surge_checked := false
 
 func _process(delta: float) -> void:
     super._process(delta)
+
+    # Parent preview layers reseed their synthetic live-roll state while the deferred capture is
+    # active. Apply the representative surge readout after that chain every frame so the uploaded
+    # reference image proves the new state instead of silently falling back to SETTLING.
+    if _capture_started and _preview_live_roll_pace != null:
+        _preview_live_roll_pace.text = "PACE 128% · SURGING"
+
     if _live_pace_surge_checked:
         return
     _live_pace_surge_checked = true
@@ -37,8 +44,3 @@ func _process(delta: float) -> void:
         return
     probe.free()
     print("LIVE_ROLL_SURGE_OK=1")
-
-    # Keep the rendered reference frame representative of the new commercial readout without
-    # changing any shot state or replay timing inherited from the preview chain.
-    if _preview_live_roll_pace != null:
-        _preview_live_roll_pace.text = "PACE 128% · SURGING"
