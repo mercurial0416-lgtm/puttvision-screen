@@ -26,6 +26,8 @@ var _live_curve_launch_speed := 0.0
 var _live_curve_trace: Line2D
 var _live_curve_zero: Line2D
 var _live_curve_history := PackedFloat32Array()
+var _live_curve_distance_history := PackedFloat32Array()
+var _live_curve_travel_m := 0.0
 var _live_curve_last_trace_pos := Vector2.ZERO
 var _live_curve_has_trace_pos := false
 
@@ -139,7 +141,7 @@ func _live_pace_readout(current_speed: float, launch_speed: float) -> String:
         phase = "SETTLING"
     return "PACE %d%% · %s" % [int(round(ratio * 100.0)), phase]
 
-func _live_trace_points(history: PackedFloat32Array) -> PackedVector2Array:
+func _live_trace_points_with_distance(history: PackedFloat32Array, distances: PackedFloat32Array) -> PackedVector2Array:
     var points := PackedVector2Array()
     if history.is_empty():
         return points
@@ -147,12 +149,20 @@ func _live_trace_points(history: PackedFloat32Array) -> PackedVector2Array:
     for value in history:
         peak = maxf(peak, absf(value))
     var count := history.size()
+    var use_distance_axis := distances.size() == count and count > 1
+    var first_distance := distances[0] if use_distance_axis else 0.0
+    var distance_span := maxf(LIVE_TRACE_SAMPLE_STEP_M, distances[count - 1] - first_distance) if use_distance_axis else 0.0
     for i in range(count):
         var t := 1.0 if count == 1 else float(i) / float(count - 1)
+        if use_distance_axis:
+            t = clampf((distances[i] - first_distance) / distance_span, 0.0, 1.0)
         var x := lerpf(LIVE_TRACE_LEFT, LIVE_TRACE_RIGHT, t)
         var y := LIVE_TRACE_CENTER_Y - clampf(history[i] / peak, -1.0, 1.0) * LIVE_TRACE_AMPLITUDE
         points.append(Vector2(x, y))
     return points
+
+func _live_trace_points(history: PackedFloat32Array) -> PackedVector2Array:
+    return _live_trace_points_with_distance(history, PackedFloat32Array())
 
 func _live_trace_accept_sample(ball_pos: Vector2) -> bool:
     if not _live_curve_has_trace_pos:
@@ -164,18 +174,22 @@ func _live_trace_accept_sample(ball_pos: Vector2) -> bool:
     _live_curve_last_trace_pos = ball_pos
     return true
 
-func _live_trace_push(cross_track_cm: float) -> void:
+func _live_trace_push(cross_track_cm: float, traveled_m: float = -1.0) -> void:
+    if traveled_m < 0.0:
+        traveled_m = 0.0 if _live_curve_distance_history.is_empty() else _live_curve_distance_history[_live_curve_distance_history.size() - 1] + LIVE_TRACE_SAMPLE_STEP_M
     _live_curve_history.append(cross_track_cm)
+    _live_curve_distance_history.append(maxf(0.0, traveled_m))
     while _live_curve_history.size() > LIVE_TRACE_MAX_POINTS:
         _live_curve_history.remove_at(0)
+        _live_curve_distance_history.remove_at(0)
     if _live_curve_trace != null:
-        _live_curve_trace.points = _live_trace_points(_live_curve_history)
+        _live_curve_trace.points = _live_trace_points_with_distance(_live_curve_history, _live_curve_distance_history)
 
 # Make the authoritative roll response obvious without touching physics. During a live roll the
 # dedicated meter reports current/peak cross-track curve, speed decay, and a bounded mini trace of
-# the curve history from bridge snapshots. Trace samples are distance-gated so duplicate/repeated
-# bridge frames cannot distort the curve on different refresh rates; nothing feeds back into
-# GreenTerrain, GreenReadAdvisor, scoring, aim, or Android physics.
+# the curve history from bridge snapshots. Trace samples are distance-gated and their horizontal
+# spacing follows actual traveled distance, so sparse/irregular bridge frames cannot visually warp
+# the break shape. Nothing feeds back into GreenTerrain, GreenReadAdvisor, scoring, aim, or physics.
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
     var running := bool(s.get("running", false))
@@ -186,6 +200,8 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         _live_curve_peak_cm = 0.0
         _live_curve_launch_speed = velocity.length()
         _live_curve_history.clear()
+        _live_curve_distance_history.clear()
+        _live_curve_travel_m = 0.0
         _live_curve_has_trace_pos = false
         if _live_curve_trace != null:
             _live_curve_trace.clear_points()
@@ -198,8 +214,10 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
         var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
         _live_curve_peak_cm = maxf(_live_curve_peak_cm, absf(cross_track_cm))
+        var segment_m := ball_pos.distance_to(_live_curve_last_trace_pos) if _live_curve_has_trace_pos else 0.0
         if _live_trace_accept_sample(ball_pos):
-            _live_trace_push(cross_track_cm)
+            _live_curve_travel_m += segment_m
+            _live_trace_push(cross_track_cm, _live_curve_travel_m)
         if _live_curve_value != null:
             _live_curve_value.text = _live_curve_readout(cross_track_cm)
         if _live_curve_peak_label != null:

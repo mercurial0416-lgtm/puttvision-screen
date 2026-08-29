@@ -9,6 +9,7 @@ var _terrain_relief_checked := false
 var _terrain_relief_preview_added := false
 var _green_fall_line_checked := false
 var _replay_progress_checked := false
+var _live_break_distance_axis_checked := false
 
 func _terrain_relief_probe():
     var probe = TerrainReliefScene.new()
@@ -101,6 +102,29 @@ func _check_replay_chronological_progress() -> bool:
     probe.free()
     return ok
 
+func _check_live_break_distance_axis() -> bool:
+    var probe = FlowScene.new()
+    var history := PackedFloat32Array([-10.0, 0.0, 10.0])
+    var distances := PackedFloat32Array([0.0, 0.20, 1.0])
+    var points := probe._live_trace_points_with_distance(history, distances)
+    var expected_mid_x := lerpf(probe.LIVE_TRACE_LEFT, probe.LIVE_TRACE_RIGHT, 0.20)
+    var equal_sample_mid_x := lerpf(probe.LIVE_TRACE_LEFT, probe.LIVE_TRACE_RIGHT, 0.50)
+    var ok := true
+    if points.size() != 3:
+        push_error("Live break distance-axis trace point count regression")
+        ok = false
+    elif absf(points[1].x - expected_mid_x) > 0.01:
+        push_error("Live break trace no longer preserves physical sample spacing")
+        ok = false
+    elif absf(points[1].x - equal_sample_mid_x) < 10.0:
+        push_error("Live break trace accidentally reverted to sample-index spacing")
+        ok = false
+    elif absf(points[0].x - probe.LIVE_TRACE_LEFT) > 0.01 or absf(points[2].x - probe.LIVE_TRACE_RIGHT) > 0.01:
+        push_error("Live break distance-axis trace span regression")
+        ok = false
+    probe.free()
+    return ok
+
 func _process(delta: float) -> void:
     super._process(delta)
     if not _terrain_relief_preview_added and _preview_frames >= 10:
@@ -117,6 +141,12 @@ func _process(delta: float) -> void:
             get_tree().quit(35)
             return
         print("REPLAY_CHRONOLOGICAL_HUD_PROGRESS_OK=1")
+    if not _live_break_distance_axis_checked and _preview_frames >= 17:
+        _live_break_distance_axis_checked = true
+        if not _check_live_break_distance_axis():
+            get_tree().quit(44)
+            return
+        print("LIVE_BREAK_DISTANCE_AXIS_OK=1")
     if _terrain_relief_checked or _preview_frames < 11:
         return
     _terrain_relief_checked = true
