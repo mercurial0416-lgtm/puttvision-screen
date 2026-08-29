@@ -46,7 +46,8 @@ func _add_trend_visual() -> void:
         head.points = PackedVector2Array([geometry["left"], geometry["tip"], geometry["right"]])
         _v179_plot.add_child(head)
 
-        var label := _v174_text(_v179_panel, Vector2(24, 34), Vector2(300, 14), "TREND · %s" % str(geometry.get("state", "STEADY")), 8, line.default_color)
+        var label_text := probe._practice_trend_label_text(str(geometry.get("state", "STEADY")), int(geometry.get("change_percent", 0)))
+        var label := _v174_text(_v179_panel, Vector2(24, 34), Vector2(300, 14), label_text, 8, line.default_color)
         label.name = "PreviewPracticeTrendLabel"
     probe.free()
 
@@ -69,6 +70,8 @@ func _process(delta: float) -> void:
     assert(bool(result.get("visible", false)))
     assert(int(result.get("group_size", 0)) == probe.PRACTICE_TREND_GROUP_SIZE)
     assert(float(result.get("recent_spread", 99.0)) < float(result.get("early_spread", 0.0)))
+    assert(int(result.get("change_percent", 0)) > 0)
+    assert(probe._practice_trend_label_text("TIGHTENING", int(result.get("change_percent", 0))).find("%") >= 0)
     # Regression: consistency and aim bias are independent. A tighter recent group must stay
     # TIGHTENING even when its centroid is farther from center than the early group.
     assert(float(result.get("recent_error", 0.0)) > float(result.get("early_error", 99.0)))
@@ -78,6 +81,14 @@ func _process(delta: float) -> void:
     assert(str(widening_result.get("state", "")) == "WIDENING")
     assert(float(widening_result.get("recent_spread", 0.0)) > float(widening_result.get("early_spread", 99.0)))
     assert(float(widening_result.get("recent_error", 99.0)) < float(widening_result.get("early_error", 0.0)))
+    assert(int(widening_result.get("change_percent", 0)) > 0)
+    assert(probe._practice_trend_label_text("WIDENING", int(widening_result.get("change_percent", 0))).find("%") >= 0)
+
+    # Relative magnitude must remain finite/bounded even when the early grouping is effectively
+    # perfect and the recent group opens up; malformed values must not leak NaN/INF into the HUD.
+    assert(probe._practice_trend_change_percent(0.0, 4.0) == probe.PRACTICE_TREND_MAX_CHANGE_PERCENT)
+    assert(probe._practice_trend_change_percent(NAN, 4.0) == 0)
+    assert(probe._practice_trend_label_text("STEADY", 52) == "TREND · STEADY")
 
     # A six-shot session should use stable three-shot windows. The final miss would make a noisy
     # two-shot comparison look WIDENING, while the broader recent group is still tighter overall.
@@ -126,5 +137,6 @@ func _process(delta: float) -> void:
     print("PRACTICE_TREND_VECTOR_OK=1")
     print("PRACTICE_TREND_DISPERSION_SEMANTICS_OK=1")
     print("PRACTICE_TREND_STABLE_WINDOW_OK=1")
+    print("PRACTICE_TREND_MAGNITUDE_OK=1")
     print("PRACTICE_RECENT_CONSISTENCY_RING_OK=1")
     print("PRACTICE_RECENT_RING_EDGE_SAFE_OK=1")
