@@ -12,6 +12,7 @@ func _preview_add_replay_chapter_label(text_value: String, rect: Rect2, tint: Co
     label.size = rect.size
     label.text = text_value
     label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
     label.add_theme_font_size_override("font_size", 10)
     label.add_theme_color_override("font_color", Color(tint.r, tint.g, tint.b, tint.a * alpha))
     label.z_index = 248
@@ -24,7 +25,6 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     var track_width: float = maxf(1.0, 1920.0 - track_left - side_inset - stage_width - 14.0)
     var helper = ReplayPlayheadScene.new()
     var x := track_left + helper._replay_playhead_x(progress, track_width)
-    helper.free()
 
     var finish_width := track_width * 0.12
     var finish_zone := ColorRect.new()
@@ -57,9 +57,19 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     add_child(playhead)
 
     var label_y := 1080.0 - bar_height + 27.0
-    _preview_add_replay_chapter_label("ROLL", Rect2(Vector2(track_left, label_y), Vector2(blend_left - track_left, 14.0)), Color(0.70, 0.80, 0.84, 0.72), alpha)
-    _preview_add_replay_chapter_label("BLEND", Rect2(Vector2(blend_left, label_y), Vector2(blend_right - blend_left, 14.0)), Color(0.90, 0.78, 0.40, 0.82), alpha)
-    _preview_add_replay_chapter_label("CUP", Rect2(Vector2(blend_right, label_y), Vector2(track_left + track_width - blend_right, 14.0)), Color(0.70, 0.92, 0.80, 0.82), alpha)
+    var roll_width := blend_left - track_left
+    var blend_width := blend_right - blend_left
+    var cup_width := track_left + track_width - blend_right
+    var roll_text := helper._replay_chapter_label_text("ROLL", roll_width)
+    var blend_text := helper._replay_chapter_label_text("BLEND", blend_width)
+    var cup_text := helper._replay_chapter_label_text("CUP", cup_width)
+    helper.free()
+    if not roll_text.is_empty():
+        _preview_add_replay_chapter_label(roll_text, Rect2(Vector2(track_left, label_y), Vector2(roll_width, 14.0)), Color(0.70, 0.80, 0.84, 0.72), alpha)
+    if not blend_text.is_empty():
+        _preview_add_replay_chapter_label(blend_text, Rect2(Vector2(blend_left, label_y), Vector2(blend_width, 14.0)), Color(0.90, 0.78, 0.40, 0.82), alpha)
+    if not cup_text.is_empty():
+        _preview_add_replay_chapter_label(cup_text, Rect2(Vector2(blend_right, label_y), Vector2(cup_width, 14.0)), Color(0.70, 0.92, 0.80, 0.82), alpha)
 
 func _preview_add_read_launch_vector() -> void:
     if _v183_panel == null:
@@ -177,6 +187,26 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    if probe._replay_chapter_label_text("BLEND", 60.0) != "BLEND":
+        push_error("Replay chapter full-label readability regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._replay_chapter_label_text("BLEND", 24.0) != "B":
+        push_error("Replay chapter narrow-label abbreviation regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._replay_chapter_label_text("CUP", 12.0) != "":
+        push_error("Replay chapter tiny-label suppression regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if probe._replay_chapter_label_text("ROLL", NAN) != "":
+        push_error("Replay chapter invalid label-width guard regression")
+        probe.free()
+        get_tree().quit(29)
+        return
     probe.free()
 
     var launch_probe = ReadLaunchScene.new()
@@ -216,4 +246,5 @@ func _process(delta: float) -> void:
     print("REPLAY_BLEND_LAYERING_OK=1")
     print("REPLAY_FINISH_ZONE_OK=1")
     print("REPLAY_CHAPTER_CLARITY_OK=1")
+    print("REPLAY_CHAPTER_ADAPTIVE_LABELS_OK=1")
     print("COMMERCIAL_READ_LAUNCH_VECTOR_OK=1")
