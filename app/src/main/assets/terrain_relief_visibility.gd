@@ -24,7 +24,7 @@ func _terrain_relief_hillshade_contrast(slope_percent: float) -> float:
     # Presentation-only contrast budget. A 1% plane should be unmistakable from the address
     # camera, while nearly level turf remains visually quiet. Kept bounded for TV/mobile safety.
     var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
-    return lerpf(0.0, 0.16, slope_signal)
+    return lerpf(0.0, 0.32, slope_signal)
 
 func _terrain_relief_material() -> ShaderMaterial:
     var shader := Shader.new()
@@ -54,22 +54,22 @@ void fragment() {
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
 
-    // Screen-golf hillshade: encode the *direction* of the authoritative local slope as a broad
-    // light/dark face. This makes a real 1-2% plane read from the low address camera without fake
-    // contour stripes, displaced vertices, extra meshes, shadows, or any physics feedback.
+    // TV-readable hillshade: encode the direction of the authoritative local slope as one broad
+    // light/dark face. The stronger contrast is deliberate: on a 1080p address view a real 1-2%
+    // plane must read without consulting HUD text. No contour stripes or displaced geometry.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float signed_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
-    float hillshade_exposure = mix(0.84, 1.16, signed_hillshade * 0.5 + 0.5);
+    float hillshade_exposure = mix(0.68, 1.32, signed_hillshade * 0.5 + 0.5);
 
-    vec3 low_green = vec3(0.040, 0.105, 0.050);
-    vec3 high_green = vec3(0.220, 0.305, 0.120);
+    vec3 low_green = vec3(0.036, 0.095, 0.046);
+    vec3 high_green = vec3(0.235, 0.320, 0.125);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
     relief_color *= hillshade_exposure;
 
     ALBEDO = relief_color;
-    // Strong enough to survive a 1080p TV view, still translucent enough to preserve turf detail.
-    ALPHA = active * (0.125 + 0.070 * abs(height_bias));
+    // Enough opacity to make macro slope survive TV scaling while keeping underlying turf visible.
+    ALPHA = active * (0.235 + 0.115 * abs(height_bias));
 }
 """
     var material := ShaderMaterial.new()
