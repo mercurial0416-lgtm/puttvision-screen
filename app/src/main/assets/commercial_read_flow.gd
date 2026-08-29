@@ -155,7 +155,9 @@ func _live_trace_points_with_distance(history: PackedFloat32Array, distances: Pa
     var first_distance := distances[0] if use_distance_axis else 0.0
     var distance_span := maxf(LIVE_TRACE_SAMPLE_STEP_M, distances[count - 1] - first_distance) if use_distance_axis else 0.0
     for i in range(count):
-        var t := 1.0 if count == 1 else float(i) / float(count - 1)
+        # A lone first sample represents the trace origin. Anchoring it at the left edge avoids the
+        # one-frame right-edge pop that otherwise occurs before a second sample establishes a span.
+        var t := 0.0 if count == 1 else float(i) / float(count - 1)
         if use_distance_axis:
             t = clampf((distances[i] - first_distance) / distance_span, 0.0, 1.0)
         var x := lerpf(LIVE_TRACE_LEFT, LIVE_TRACE_RIGHT, t)
