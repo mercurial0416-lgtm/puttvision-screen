@@ -5,6 +5,18 @@ const ReadLaunchScene = preload("res://read_launch_vector.gd")
 var _replay_playhead_checks_done := false
 var _read_launch_preview_added := false
 
+func _preview_add_replay_chapter_label(text_value: String, rect: Rect2, tint: Color, alpha: float) -> void:
+    var label := Label.new()
+    label.name = "PreviewReplayChapter%s" % text_value.capitalize()
+    label.position = rect.position
+    label.size = rect.size
+    label.text = text_value
+    label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.add_theme_font_size_override("font_size", 10)
+    label.add_theme_color_override("font_color", Color(tint.r, tint.g, tint.b, tint.a * alpha))
+    label.z_index = 248
+    add_child(label)
+
 func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: float, side_inset: float, label_width: float, stage_width: float, track_height: float, chapter_start: float, chapter_full: float, stage_text: String) -> void:
     super._preview_add_replay_timeline(progress, alpha, bar_height, side_inset, label_width, stage_width, track_height, chapter_start, chapter_full, stage_text)
 
@@ -41,6 +53,11 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
     playhead.color = Color(0.96, 0.99, 1.0, 0.98 * alpha)
     playhead.z_index = 247
     add_child(playhead)
+
+    var label_y := 1080.0 - bar_height + 27.0
+    _preview_add_replay_chapter_label("ROLL", Rect2(Vector2(track_left, label_y), Vector2(blend_left - track_left, 14.0)), Color(0.70, 0.80, 0.84, 0.72), alpha)
+    _preview_add_replay_chapter_label("BLEND", Rect2(Vector2(blend_left, label_y), Vector2(blend_right - blend_left, 14.0)), Color(0.90, 0.78, 0.40, 0.82), alpha)
+    _preview_add_replay_chapter_label("CUP", Rect2(Vector2(blend_right, label_y), Vector2(track_left + track_width - blend_right, 14.0)), Color(0.70, 0.92, 0.80, 0.82), alpha)
 
 func _preview_add_read_launch_vector() -> void:
     if _v183_panel == null:
@@ -116,6 +133,31 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
+    var chapters := probe._replay_chapter_geometry(100.0)
+    var roll: Vector2 = chapters["roll"]
+    var blend: Vector2 = chapters["blend"]
+    var cup: Vector2 = chapters["cup"]
+    if absf(roll.x) > 0.001 or absf(roll.y - 72.0) > 0.001:
+        push_error("Replay roll chapter geometry regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(blend.x - 72.0) > 0.001 or absf(blend.y - 18.0) > 0.001:
+        push_error("Replay blend chapter geometry regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(cup.x - 90.0) > 0.001 or absf(cup.y - 10.0) > 0.001:
+        push_error("Replay cup chapter geometry regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    var invalid_chapters := probe._replay_chapter_geometry(NAN)
+    if invalid_chapters["roll"] != Vector2.ZERO or invalid_chapters["blend"] != Vector2.ZERO or invalid_chapters["cup"] != Vector2.ZERO:
+        push_error("Replay chapter invalid width guard regression")
+        probe.free()
+        get_tree().quit(29)
+        return
     probe.free()
 
     var launch_probe = ReadLaunchScene.new()
@@ -153,4 +195,5 @@ func _process(delta: float) -> void:
     print("REPLAY_PLAYHEAD_VISIBILITY_OK=1")
     print("REPLAY_BLEND_LAYERING_OK=1")
     print("REPLAY_FINISH_ZONE_OK=1")
+    print("REPLAY_CHAPTER_CLARITY_OK=1")
     print("COMMERCIAL_READ_LAUNCH_VECTOR_OK=1")
