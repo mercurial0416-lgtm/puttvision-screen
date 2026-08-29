@@ -8,7 +8,7 @@ func _process(delta: float) -> void:
         return
     _v197_checks_done = true
 
-    if _v197_make_fill == null or _v197_make_outline == null:
+    if _v197_make_fill == null or _v197_make_outline == null or _v188_dot == null:
         push_error("Shot map make-window package missing")
         get_tree().quit(28)
         return
@@ -57,7 +57,7 @@ func _process(delta: float) -> void:
         push_error("Shot map make-window success feedback regression")
         get_tree().quit(28)
         return
-    if _v197_make_outline.default_color != V197_MAKE_OUTLINE:
+    if _v197_make_outline.default_color != V197_MAKE_OUTLINE or _v188_dot.color != V197_MARKER_MAKE:
         push_error("Shot map make-window success emphasis regression")
         get_tree().quit(28)
         return
@@ -67,8 +67,8 @@ func _process(delta: float) -> void:
         push_error("Shot map make-window boundary miss feedback regression")
         get_tree().quit(28)
         return
-    if _v197_make_outline.default_color != V197_MISS_OUTLINE:
-        push_error("Shot map make-window miss de-emphasis regression")
+    if _v197_make_outline.default_color != V197_MISS_OUTLINE or _v188_dot.color != V197_MARKER_MISS:
+        push_error("Shot map marker must match strict boundary verdict")
         get_tree().quit(28)
         return
 
