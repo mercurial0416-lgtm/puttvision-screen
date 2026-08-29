@@ -1,7 +1,7 @@
 extends "res://v196_shot_map_hierarchy.gd"
 
 # Presentation-only SHOT MAP make window. The debrief coach treats the threshold itself as
-# corrective (line >= 9 cm OR pace >= 22 cm), so the visual verdict uses the same strict window.
+# corrective (line >= 9 cm OR pace >= 22 cm), so every visible verdict uses the same strict window.
 # This layer never feeds back into physics, terrain, green read, aiming, or scoring.
 
 var _v197_make_fill: Polygon2D
@@ -15,6 +15,8 @@ const V197_MAKE_FILL := Color(0.30, 0.94, 0.66, 0.22)
 const V197_MAKE_OUTLINE := Color(0.52, 1.00, 0.76, 0.98)
 const V197_MISS_FILL := Color(0.28, 0.84, 0.62, 0.07)
 const V197_MISS_OUTLINE := Color(0.42, 0.74, 0.58, 0.54)
+const V197_MARKER_MAKE := Color("#76d7b6")
+const V197_MARKER_MISS := Color("#f4dda0")
 
 func _v197_window_radius_px() -> Vector2:
     return Vector2(
@@ -70,6 +72,10 @@ func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) ->
         return
 
     var made := _v197_inside_make_window(line_delta_cm, pace_delta_cm)
+    # The inherited map predates the strict debrief boundary and colors the marker with <=.
+    # Re-apply the authoritative presentation verdict here so marker, box, and coach cannot disagree.
+    if _v188_dot != null:
+        _v188_dot.color = V197_MARKER_MAKE if made else V197_MARKER_MISS
     _v197_make_fill.color = V197_MAKE_FILL if made else V197_MISS_FILL
     _v197_make_outline.default_color = V197_MAKE_OUTLINE if made else V197_MISS_OUTLINE
     if _v196_center_legend != null:
