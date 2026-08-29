@@ -11,6 +11,7 @@ const PRACTICE_TREND_STABLE_GROUP_SIZE := 3
 const PRACTICE_TREND_STABLE_MIN_SAMPLES := 6
 const PRACTICE_TREND_MIN_PIXELS := 5.0
 const PRACTICE_TREND_STATE_DEADBAND := 0.05
+const PRACTICE_TREND_MAX_CHANGE_PERCENT := 999
 const PRACTICE_TREND_WING_LENGTH := 6.5
 const PRACTICE_TREND_WING_HALF_WIDTH := 4.0
 const PRACTICE_RECENT_GROUP_SIZE := 3
@@ -60,9 +61,21 @@ func _practice_trend_group_size(samples: Array[Vector2]) -> int:
     # state while staying bounded and cheap on Forward Mobile.
     return PRACTICE_TREND_STABLE_GROUP_SIZE if samples.size() >= PRACTICE_TREND_STABLE_MIN_SAMPLES else PRACTICE_TREND_GROUP_SIZE
 
+func _practice_trend_change_percent(early_spread: float, recent_spread: float) -> int:
+    if not is_finite(early_spread) or not is_finite(recent_spread):
+        return 0
+    var baseline := maxf(absf(early_spread), PRACTICE_TREND_STATE_DEADBAND)
+    var magnitude := absf(recent_spread - early_spread) / baseline * 100.0
+    return clampi(int(round(magnitude)), 0, PRACTICE_TREND_MAX_CHANGE_PERCENT)
+
+func _practice_trend_label_text(state: String, change_percent: int) -> String:
+    if state == "TIGHTENING" or state == "WIDENING":
+        return "TREND · %s · %d%%" % [state, clampi(change_percent, 0, PRACTICE_TREND_MAX_CHANGE_PERCENT)]
+    return "TREND · %s" % state
+
 func _practice_trend_geometry(samples: Array[Vector2]) -> Dictionary:
     if samples.size() < PRACTICE_TREND_MIN_SAMPLES:
-        return {"visible": false, "state": "BUILDING"}
+        return {"visible": false, "state": "BUILDING", "change_percent": 0}
 
     var group_size := _practice_trend_group_size(samples)
     var early_from := 0
@@ -78,18 +91,20 @@ func _practice_trend_geometry(samples: Array[Vector2]) -> Dictionary:
     var recent_spread := _practice_group_spread(samples, recent_from, group_size)
     var spread_improvement := early_spread - recent_spread
 
-    # The arrow already communicates centroid drift. The text must describe consistency, so base
-    # TIGHTENING/WIDENING on within-group dispersion instead of distance of the centroid from zero.
-    # Otherwise a tighter group that moves slightly off-center can be mislabeled as DRIFTING.
+    # The arrow already communicates centroid drift. The text describes consistency and now also
+    # exposes the bounded relative magnitude so players can tell a marginal improvement from a
+    # substantial one without changing any coaching or physics decision.
     var state := "STEADY"
     if spread_improvement > PRACTICE_TREND_STATE_DEADBAND:
         state = "TIGHTENING"
     elif spread_improvement < -PRACTICE_TREND_STATE_DEADBAND:
         state = "WIDENING"
+    var change_percent := _practice_trend_change_percent(early_spread, recent_spread)
 
     var result := {
         "visible": delta.length() >= PRACTICE_TREND_MIN_PIXELS,
         "state": state,
+        "change_percent": change_percent,
         "group_size": group_size,
         "early_error": early_error,
         "recent_error": recent_error,
@@ -181,6 +196,7 @@ func _practice_trend_refresh() -> void:
     var geometry := _practice_trend_geometry(_v179_samples)
     var recent_ring := _practice_recent_ring_geometry(_v179_samples)
     var state := str(geometry.get("state", "BUILDING"))
+    var change_percent := int(geometry.get("change_percent", 0))
     var visible := bool(geometry.get("visible", false))
     _practice_trend_line.visible = visible
     _practice_trend_head.visible = visible
@@ -197,7 +213,7 @@ func _practice_trend_refresh() -> void:
     _practice_trend_line.default_color = color
     _practice_trend_head.default_color = color
     _practice_trend_label.modulate = color
-    _practice_trend_label.text = "TREND · %s" % state
+    _practice_trend_label.text = _practice_trend_label_text(state, change_percent)
 
     if not visible:
         return
