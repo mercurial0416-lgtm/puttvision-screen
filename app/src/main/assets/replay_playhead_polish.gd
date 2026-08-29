@@ -70,7 +70,9 @@ func _replay_build_chapter_label(text_value: String, tint: Color) -> Label:
 func _replay_playhead_x(progress: float, track_width: float) -> float:
     if not is_finite(progress) or not is_finite(track_width) or track_width <= 0.0:
         return 0.0
-    return clampf(progress, 0.0, 1.0) * track_width
+    var half_size := minf(REPLAY_PLAYHEAD_SIZE * 0.5, track_width * 0.5)
+    var usable_width := maxf(0.0, track_width - half_size * 2.0)
+    return half_size + clampf(progress, 0.0, 1.0) * usable_width
 
 func _replay_finish_zone_geometry(track_width: float) -> Vector2:
     if not is_finite(track_width) or track_width <= 0.0:

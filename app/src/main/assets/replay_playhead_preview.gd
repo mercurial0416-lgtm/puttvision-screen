@@ -22,7 +22,9 @@ func _preview_add_replay_timeline(progress: float, alpha: float, bar_height: flo
 
     var track_left: float = side_inset + label_width
     var track_width: float = maxf(1.0, 1920.0 - track_left - side_inset - stage_width - 14.0)
-    var x := track_left + track_width * clampf(progress, 0.0, 1.0)
+    var helper = ReplayPlayheadScene.new()
+    var x := track_left + helper._replay_playhead_x(progress, track_width)
+    helper.free()
 
     var finish_width := track_width * 0.12
     var finish_zone := ColorRect.new()
@@ -102,13 +104,18 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(29)
         return
-    if absf(probe._replay_playhead_x(-0.4, 100.0)) > 0.001:
-        push_error("Replay playhead lower clamp regression")
+    if absf(probe._replay_playhead_x(-0.4, 100.0) - 4.5) > 0.001:
+        push_error("Replay playhead lower edge containment regression")
         probe.free()
         get_tree().quit(29)
         return
-    if absf(probe._replay_playhead_x(1.4, 100.0) - 100.0) > 0.001:
-        push_error("Replay playhead upper clamp regression")
+    if absf(probe._replay_playhead_x(1.4, 100.0) - 95.5) > 0.001:
+        push_error("Replay playhead upper edge containment regression")
+        probe.free()
+        get_tree().quit(29)
+        return
+    if absf(probe._replay_playhead_x(0.5, 6.0) - 3.0) > 0.001:
+        push_error("Replay playhead narrow-track containment regression")
         probe.free()
         get_tree().quit(29)
         return
@@ -193,6 +200,7 @@ func _process(delta: float) -> void:
     launch_probe.free()
 
     print("REPLAY_PLAYHEAD_VISIBILITY_OK=1")
+    print("REPLAY_PLAYHEAD_EDGE_CONTAINMENT_OK=1")
     print("REPLAY_BLEND_LAYERING_OK=1")
     print("REPLAY_FINISH_ZONE_OK=1")
     print("REPLAY_CHAPTER_CLARITY_OK=1")
