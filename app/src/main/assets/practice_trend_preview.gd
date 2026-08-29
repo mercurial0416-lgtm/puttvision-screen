@@ -5,7 +5,9 @@ var _trend_checked := false
 var _trend_visual_added := false
 
 func _preview_trend_samples() -> Array[Vector2]:
-    return [Vector2(20, 42), Vector2(17, 34), Vector2(11, 21), Vector2(8, 15), Vector2(4, 7)]
+    # The recent pair is much tighter even though its centroid sits farther from the target center.
+    # This is the case that previously produced the wrong coaching state.
+    return [Vector2(-15, 0), Vector2(15, 0), Vector2(12, 8), Vector2(20, 5), Vector2(21, 5)]
 
 func _add_trend_visual() -> void:
     if _v179_plot == null or _v179_panel == null:
@@ -44,7 +46,7 @@ func _add_trend_visual() -> void:
         head.points = PackedVector2Array([geometry["left"], geometry["tip"], geometry["right"]])
         _v179_plot.add_child(head)
 
-        var label := _v174_text(_v179_panel, Vector2(24, 34), Vector2(300, 14), "TREND · TIGHTENING", 8, line.default_color)
+        var label := _v174_text(_v179_panel, Vector2(24, 34), Vector2(300, 14), "TREND · %s" % str(geometry.get("state", "STEADY")), 8, line.default_color)
         label.name = "PreviewPracticeTrendLabel"
     probe.free()
 
@@ -65,7 +67,16 @@ func _process(delta: float) -> void:
     var result := probe._practice_trend_geometry(_preview_trend_samples())
     assert(str(result.get("state", "")) == "TIGHTENING")
     assert(bool(result.get("visible", false)))
-    assert(float(result.get("recent_error", 99.0)) < float(result.get("early_error", 0.0)))
+    assert(float(result.get("recent_spread", 99.0)) < float(result.get("early_spread", 0.0)))
+    # Regression: consistency and aim bias are independent. A tighter recent group must stay
+    # TIGHTENING even when its centroid is farther from center than the early group.
+    assert(float(result.get("recent_error", 0.0)) > float(result.get("early_error", 99.0)))
+
+    var widening_while_centering: Array[Vector2] = [Vector2(19, 0), Vector2(21, 0), Vector2(-15, 0), Vector2(15, 0)]
+    var widening_result := probe._practice_trend_geometry(widening_while_centering)
+    assert(str(widening_result.get("state", "")) == "WIDENING")
+    assert(float(widening_result.get("recent_spread", 0.0)) > float(widening_result.get("early_spread", 99.0)))
+    assert(float(widening_result.get("recent_error", 99.0)) < float(widening_result.get("early_error", 0.0)))
 
     var ring := probe._practice_recent_ring_geometry(_preview_trend_samples())
     assert(bool(ring.get("visible", false)))
@@ -86,13 +97,14 @@ func _process(delta: float) -> void:
         assert(point.x <= probe.V179_PLOT_SIZE.x - probe.PRACTICE_RECENT_RING_EDGE_INSET + 0.01)
         assert(point.y <= probe.V179_PLOT_SIZE.y - probe.PRACTICE_RECENT_RING_EDGE_INSET + 0.01)
 
-    var drifting: Array[Vector2] = [Vector2(4, 7), Vector2(8, 15), Vector2(17, 34), Vector2(20, 42)]
-    assert(str(probe._practice_trend_geometry(drifting).get("state", "")) == "DRIFTING")
+    var steady: Array[Vector2] = [Vector2(-8, -5), Vector2(8, 5), Vector2(12, 8), Vector2(28, 18)]
+    assert(str(probe._practice_trend_geometry(steady).get("state", "")) == "STEADY")
 
     var building: Array[Vector2] = [Vector2(10, 20), Vector2(8, 16), Vector2(6, 12)]
     assert(not bool(probe._practice_trend_geometry(building).get("visible", true)))
     assert(not bool(probe._practice_recent_ring_geometry(building).get("visible", true)))
     probe.free()
     print("PRACTICE_TREND_VECTOR_OK=1")
+    print("PRACTICE_TREND_DISPERSION_SEMANTICS_OK=1")
     print("PRACTICE_RECENT_CONSISTENCY_RING_OK=1")
     print("PRACTICE_RECENT_RING_EDGE_SAFE_OK=1")
