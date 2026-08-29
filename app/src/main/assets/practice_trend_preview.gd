@@ -81,7 +81,7 @@ func _process(delta: float) -> void:
 
     # A six-shot session should use stable three-shot windows. The final miss would make a noisy
     # two-shot comparison look WIDENING, while the broader recent group is still tighter overall.
-    var sx := probe.V179_LINE_SCALE_CM
+    var sx: float = float(probe.V179_LINE_SCALE_CM)
     var stable_noise: Array[Vector2] = [
         Vector2(-1.5 * sx, 0.0),
         Vector2(0.0, 0.0),
@@ -90,12 +90,12 @@ func _process(delta: float) -> void:
         Vector2(0.1 * sx, 0.0),
         Vector2(1.8 * sx, 0.0)
     ]
-    var stable_result := probe._practice_trend_geometry(stable_noise)
+    var stable_result: Dictionary = probe._practice_trend_geometry(stable_noise)
     assert(int(stable_result.get("group_size", 0)) == probe.PRACTICE_TREND_STABLE_GROUP_SIZE)
     assert(str(stable_result.get("state", "")) == "TIGHTENING")
-    var noisy_two_shot_early := probe._practice_group_spread(stable_noise, 0, probe.PRACTICE_TREND_GROUP_SIZE)
-    var noisy_two_shot_recent := probe._practice_group_spread(stable_noise, stable_noise.size() - probe.PRACTICE_TREND_GROUP_SIZE, probe.PRACTICE_TREND_GROUP_SIZE)
-    assert(noisy_two_shot_recent > noisy_two_shot_early + probe.PRACTICE_TREND_STATE_DEADBAND)
+    var noisy_two_shot_early: float = float(probe._practice_group_spread(stable_noise, 0, probe.PRACTICE_TREND_GROUP_SIZE))
+    var noisy_two_shot_recent: float = float(probe._practice_group_spread(stable_noise, stable_noise.size() - probe.PRACTICE_TREND_GROUP_SIZE, probe.PRACTICE_TREND_GROUP_SIZE))
+    assert(noisy_two_shot_recent > noisy_two_shot_early + float(probe.PRACTICE_TREND_STATE_DEADBAND))
 
     var ring := probe._practice_recent_ring_geometry(_preview_trend_samples())
     assert(bool(ring.get("visible", false)))
