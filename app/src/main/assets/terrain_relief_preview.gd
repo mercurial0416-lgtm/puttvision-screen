@@ -1,11 +1,14 @@
-extends "res://replay_progress_regression.gd"
+extends "res://practice_trend_preview.gd"
 
 const TerrainReliefScene = preload("res://terrain_relief_visibility.gd")
+const CinematicReplayScene = preload("res://v175_cinematic_replay.gd")
 const RELIEF_PREVIEW_SIDE := 1.35
 const RELIEF_PREVIEW_LONG := -0.55
+const REPLAY_TRACK_WIDTH := 634.0
 var _terrain_relief_checked := false
 var _terrain_relief_preview_added := false
 var _green_fall_line_checked := false
+var _replay_progress_checked := false
 
 func _terrain_relief_probe():
     var probe = TerrainReliefScene.new()
@@ -73,6 +76,31 @@ func _check_green_fall_line_geometry() -> bool:
         return false
     return true
 
+func _check_replay_chronological_progress() -> bool:
+    var probe = CinematicReplayScene.new()
+    var quarter: float = probe._v175_progress_from_times(6.0, 8.0)
+    var quarter_width: float = probe._v175_replay_track_fill_width(quarter)
+    var expected_width := REPLAY_TRACK_WIDTH * 0.25
+    var eased_width := REPLAY_TRACK_WIDTH * smoothstep(0.0, 1.0, quarter)
+    var ok := true
+    if absf(quarter - 0.25) > 0.001:
+        push_error("Replay chronological progress calculation regression")
+        ok = false
+    elif absf(quarter_width - expected_width) > 0.001:
+        push_error("Replay HUD track no longer matches chronological percentage")
+        ok = false
+    elif absf(quarter_width - eased_width) < 1.0:
+        push_error("Replay HUD track accidentally reintroduced camera easing")
+        ok = false
+    elif absf(probe._v175_replay_track_fill_width(-0.4)) > 0.001:
+        push_error("Replay HUD lower progress clamp regression")
+        ok = false
+    elif absf(probe._v175_replay_track_fill_width(1.4) - REPLAY_TRACK_WIDTH) > 0.001:
+        push_error("Replay HUD upper progress clamp regression")
+        ok = false
+    probe.free()
+    return ok
+
 func _process(delta: float) -> void:
     super._process(delta)
     if not _terrain_relief_preview_added and _preview_frames >= 10:
@@ -83,6 +111,12 @@ func _process(delta: float) -> void:
             get_tree().quit(42)
             return
         print("GREEN_FALL_LINE_GEOMETRY_OK=1")
+    if not _replay_progress_checked and _preview_frames >= 16:
+        _replay_progress_checked = true
+        if not _check_replay_chronological_progress():
+            get_tree().quit(35)
+            return
+        print("REPLAY_CHRONOLOGICAL_HUD_PROGRESS_OK=1")
     if _terrain_relief_checked or _preview_frames < 11:
         return
     _terrain_relief_checked = true
