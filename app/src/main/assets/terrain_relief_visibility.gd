@@ -20,6 +20,12 @@ func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m:
     var elevation_signal := smoothstep(0.035, 0.14, absf(terrain_height_m))
     return maxf(slope_signal, elevation_signal * 0.48)
 
+func _terrain_relief_hillshade_contrast(slope_percent: float) -> float:
+    # Presentation-only contrast budget. A 1% plane should be unmistakable from the address
+    # camera, while nearly level turf remains visually quiet. Kept bounded for TV/mobile safety.
+    var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
+    return lerpf(0.0, 0.16, slope_signal)
+
 func _terrain_relief_material() -> ShaderMaterial:
     var shader := Shader.new()
     shader.code = """
@@ -34,6 +40,7 @@ void vertex() {
     terrain_height = (COLOR.r - 0.5) * 4.0;
     local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
     slope_pct = length(local_slope);
+    // Tiny z-fight separation only; physical/display geometry is not vertically exaggerated.
     VERTEX.y += 0.0016;
 }
 
@@ -46,16 +53,23 @@ void fragment() {
     float elevation_signal = smoothstep(0.035, 0.14, abs(terrain_height));
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
+
+    // Screen-golf hillshade: encode the *direction* of the authoritative local slope as a broad
+    // light/dark face. This makes a real 1-2% plane read from the low address camera without fake
+    // contour stripes, displaced vertices, extra meshes, shadows, or any physics feedback.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
+    float signed_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
+    float hillshade_exposure = mix(0.84, 1.16, signed_hillshade * 0.5 + 0.5);
 
-    vec3 low_green = vec3(0.045, 0.115, 0.055);
-    vec3 high_green = vec3(0.205, 0.285, 0.115);
+    vec3 low_green = vec3(0.040, 0.105, 0.050);
+    vec3 high_green = vec3(0.220, 0.305, 0.120);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
-    relief_color *= 1.0 + facing * 0.045 * slope_signal;
+    relief_color *= hillshade_exposure;
 
     ALBEDO = relief_color;
-    ALPHA = active * (0.082 + 0.052 * abs(height_bias));
+    // Strong enough to survive a 1080p TV view, still translucent enough to preserve turf detail.
+    ALPHA = active * (0.125 + 0.070 * abs(height_bias));
 }
 """
     var material := ShaderMaterial.new()
