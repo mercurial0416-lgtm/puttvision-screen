@@ -6,10 +6,12 @@ var _replay_transition_cues_checked := false
 func _process(delta: float) -> void:
     super._process(delta)
 
-    # Preview scripts mirror production through a separate inheritance chain, so resolve the actual
-    # rendered replay label by node name instead of reaching across that script boundary directly.
+    # Preview scripts mirror production through a separate inheritance chain. Update whichever
+    # replay-stage label is present so the uploaded frame proves the new handoff countdown visually.
     if _capture_started:
         var replay_stage := find_child("ReplayCameraStage", true, false) as Label
+        if replay_stage == null:
+            replay_stage = find_child("PreviewReplayCameraStage", true, false) as Label
         if replay_stage != null:
             replay_stage.text = "BLEND · →CUP 0.3s"
 
