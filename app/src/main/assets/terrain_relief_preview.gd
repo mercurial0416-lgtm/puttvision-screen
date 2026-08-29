@@ -236,6 +236,28 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(41)
         return
+    if probe._terrain_relief_visibility_strength(0.0, 0.0) > 0.001:
+        push_error("Terrain relief baseline should stay visually quiet")
+        probe.free()
+        get_tree().quit(47)
+        return
+    var crown_floor := probe._terrain_relief_visibility_strength(0.0, 0.14)
+    var bowl_floor := probe._terrain_relief_visibility_strength(0.0, -0.14)
+    if crown_floor < 0.45 or bowl_floor < 0.45:
+        push_error("Terrain relief disappeared at a crown peak or bowl floor")
+        probe.free()
+        get_tree().quit(47)
+        return
+    if absf(crown_floor - bowl_floor) > 0.001:
+        push_error("Terrain relief turning-point visibility became elevation-sign biased")
+        probe.free()
+        get_tree().quit(47)
+        return
+    if probe._terrain_relief_visibility_strength(1.0, 0.0) < 0.99:
+        push_error("Terrain relief slope-driven visibility regressed")
+        probe.free()
+        get_tree().quit(47)
+        return
     var material := probe._terrain_relief_material()
     if material == null or material.shader == null:
         push_error("Terrain relief material missing")
@@ -248,6 +270,11 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(41)
         return
+    if shader_code.find("elevation_signal") < 0 or shader_code.find("max(slope_signal, elevation_signal * 0.48)") < 0:
+        push_error("Terrain relief shader lost crown/bowl continuity floor")
+        probe.free()
+        get_tree().quit(47)
+        return
     var light := DirectionalLight3D.new()
     light.shadow_enabled = false
     if light.shadow_enabled:
@@ -259,3 +286,4 @@ func _process(delta: float) -> void:
     light.free()
     probe.free()
     print("TERRAIN_RELIEF_VISIBILITY_OK=1")
+    print("TERRAIN_RELIEF_TURNING_POINT_CONTINUITY_OK=1")
