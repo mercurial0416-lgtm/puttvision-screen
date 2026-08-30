@@ -25,8 +25,9 @@ const V197_MARKER_MAKE := Color("#76d7b6")
 const V197_MARKER_MISS := Color("#f4dda0")
 const V197_AXIS_COLOR := Color(0.67, 0.76, 0.72, 0.78)
 const V197_CORRECTION_COLOR := Color(0.42, 0.92, 0.82, 0.94)
-const V197_RESULT_Z_INDEX := 3
-const V197_CORRECTION_Z_INDEX := 2
+const V197_RESULT_Z_INDEX := 2
+const V197_CORRECTION_Z_INDEX := 1
+const V197_CORRECTION_MARGIN_CM := 1.0
 const V197_WINDOW_EPSILON_CM := 0.01
 
 func _v197_window_radius_px() -> Vector2:
@@ -66,11 +67,12 @@ func _v197_promote_shot_indicators() -> void:
         _v188_overflow_label.z_index = V197_RESULT_Z_INDEX
 
 func _v197_correction_target(line_delta_cm: float, pace_delta_cm: float) -> Vector2:
-    # Project the miss to the nearest point just inside the same strict success window used by the
-    # debrief. This is a presentation target only; it never changes aim, read, scoring, or physics.
+    # Project a miss to a small safety margin inside the same strict success window used by the
+    # debrief. The 1 cm inset avoids coaching a player to sit exactly on a fail boundary. This is a
+    # presentation target only; it never changes aim, read, scoring, or physics.
     return Vector2(
-        clampf(line_delta_cm, -V197_LINE_WINDOW_CM + V197_WINDOW_EPSILON_CM, V197_LINE_WINDOW_CM - V197_WINDOW_EPSILON_CM),
-        clampf(pace_delta_cm, -V197_PACE_WINDOW_CM + V197_WINDOW_EPSILON_CM, V197_PACE_WINDOW_CM - V197_WINDOW_EPSILON_CM)
+        clampf(line_delta_cm, -V197_LINE_WINDOW_CM + V197_CORRECTION_MARGIN_CM, V197_LINE_WINDOW_CM - V197_CORRECTION_MARGIN_CM),
+        clampf(pace_delta_cm, -V197_PACE_WINDOW_CM + V197_CORRECTION_MARGIN_CM, V197_PACE_WINDOW_CM - V197_CORRECTION_MARGIN_CM)
     )
 
 func _v197_correction_text(line_delta_cm: float, pace_delta_cm: float) -> String:
