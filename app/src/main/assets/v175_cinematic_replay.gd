@@ -6,6 +6,7 @@ extends "res://v174_broadcast_hud.gd"
 
 const V175_REPLAY_TRACK_WIDTH := 634.0
 const V175_HEADING_SAMPLE_M := 0.18
+const V175_HEADING_WIDE_SAMPLE_M := 0.42
 
 var _v175_replay_panel: Panel
 var _v175_replay_title: Label
@@ -105,16 +106,28 @@ func _v175_trail_point(points: Array, progress: float) -> Vector2:
         walked += segment_length
     return points[points.size() - 1] as Vector2
 
+func _v175_heading_vector(points: Array, progress: float, sample_m: float, total_length: float) -> Vector2:
+    var sample_progress := minf(0.22, sample_m / total_length)
+    var ahead := _v175_trail_point(points, min(1.0, progress + sample_progress))
+    var behind := _v175_trail_point(points, max(0.0, progress - sample_progress))
+    return ahead - behind
+
 func _v175_trail_heading(points: Array, progress: float) -> Vector2:
     if points.size() < 2:
         return Vector2(0.0, 1.0)
     var total_length := _v175_trail_total_length(points)
     if total_length <= 0.000001:
         return Vector2(0.0, 1.0)
-    var sample_progress := minf(0.12, V175_HEADING_SAMPLE_M / total_length)
-    var ahead := _v175_trail_point(points, min(1.0, progress + sample_progress))
-    var behind := _v175_trail_point(points, max(0.0, progress - sample_progress))
-    var heading: Vector2 = ahead - behind
+
+    # A single short tangent reacts too aggressively to tiny polygon corners in the recorded trail,
+    # which can make the replay rig visibly snap its yaw even though the ball path itself is smooth.
+    # Blend a local tangent with a wider physical-distance tangent so the camera anticipates curvature
+    # without rewriting or simplifying any authoritative Android trail samples.
+    var near_heading := _v175_heading_vector(points, progress, V175_HEADING_SAMPLE_M, total_length)
+    var wide_heading := _v175_heading_vector(points, progress, V175_HEADING_WIDE_SAMPLE_M, total_length)
+    var heading := near_heading * 0.68 + wide_heading * 0.32
+    if heading.length_squared() < 0.000001:
+        heading = wide_heading
     if heading.length_squared() < 0.000001:
         heading = (points[points.size() - 1] as Vector2) - (points[0] as Vector2)
     return heading.normalized() if heading.length_squared() > 0.000001 else Vector2(0.0, 1.0)
