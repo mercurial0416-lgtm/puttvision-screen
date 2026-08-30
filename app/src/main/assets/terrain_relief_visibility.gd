@@ -9,6 +9,8 @@ const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
 const RELIEF_VISUAL_SCALE := 3.2
 const RELIEF_EXTRA_CAP_M := 0.55
+const RELIEF_MINOR_CONTOUR_M := 0.05
+const RELIEF_MAJOR_CONTOUR_M := 0.10
 
 var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
@@ -77,6 +79,19 @@ void fragment() {
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
     relief_color *= hillshade_exposure;
     relief_color *= cross_tint;
+
+    // Sparse, physically-derived elevation ribbons make crowns and bowls readable even when their
+    // silhouette is hidden by the address camera. They come directly from authoritative terrain
+    // height, remain subtle, and never alter geometry or physics. Major 10 cm ribbons are slightly
+    // stronger than 5 cm intermediates so the TV gets depth structure without a heat-map look.
+    float minor_phase = abs(fract(terrain_height / 0.05 + 0.5) - 0.5);
+    float major_phase = abs(fract(terrain_height / 0.10 + 0.5) - 0.5);
+    float minor_ribbon = 1.0 - smoothstep(0.055, 0.115, minor_phase);
+    float major_ribbon = 1.0 - smoothstep(0.070, 0.145, major_phase);
+    float elevation_ribbon = max(minor_ribbon * 0.42, major_ribbon);
+    float ribbon_strength = elevation_ribbon * active * 0.18;
+    vec3 ribbon_color = relief_color * 1.08 + vec3(0.010, 0.018, 0.004);
+    relief_color = mix(relief_color, ribbon_color, ribbon_strength);
 
     ALBEDO = relief_color;
     // Continuous but restrained shell: geometry communicates the grade, not a giant dark mask.
