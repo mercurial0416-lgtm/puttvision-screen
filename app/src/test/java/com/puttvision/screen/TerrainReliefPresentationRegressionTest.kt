@@ -17,17 +17,20 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
-    fun terrainReliefUsesTvReadableOmnidirectionalHillshadeWithoutGeometryExaggeration() {
+    fun terrainReliefUsesContinuousDualAxisHillshadeWithoutGeometryExaggeration() {
         val script = asset("terrain_relief_visibility.gd")
 
-        assertTrue(script.contains("cross_facing"))
-        assertTrue(script.contains("hillshade_axis = max(abs(facing), abs(cross_facing) * 0.34)"))
-        assertTrue(script.contains("signed_hillshade"))
-        assertTrue(script.contains("hillshade_exposure"))
-        assertTrue(script.contains("mix(0.68, 1.32"))
+        assertTrue(script.contains("primary_hillshade"))
+        assertTrue(script.contains("cross_hillshade"))
+        assertTrue(script.contains("cross_tint"))
+        assertTrue(script.contains("mix(0.72, 1.28"))
+        assertTrue(script.contains("vec3(0.090, 0.020, -0.080) * cross_hillshade"))
         assertTrue(script.contains("ALPHA = active * (0.235 + 0.115 * abs(height_bias))"))
         assertTrue(script.contains("VERTEX.y += 0.0016"))
 
+        // Regression: directional readability must not depend on a hard sign-switch threshold.
+        assertFalse(script.contains("abs(facing) > 0.06"))
+        assertFalse(script.contains("hillshade_sign"))
         assertFalse(script.contains("TerrainReliefGrazingLight"))
         assertFalse(script.contains("DirectionalLight3D.new()"))
         assertFalse(script.contains("contour_wave"))
