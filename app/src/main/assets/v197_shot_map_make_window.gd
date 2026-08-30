@@ -22,6 +22,7 @@ const V197_MISS_OUTLINE := Color(0.42, 0.74, 0.58, 0.54)
 const V197_MARKER_MAKE := Color("#76d7b6")
 const V197_MARKER_MISS := Color("#f4dda0")
 const V197_AXIS_COLOR := Color(0.67, 0.76, 0.72, 0.78)
+const V197_RESULT_Z_INDEX := 2
 
 func _v197_window_radius_px() -> Vector2:
     return Vector2(
@@ -46,6 +47,18 @@ func _v197_axis_label(text: String, name: String, position: Vector2, size: Vecto
     label.name = name
     label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     return label
+
+func _v197_promote_shot_indicators() -> void:
+    # Semantic axis labels are static context. The actual shot result must always win the draw order,
+    # especially at cardinal edges where an off-scale arrow/tail can occupy the same pixels.
+    if _v188_vector != null:
+        _v188_vector.z_index = V197_RESULT_Z_INDEX
+    if _v188_overflow_tick != null:
+        _v188_overflow_tick.z_index = V197_RESULT_Z_INDEX
+    if _v188_dot != null:
+        _v188_dot.z_index = V197_RESULT_Z_INDEX
+    if _v188_overflow_label != null:
+        _v188_overflow_label.z_index = V197_RESULT_Z_INDEX
 
 func _build_hud() -> void:
     super._build_hud()
@@ -76,6 +89,7 @@ func _build_hud() -> void:
     _v197_axis_short = _v197_axis_label("SHORT", "ShotMapAxisShort", Vector2(55, 116), Vector2(42, 10))
     _v197_axis_left = _v197_axis_label("LEFT", "ShotMapAxisLeft", Vector2(34, 80), Vector2(34, 10), HORIZONTAL_ALIGNMENT_LEFT)
     _v197_axis_right = _v197_axis_label("RIGHT", "ShotMapAxisRight", Vector2(84, 80), Vector2(34, 10), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v197_promote_shot_indicators()
 
     if _v196_center_legend != null:
         _v196_center_legend.text = "GREEN BOX = MAKE"
