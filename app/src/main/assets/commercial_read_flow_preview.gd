@@ -36,7 +36,7 @@ func _seed_live_break_preview() -> void:
         _preview_live_roll_pace = _v174_text(_preview_live_break_panel, Vector2(190, 8), Vector2(286, 22), "PACE 46% · SETTLING", 12, Color(0.68, 0.82, 0.82, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
         _preview_live_roll_pace.name = "PreviewLiveRollPace"
         _preview_live_break_value = _v174_text(_preview_live_break_panel, Vector2(20, 30), Vector2(250, 42), "R 12.4 cm", 24, Color("#f4f6f0"))
-        _preview_live_break_peak = _v174_text(_preview_live_break_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 18.7 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
+        _preview_live_break_peak = _v174_text(_preview_live_break_panel, Vector2(280, 30), Vector2(196, 42), "PEAK R 18.7 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
         var zero := Line2D.new()
         zero.name = "PreviewLiveBreakTraceZero"
         zero.width = 1.0
@@ -55,7 +55,7 @@ func _seed_live_break_preview() -> void:
     _preview_live_break_panel.modulate.a = 1.0
     _preview_live_roll_pace.text = "PACE 46% · SETTLING"
     _preview_live_break_value.text = "R 12.4 cm"
-    _preview_live_break_peak.text = "PEAK 18.7 cm"
+    _preview_live_break_peak.text = "PEAK R 18.7 cm"
     var preview_history := PackedFloat32Array([0.0, 0.8, 2.2, 4.8, 7.1, 10.0, 12.4, 15.8, 18.7])
     var probe = FlowScene.new()
     _preview_live_break_trace.points = probe._live_trace_points(preview_history)
@@ -158,6 +158,11 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(42)
         return false
+    if probe._live_peak_readout(0.0) != "PEAK CENTER" or probe._live_peak_readout(18.74) != "PEAK R 18.7 cm" or probe._live_peak_readout(-9.26) != "PEAK L 9.3 cm":
+        push_error("Live break peak direction/readout regression")
+        probe.free()
+        get_tree().quit(42)
+        return false
     if probe._live_pace_readout(0.0, 0.0) != "PACE --" or probe._live_pace_readout(0.86, 1.0) != "PACE 86% · ROLLING" or probe._live_pace_readout(0.46, 1.0) != "PACE 46% · SETTLING" or probe._live_pace_readout(0.18, 1.0) != "PACE 18% · DYING":
         push_error("Live roll pace phase/readout regression")
         probe.free()
@@ -195,7 +200,7 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(42)
         return false
-    if _preview_live_break_value.text != "R 12.4 cm" or _preview_live_break_peak.text != "PEAK 18.7 cm" or _preview_live_roll_pace.text != "PACE 46% · SETTLING" or _preview_live_break_trace.points.size() < 5:
+    if _preview_live_break_value.text != "R 12.4 cm" or _preview_live_break_peak.text != "PEAK R 18.7 cm" or _preview_live_roll_pace.text != "PACE 46% · SETTLING" or _preview_live_break_trace.points.size() < 5:
         push_error("Live roll meter HUD regression")
         probe.free()
         get_tree().quit(42)
