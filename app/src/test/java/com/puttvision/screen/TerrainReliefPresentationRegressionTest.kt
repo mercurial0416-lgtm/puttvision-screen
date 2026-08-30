@@ -28,19 +28,19 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
-    fun reliefSurfaceDepthWritesInsteadOfGhostingOverFlatBase() {
+    fun translucentReliefPreservesExistingTurfGridAndReadCues() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("render_mode unshaded, cull_disabled;"))
-        assertTrue(script.contains("surface now depth-writes"))
-        assertFalse(script.contains("blend_mix"))
-        assertFalse(script.contains("depth_draw_never"))
-        assertFalse(script.contains("ALPHA ="))
+        assertTrue(script.contains("render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;"))
+        assertTrue(script.contains("float base_alpha = 0.018"))
+        assertTrue(script.contains("float ribbon_alpha = elevation_ribbon * active * 0.22"))
+        assertTrue(script.contains("ALPHA = min(0.32, base_alpha + ribbon_alpha)"))
+        assertFalse(script.contains("surface now depth-writes"))
     }
 
     @Test
     fun subtleGradeReliefBudgetIsMateriallyStrongerButStillCapped() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("previous 3.2x translucent pass still read too flat"))
+        assertTrue(script.contains("previous 3.2x pass still read too flat"))
         assertTrue(script.contains("-0.72,\n        0.72"))
         assertFalse(script.contains("RELIEF_EXTRA_CAP_M := 1."))
     }
@@ -52,7 +52,6 @@ class TerrainReliefPresentationRegressionTest {
         assertTrue(script.contains("target_root.position.y += cup_delta"))
         assertTrue(script.contains("aim_line.position.y = _terrain_relief_visual_height"))
         assertTrue(script.contains("super._apply_snapshot(s, immediate, delta)\n    _terrain_relief_sync_anchors(s)"))
-
         assertFalse(script.contains("ball.position.y = float(s.get(\"ballZ\""))
         assertFalse(script.contains("target_root.position.y = float(s.get(\"cupZ\""))
         assertFalse(script.contains("s[\"ballZ\"] ="))
@@ -68,14 +67,14 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
-    fun terrainReliefAddsSparsePhysicalElevationRibbons() {
+    fun terrainReliefUsesStrongButSparsePhysicalElevationRibbons() {
         val script = asset("terrain_relief_visibility.gd")
         assertTrue(script.contains("RELIEF_MINOR_CONTOUR_M := 0.05"))
         assertTrue(script.contains("RELIEF_MAJOR_CONTOUR_M := 0.10"))
         assertTrue(script.contains("terrain_height / 0.05"))
         assertTrue(script.contains("terrain_height / 0.10"))
-        assertTrue(script.contains("float elevation_ribbon = max(minor_ribbon * 0.42, major_ribbon)"))
-        assertTrue(script.contains("float ribbon_strength = elevation_ribbon * active * 0.18"))
+        assertTrue(script.contains("float elevation_ribbon = max(minor_ribbon * 0.46, major_ribbon)"))
+        assertTrue(script.contains("float ribbon_strength = elevation_ribbon * active * 0.34"))
         assertTrue(script.contains("relief_color = mix(relief_color, ribbon_color, ribbon_strength)"))
         assertFalse(script.contains("VERTEX.y += elevation_ribbon"))
     }
