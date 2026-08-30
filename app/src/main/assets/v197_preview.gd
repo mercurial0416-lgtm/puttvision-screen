@@ -12,6 +12,10 @@ func _process(delta: float) -> void:
         push_error("Shot map make-window package missing")
         get_tree().quit(28)
         return
+    if _v197_correction_line == null or _v197_correction_tip == null:
+        push_error("Shot map correction-vector package missing")
+        get_tree().quit(28)
+        return
 
     var radius := _v197_window_radius_px()
     var expected_x := V188_RADIUS * V197_LINE_WINDOW_CM / 30.0
@@ -61,10 +65,43 @@ func _process(delta: float) -> void:
         push_error("Shot map make-window success emphasis regression")
         get_tree().quit(28)
         return
+    if _v197_correction_line.visible or _v197_correction_tip.visible:
+        push_error("Correction guide must stay hidden for a made window")
+        get_tree().quit(28)
+        return
+
+    _v188_refresh(13.0, 34.0, true)
+    var correction_target := _v197_correction_target(13.0, 34.0)
+    if correction_target.distance_to(Vector2(8.99, 21.99)) > 0.02:
+        push_error("Shot map correction target does not project to nearest strict window point")
+        get_tree().quit(28)
+        return
+    if _v196_center_legend.text != "FIX  L 4  ·  SHORT 12":
+        push_error("Shot map correction copy regression: %s" % _v196_center_legend.text)
+        get_tree().quit(28)
+        return
+    if not _v197_correction_line.visible or not _v197_correction_tip.visible:
+        push_error("Shot map correction vector must be visible for actionable miss")
+        get_tree().quit(28)
+        return
+    if _v197_correction_line.points.size() != 2 or _v197_correction_tip.points.size() != 3:
+        push_error("Shot map correction vector geometry regression")
+        get_tree().quit(28)
+        return
+    if _v197_correction_line.points[1].distance_to(_v188_point(correction_target.x, correction_target.y)) > 0.02:
+        push_error("Shot map correction vector endpoint disagrees with corrective target")
+        get_tree().quit(28)
+        return
+
+    _v188_refresh(-15.0, -30.0, true)
+    if _v196_center_legend.text != "FIX  R 6  ·  LONG 8":
+        push_error("Shot map opposite-quadrant correction regression: %s" % _v196_center_legend.text)
+        get_tree().quit(28)
+        return
 
     _v188_refresh(9.0, 20.0, true)
-    if _v196_center_legend.text != "OUTSIDE MAKE WINDOW":
-        push_error("Shot map make-window boundary miss feedback regression")
+    if _v196_center_legend.text != "FIX  L 0":
+        push_error("Shot map strict boundary correction regression: %s" % _v196_center_legend.text)
         get_tree().quit(28)
         return
     if _v197_make_outline.default_color != V197_MISS_OUTLINE or _v188_dot.color != V197_MARKER_MISS:
@@ -74,7 +111,8 @@ func _process(delta: float) -> void:
 
     _v179_preview_force_visible = true
     _v179_samples = [Vector2(2.0, 8.0), Vector2(5.0, 12.0), Vector2(7.0, 16.0), Vector2(4.0, 10.0)]
-    _v188_refresh(8.0, 20.0, true)
+    _v188_refresh(13.0, 34.0, true)
     _v179_refresh()
 
     print("SHOT_MAP_MAKE_WINDOW_OK=1")
+    print("SHOT_MAP_CORRECTION_VECTOR_OK=1")
