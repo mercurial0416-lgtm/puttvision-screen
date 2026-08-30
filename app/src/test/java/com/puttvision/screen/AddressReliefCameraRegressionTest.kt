@@ -26,6 +26,27 @@ class AddressReliefCameraRegressionTest {
     }
 
     @Test
+    fun addressCameraFocusesRealMacroReliefInsteadOfOnlyFixedMidpoint() {
+        val script = asset("address_relief_camera.gd")
+        assertTrue(script.contains("ADDRESS_RELIEF_SAMPLES := 5"))
+        assertTrue(script.contains("terrain_h - chord_h"))
+        assertTrue(script.contains("best_fraction"))
+        assertTrue(script.contains("ADDRESS_RELIEF_FOCUS_BLEND"))
+        assertTrue(script.contains("look_fraction\": look_fraction"))
+    }
+
+    @Test
+    fun addressCameraUsesBoundedCrossSlopeParallaxWithoutOrbitingPhysics() {
+        val script = asset("address_relief_camera.gd")
+        assertTrue(script.contains("ADDRESS_CAMERA_SIDE_ADAPT := 0.18"))
+        assertTrue(script.contains("cross_component := downhill.dot(right)"))
+        assertTrue(script.contains("smoothstep(0.35, 2.20"))
+        assertTrue(script.contains("-signf(cross_component) * ADDRESS_CAMERA_SIDE_ADAPT"))
+        assertFalse(script.contains("TIME"))
+        assertFalse(script.contains("rotate_y("))
+    }
+
+    @Test
     fun tvSceneUsesReliefAwareCameraTopLayer() {
         val scene = asset("v143_tv.tscn")
         assertTrue(scene.contains("res://address_relief_camera.gd"))
