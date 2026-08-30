@@ -28,15 +28,27 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
-    fun ballCupAndTemporaryAimStayGroundedOnVisualRelief() {
+    fun reliefAddsOnlyVisualDeltaToInheritedBallAndCupPose() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("func _terrain_relief_sync_anchors(s: Dictionary) -> void:"))
-        assertTrue(script.contains("ball.position.y = float(s.get(\"ballZ\", BALL_RADIUS)) + ball_delta"))
-        assertTrue(script.contains("target_root.position.y = float(s.get(\"cupZ\", last_cup_z)) + cup_delta"))
+        assertTrue(script.contains("ball.position.y += ball_delta"))
+        assertTrue(script.contains("target_root.position.y += cup_delta"))
         assertTrue(script.contains("aim_line.position.y = _terrain_relief_visual_height"))
         assertTrue(script.contains("super._apply_snapshot(s, immediate, delta)\n    _terrain_relief_sync_anchors(s)"))
+
+        // Regression: rebuilding absolute positions from bridge Z loses the inherited cup -20 mm
+        // offset and can also stomp cup-entry/settled ball pose.
+        assertFalse(script.contains("ball.position.y = float(s.get(\"ballZ\""))
+        assertFalse(script.contains("target_root.position.y = float(s.get(\"cupZ\""))
         assertFalse(script.contains("s[\"ballZ\"] ="))
         assertFalse(script.contains("s[\"cupZ\"] ="))
+    }
+
+    @Test
+    fun allContactShadowsFollowPresentationRelief() {
+        val script = asset("terrain_relief_visibility.gd")
+        assertTrue(script.contains("_v155_ball_shadow.position.y += ball_delta"))
+        assertTrue(script.contains("_v162_ball_shadow.position.y += ball_delta"))
+        assertTrue(script.contains("_v173_ball_shadow.position.y += ball_delta"))
     }
 
     @Test
