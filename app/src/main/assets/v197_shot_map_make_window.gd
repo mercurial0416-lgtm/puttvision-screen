@@ -6,6 +6,10 @@ extends "res://v196_shot_map_hierarchy.gd"
 
 var _v197_make_fill: Polygon2D
 var _v197_make_outline: Line2D
+var _v197_axis_left: Label
+var _v197_axis_right: Label
+var _v197_axis_long: Label
+var _v197_axis_short: Label
 
 const V197_LINE_WINDOW_CM := 9.0
 const V197_PACE_WINDOW_CM := 22.0
@@ -17,6 +21,7 @@ const V197_MISS_FILL := Color(0.28, 0.84, 0.62, 0.07)
 const V197_MISS_OUTLINE := Color(0.42, 0.74, 0.58, 0.54)
 const V197_MARKER_MAKE := Color("#76d7b6")
 const V197_MARKER_MISS := Color("#f4dda0")
+const V197_AXIS_COLOR := Color(0.67, 0.76, 0.72, 0.78)
 
 func _v197_window_radius_px() -> Vector2:
     return Vector2(
@@ -35,6 +40,12 @@ func _v197_window_points(close_loop: bool = false) -> PackedVector2Array:
     if close_loop:
         out.append(out[0])
     return out
+
+func _v197_axis_label(text: String, name: String, position: Vector2, size: Vector2, alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> Label:
+    var label := _v174_text(_v188_panel, position, size, text, 7, V197_AXIS_COLOR, alignment)
+    label.name = name
+    label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    return label
 
 func _build_hud() -> void:
     super._build_hud()
@@ -56,6 +67,15 @@ func _build_hud() -> void:
     _v197_make_outline.default_color = V197_IDLE_OUTLINE
     _v197_make_outline.points = _v197_window_points(true)
     _v188_panel.add_child(_v197_make_outline)
+
+    # The plot used to rely on the post-shot detail text to explain direction. That made the chart
+    # itself ambiguous from TV distance, especially for pace where positive values render upward.
+    # Compact semantic edge labels make LEFT/RIGHT and LONG/SHORT readable at a glance without
+    # changing the underlying deltas, scale, make window, or any authoritative coaching input.
+    _v197_axis_long = _v197_axis_label("LONG", "ShotMapAxisLong", Vector2(58, 47), Vector2(36, 10))
+    _v197_axis_short = _v197_axis_label("SHORT", "ShotMapAxisShort", Vector2(55, 116), Vector2(42, 10))
+    _v197_axis_left = _v197_axis_label("LEFT", "ShotMapAxisLeft", Vector2(34, 80), Vector2(34, 10), HORIZONTAL_ALIGNMENT_LEFT)
+    _v197_axis_right = _v197_axis_label("RIGHT", "ShotMapAxisRight", Vector2(84, 80), Vector2(34, 10), HORIZONTAL_ALIGNMENT_RIGHT)
 
     if _v196_center_legend != null:
         _v196_center_legend.text = "GREEN BOX = MAKE"
