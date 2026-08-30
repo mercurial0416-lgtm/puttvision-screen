@@ -10,7 +10,6 @@ const RELIEF_SUB_Z := 86
 
 var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
-var _terrain_relief_light: DirectionalLight3D
 
 func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m: float) -> float:
     # A crown peak or bowl floor is physically important even though its instantaneous local
@@ -54,12 +53,16 @@ void fragment() {
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
 
-    // TV-readable hillshade: encode the direction of the authoritative local slope as one broad
-    // light/dark face. The stronger contrast is deliberate: on a 1080p address view a real 1-2%
-    // plane must read without consulting HUD text. No contour stripes or displaced geometry.
+    // Omnidirectional TV-readable hillshade. The old single key vector had a blind axis: a real
+    // slope nearly perpendicular to that key could collapse to neutral and still look flat from
+    // address. Use the orthogonal axis only as a bounded fallback, preserving a signed broad-face
+    // cue without contour stripes, extra lights, displaced geometry, or physics changes.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
-    float signed_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
+    float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
+    float hillshade_sign = abs(facing) > 0.06 ? sign(facing) : sign(cross_facing);
+    float hillshade_axis = max(abs(facing), abs(cross_facing) * 0.34);
+    float signed_hillshade = clamp(hillshade_sign * hillshade_axis * slope_signal, -1.0, 1.0);
     float hillshade_exposure = mix(0.68, 1.32, signed_hillshade * 0.5 + 0.5);
 
     vec3 low_green = vec3(0.036, 0.095, 0.046);
@@ -91,18 +94,6 @@ func _build_course() -> void:
     _terrain_relief.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     _terrain_relief.mesh = _v166_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, true)
     add_child(_terrain_relief)
-
-func _build_environment() -> void:
-    super._build_environment()
-    # Shadowless grazing key: one cheap Forward-Mobile-safe directional light that makes the exact
-    # macro normals from GreenTerrain legible without enabling dynamic shadows or extra geometry.
-    _terrain_relief_light = DirectionalLight3D.new()
-    _terrain_relief_light.name = "TerrainReliefGrazingLight"
-    _terrain_relief_light.light_color = Color("#f4e6bf")
-    _terrain_relief_light.light_energy = 0.28
-    _terrain_relief_light.shadow_enabled = false
-    _terrain_relief_light.rotation_degrees = Vector3(-21.0, 68.0, 0.0)
-    add_child(_terrain_relief_light)
 
 func _terrain_relief_rebuild() -> void:
     if _terrain_relief == null:
