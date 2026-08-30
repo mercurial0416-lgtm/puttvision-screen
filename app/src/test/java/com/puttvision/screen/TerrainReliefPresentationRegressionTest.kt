@@ -36,6 +36,26 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
+    fun ballCupAimAndPhysicsTrailsStayGroundedOnVisualRelief() {
+        val script = asset("terrain_relief_visibility.gd")
+
+        assertTrue(script.contains("func _terrain_relief_visual_offset(terrain_height_m: float) -> float:"))
+        assertTrue(script.contains("func _terrain_relief_sync_anchors(s: Dictionary) -> void:"))
+        assertTrue(script.contains("ball.position.y = float(s.get(\"ballZ\", BALL_RADIUS)) + ball_delta"))
+        assertTrue(script.contains("target_root.position.y = float(s.get(\"cupZ\", last_cup_z)) + cup_delta"))
+        assertTrue(script.contains("aim_line.position.y = _terrain_relief_visual_height"))
+        assertTrue(script.contains("func _v166_ribbon_mesh(points: Array, width: float) -> ArrayMesh:"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(a.x, a.y).x) + 0.0075"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(b.x, b.y).x) + 0.0075"))
+        assertTrue(script.contains("super._apply_snapshot(s, immediate, delta)\n    _terrain_relief_sync_anchors(s)"))
+
+        // Visual grounding must not overwrite authoritative snapshot coordinates or trail XY.
+        assertFalse(script.contains("s[\"ballZ\"] ="))
+        assertFalse(script.contains("s[\"cupZ\"] ="))
+        assertFalse(script.contains("points[i] ="))
+    }
+
+    @Test
     fun terrainReliefRetainsContinuousDirectionalReadabilityWithoutDarkMaskRegression() {
         val script = asset("terrain_relief_visibility.gd")
 
