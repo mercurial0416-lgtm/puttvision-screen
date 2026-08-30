@@ -12,12 +12,14 @@ const LIVE_TRACE_LEFT := 20.0
 const LIVE_TRACE_RIGHT := 476.0
 const LIVE_TRACE_CENTER_Y := 81.0
 const LIVE_TRACE_AMPLITUDE := 6.0
+const LIVE_SUMMARY_HOLD_SECONDS := 2.4
 
 var _read_flow_cues: Array[Line2D] = []
 var _live_curve_was_running := false
 var _live_curve_origin := Vector2.ZERO
 var _live_curve_forward := Vector2.UP
 var _live_curve_panel: Panel
+var _live_curve_title: Label
 var _live_curve_value: Label
 var _live_curve_peak_label: Label
 var _live_curve_pace_label: Label
@@ -26,6 +28,7 @@ var _live_curve_peak_signed_cm := 0.0
 var _live_curve_launch_speed := 0.0
 var _live_curve_trace: Line2D
 var _live_curve_zero: Line2D
+var _live_curve_summary_timer: Timer
 var _live_curve_history := PackedFloat32Array()
 var _live_curve_distance_history := PackedFloat32Array()
 var _live_curve_travel_m := 0.0
@@ -88,7 +91,8 @@ func _build_hud() -> void:
     _live_curve_panel.name = "LiveBreakMeter"
     _live_curve_panel.visible = false
     _v174_accent(_live_curve_panel, Vector2(0, 0), Vector2(6, 92), Color("#73c2d4"))
-    _v174_text(_live_curve_panel, Vector2(20, 8), Vector2(170, 22), "LIVE BREAK", 13, Color("#bfe9f1"))
+    _live_curve_title = _v174_text(_live_curve_panel, Vector2(20, 8), Vector2(170, 22), "LIVE BREAK", 13, Color("#bfe9f1"))
+    _live_curve_title.name = "LiveBreakTitle"
     _live_curve_pace_label = _v174_text(_live_curve_panel, Vector2(190, 8), Vector2(286, 22), "PACE --", 12, Color(0.68, 0.82, 0.82, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
     _live_curve_pace_label.name = "LiveRollPace"
     _live_curve_value = _v174_text(_live_curve_panel, Vector2(20, 30), Vector2(250, 42), "CENTER", 24, Color("#f4f6f0"))
@@ -111,6 +115,13 @@ func _build_hud() -> void:
     _live_curve_trace.begin_cap_mode = Line2D.LINE_CAP_ROUND
     _live_curve_trace.end_cap_mode = Line2D.LINE_CAP_ROUND
     _live_curve_panel.add_child(_live_curve_trace)
+
+    _live_curve_summary_timer = Timer.new()
+    _live_curve_summary_timer.name = "LiveBreakSummaryHold"
+    _live_curve_summary_timer.one_shot = true
+    _live_curve_summary_timer.wait_time = LIVE_SUMMARY_HOLD_SECONDS
+    _live_curve_summary_timer.timeout.connect(_hide_live_curve_summary)
+    add_child(_live_curve_summary_timer)
 
 func _refresh_read_flow() -> void:
     if _v183_panel == null:
@@ -148,6 +159,24 @@ func _live_pace_readout(current_speed: float, launch_speed: float) -> String:
     elif ratio < 0.72:
         phase = "SETTLING"
     return "PACE %d%% · %s" % [int(round(ratio * 100.0)), phase]
+
+func _live_summary_pace_readout() -> String:
+    return "ROLL COMPLETE · %.2f m" % _live_curve_travel_m
+
+func _hide_live_curve_summary() -> void:
+    if _live_curve_panel != null and not _live_curve_was_running:
+        _live_curve_panel.visible = false
+
+func _show_live_curve_summary() -> void:
+    if _live_curve_panel == null:
+        return
+    _live_curve_panel.visible = true
+    if _live_curve_title != null:
+        _live_curve_title.text = "ROLL SUMMARY"
+    if _live_curve_pace_label != null:
+        _live_curve_pace_label.text = _live_summary_pace_readout()
+    if _live_curve_summary_timer != null:
+        _live_curve_summary_timer.start(LIVE_SUMMARY_HOLD_SECONDS)
 
 func _live_trace_points_with_distance(history: PackedFloat32Array, distances: PackedFloat32Array) -> PackedVector2Array:
     var points := PackedVector2Array()
@@ -210,12 +239,18 @@ func _live_trace_push(cross_track_cm: float, traveled_m: float = -1.0) -> void:
 # while their horizontal axis accumulates every bridge-frame path segment so curved travel between
 # accepted samples is not collapsed into a shorter chord. Peak telemetry preserves the side of the
 # largest excursion so the player can distinguish left- and right-breaking rolls at a glance.
-# Nothing feeds back into GreenTerrain, GreenReadAdvisor, scoring, aim, or physics.
+# When the roll stops, the final telemetry remains visible briefly as a read-only summary so the
+# player can actually inspect the outcome before the HUD clears. Nothing feeds back into
+# GreenTerrain, GreenReadAdvisor, scoring, aim, or physics.
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
     var running := bool(s.get("running", false))
     var velocity := Vector2(float(s.get("vx", 0.0)), float(s.get("vy", 0.0)))
     if running and not _live_curve_was_running:
+        if _live_curve_summary_timer != null:
+            _live_curve_summary_timer.stop()
+        if _live_curve_title != null:
+            _live_curve_title.text = "LIVE BREAK"
         _live_curve_origin = Vector2(float(s.get("startX", 0.0)), float(s.get("startY", 0.0)))
         _live_curve_forward = velocity.normalized() if velocity.length_squared() > 0.0001 else Vector2.UP
         _live_curve_peak_cm = 0.0
@@ -230,10 +265,9 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         if _live_curve_trace != null:
             _live_curve_trace.clear_points()
 
-    if _live_curve_panel != null:
-        _live_curve_panel.visible = running
-
     if running:
+        if _live_curve_panel != null:
+            _live_curve_panel.visible = true
         var ball_pos := Vector2(float(s.get("ballX", 0.0)), float(s.get("ballY", 0.0)))
         var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
         var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
@@ -249,5 +283,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
             _live_curve_peak_label.text = _live_peak_readout(_live_curve_peak_signed_cm)
         if _live_curve_pace_label != null:
             _live_curve_pace_label.text = _live_pace_readout(velocity.length(), _live_curve_launch_speed)
+    elif _live_curve_was_running:
+        _show_live_curve_summary()
 
     _live_curve_was_running = running
