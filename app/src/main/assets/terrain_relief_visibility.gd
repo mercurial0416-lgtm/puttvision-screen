@@ -7,9 +7,10 @@ extends "res://practice_trend_vector.gd"
 const RELIEF_GREEN_SIZE := Vector2(11.8, 34.5)
 const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
-# The previous 3.2x translucent pass still read too flat from the address camera on subtle 1-2%
-# surfaces. 4.6x is presentation-only and hard-capped, while the relief surface now depth-writes so
-# the displaced silhouette actually replaces the flat base surface instead of ghosting over it.
+# The previous 3.2x pass still read too flat from the address camera on subtle 1-2% surfaces.
+# 4.6x is presentation-only and hard-capped so gentle terrain becomes legible without allowing large
+# crowns/bowls to turn into cartoon geometry. The shell stays translucent so existing turf/grid/read
+# cues remain visible; narrow physical-elevation ribbons carry the strongest displaced depth cue.
 const RELIEF_VISUAL_SCALE := 4.6
 const RELIEF_EXTRA_CAP_M := 0.72
 const RELIEF_MINOR_CONTOUR_M := 0.05
@@ -41,7 +42,7 @@ func _terrain_relief_material() -> ShaderMaterial:
     var shader := Shader.new()
     shader.code = """
 shader_type spatial;
-render_mode unshaded, cull_disabled;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;
 
 varying float terrain_height;
 varying float slope_pct;
@@ -81,14 +82,17 @@ void fragment() {
 
     float minor_phase = abs(fract(terrain_height / 0.05 + 0.5) - 0.5);
     float major_phase = abs(fract(terrain_height / 0.10 + 0.5) - 0.5);
-    float minor_ribbon = 1.0 - smoothstep(0.055, 0.115, minor_phase);
-    float major_ribbon = 1.0 - smoothstep(0.070, 0.145, major_phase);
-    float elevation_ribbon = max(minor_ribbon * 0.42, major_ribbon);
-    float ribbon_strength = elevation_ribbon * active * 0.18;
-    vec3 ribbon_color = relief_color * 1.16 + vec3(0.012, 0.018, 0.006);
+    float minor_ribbon = 1.0 - smoothstep(0.050, 0.115, minor_phase);
+    float major_ribbon = 1.0 - smoothstep(0.065, 0.145, major_phase);
+    float elevation_ribbon = max(minor_ribbon * 0.46, major_ribbon);
+    float ribbon_strength = elevation_ribbon * active * 0.34;
+    vec3 ribbon_color = relief_color * 1.34 + vec3(0.024, 0.034, 0.010);
     relief_color = mix(relief_color, ribbon_color, ribbon_strength);
 
     ALBEDO = relief_color;
+    float base_alpha = 0.018 + active * (0.072 + 0.012 * abs(height_bias));
+    float ribbon_alpha = elevation_ribbon * active * 0.22;
+    ALPHA = min(0.32, base_alpha + ribbon_alpha);
 }
 """
     var material := ShaderMaterial.new()
