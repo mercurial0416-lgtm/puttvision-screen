@@ -7,8 +7,11 @@ extends "res://practice_trend_vector.gd"
 const RELIEF_GREEN_SIZE := Vector2(11.8, 34.5)
 const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
-const RELIEF_VISUAL_SCALE := 3.2
-const RELIEF_EXTRA_CAP_M := 0.55
+# The previous 3.2x pass still read too flat from the address camera on subtle 1-2% surfaces.
+# 4.6x is intentionally presentation-only and hard-capped so gentle terrain becomes legible without
+# allowing large crowns/bowls to turn into cartoon geometry.
+const RELIEF_VISUAL_SCALE := 4.6
+const RELIEF_EXTRA_CAP_M := 0.72
 const RELIEF_MINOR_CONTOUR_M := 0.05
 const RELIEF_MAJOR_CONTOUR_M := 0.10
 
@@ -49,9 +52,9 @@ void vertex() {
     local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
     slope_pct = length(local_slope);
     float relief_delta = clamp(
-        terrain_height * (3.2 - 1.0),
-        -0.55,
-        0.55
+        terrain_height * (4.6 - 1.0),
+        -0.72,
+        0.72
     );
     VERTEX.y = terrain_height + relief_delta + 0.0030;
 }
