@@ -5,6 +5,7 @@ extends "res://v174_broadcast_hud.gd"
 # broadcast-style moving camera with explicit replay progress and shot-trace labeling.
 
 const V175_REPLAY_TRACK_WIDTH := 634.0
+const V175_HEADING_SAMPLE_M := 0.18
 
 var _v175_replay_panel: Panel
 var _v175_replay_title: Label
@@ -69,22 +70,50 @@ func _v175_replay_track_fill_width(progress: float) -> float:
         return 0.0
     return V175_REPLAY_TRACK_WIDTH * clampf(progress, 0.0, 1.0)
 
+func _v175_trail_total_length(points: Array) -> float:
+    if points.size() < 2:
+        return 0.0
+    var total := 0.0
+    for i in range(1, points.size()):
+        total += (points[i - 1] as Vector2).distance_to(points[i] as Vector2)
+    return total
+
 func _v175_trail_point(points: Array, progress: float) -> Vector2:
     if points.is_empty():
         return Vector2.ZERO
     if points.size() == 1:
         return points[0] as Vector2
-    var scaled: float = clamp(progress, 0.0, 1.0) * float(points.size() - 1)
-    var index_a: int = clamp(int(floor(scaled)), 0, points.size() - 1)
-    var index_b: int = min(index_a + 1, points.size() - 1)
-    var local_t: float = scaled - float(index_a)
-    return (points[index_a] as Vector2).lerp(points[index_b] as Vector2, local_t)
+
+    # Android trail samples are not guaranteed to be evenly spaced in world distance. Walking the
+    # polyline by sample index made a constant replay clock visibly surge through sparse sections
+    # and crawl through dense ones. Map replay progress to accumulated physical trail distance so
+    # camera motion remains broadcast-smooth without changing any authoritative shot coordinates.
+    var total_length := _v175_trail_total_length(points)
+    if total_length <= 0.000001:
+        return points[0] as Vector2
+    var target_distance := clampf(progress, 0.0, 1.0) * total_length
+    var walked := 0.0
+    for i in range(1, points.size()):
+        var a := points[i - 1] as Vector2
+        var b := points[i] as Vector2
+        var segment_length := a.distance_to(b)
+        if segment_length <= 0.000001:
+            continue
+        if target_distance <= walked + segment_length or i == points.size() - 1:
+            var local_t := clampf((target_distance - walked) / segment_length, 0.0, 1.0)
+            return a.lerp(b, local_t)
+        walked += segment_length
+    return points[points.size() - 1] as Vector2
 
 func _v175_trail_heading(points: Array, progress: float) -> Vector2:
     if points.size() < 2:
         return Vector2(0.0, 1.0)
-    var ahead := _v175_trail_point(points, min(1.0, progress + 0.035))
-    var behind := _v175_trail_point(points, max(0.0, progress - 0.035))
+    var total_length := _v175_trail_total_length(points)
+    if total_length <= 0.000001:
+        return Vector2(0.0, 1.0)
+    var sample_progress := minf(0.12, V175_HEADING_SAMPLE_M / total_length)
+    var ahead := _v175_trail_point(points, min(1.0, progress + sample_progress))
+    var behind := _v175_trail_point(points, max(0.0, progress - sample_progress))
     var heading: Vector2 = ahead - behind
     if heading.length_squared() < 0.000001:
         heading = (points[points.size() - 1] as Vector2) - (points[0] as Vector2)
