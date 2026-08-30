@@ -22,6 +22,7 @@ var _live_curve_value: Label
 var _live_curve_peak_label: Label
 var _live_curve_pace_label: Label
 var _live_curve_peak_cm := 0.0
+var _live_curve_peak_signed_cm := 0.0
 var _live_curve_launch_speed := 0.0
 var _live_curve_trace: Line2D
 var _live_curve_zero: Line2D
@@ -92,7 +93,7 @@ func _build_hud() -> void:
     _live_curve_pace_label.name = "LiveRollPace"
     _live_curve_value = _v174_text(_live_curve_panel, Vector2(20, 30), Vector2(250, 42), "CENTER", 24, Color("#f4f6f0"))
     _live_curve_value.name = "LiveBreakValue"
-    _live_curve_peak_label = _v174_text(_live_curve_panel, Vector2(280, 30), Vector2(196, 42), "PEAK 0.0 cm", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
+    _live_curve_peak_label = _v174_text(_live_curve_panel, Vector2(280, 30), Vector2(196, 42), "PEAK CENTER", 14, Color(0.74, 0.82, 0.82, 0.94), HORIZONTAL_ALIGNMENT_RIGHT)
     _live_curve_peak_label.name = "LiveBreakPeak"
 
     _live_curve_zero = Line2D.new()
@@ -131,6 +132,11 @@ func _live_curve_readout(cross_track_cm: float) -> String:
     if absf(cross_track_cm) < 0.05:
         return "CENTER"
     return "%s %.1f cm" % ["R" if cross_track_cm > 0.0 else "L", absf(cross_track_cm)]
+
+func _live_peak_readout(peak_signed_cm: float) -> String:
+    if absf(peak_signed_cm) < 0.05:
+        return "PEAK CENTER"
+    return "PEAK %s %.1f cm" % ["R" if peak_signed_cm > 0.0 else "L", absf(peak_signed_cm)]
 
 func _live_pace_readout(current_speed: float, launch_speed: float) -> String:
     if launch_speed <= 0.001:
@@ -202,8 +208,9 @@ func _live_trace_push(cross_track_cm: float, traveled_m: float = -1.0) -> void:
 # dedicated meter reports current/peak cross-track curve, speed decay, and a bounded mini trace of
 # the curve history from bridge snapshots. Trace points stay distance-gated for stable rendering,
 # while their horizontal axis accumulates every bridge-frame path segment so curved travel between
-# accepted samples is not collapsed into a shorter chord. Nothing feeds back into GreenTerrain,
-# GreenReadAdvisor, scoring, aim, or physics.
+# accepted samples is not collapsed into a shorter chord. Peak telemetry preserves the side of the
+# largest excursion so the player can distinguish left- and right-breaking rolls at a glance.
+# Nothing feeds back into GreenTerrain, GreenReadAdvisor, scoring, aim, or physics.
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
     var running := bool(s.get("running", false))
@@ -212,6 +219,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         _live_curve_origin = Vector2(float(s.get("startX", 0.0)), float(s.get("startY", 0.0)))
         _live_curve_forward = velocity.normalized() if velocity.length_squared() > 0.0001 else Vector2.UP
         _live_curve_peak_cm = 0.0
+        _live_curve_peak_signed_cm = 0.0
         _live_curve_launch_speed = velocity.length()
         _live_curve_history.clear()
         _live_curve_distance_history.clear()
@@ -229,14 +237,16 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         var ball_pos := Vector2(float(s.get("ballX", 0.0)), float(s.get("ballY", 0.0)))
         var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
         var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
-        _live_curve_peak_cm = maxf(_live_curve_peak_cm, absf(cross_track_cm))
+        if absf(cross_track_cm) > _live_curve_peak_cm:
+            _live_curve_peak_cm = absf(cross_track_cm)
+            _live_curve_peak_signed_cm = cross_track_cm
         var traveled_m := _live_trace_accumulate_travel(ball_pos)
         if _live_trace_accept_sample(ball_pos):
             _live_trace_push(cross_track_cm, traveled_m)
         if _live_curve_value != null:
             _live_curve_value.text = _live_curve_readout(cross_track_cm)
         if _live_curve_peak_label != null:
-            _live_curve_peak_label.text = "PEAK %.1f cm" % _live_curve_peak_cm
+            _live_curve_peak_label.text = _live_peak_readout(_live_curve_peak_signed_cm)
         if _live_curve_pace_label != null:
             _live_curve_pace_label.text = _live_pace_readout(velocity.length(), _live_curve_launch_speed)
 
