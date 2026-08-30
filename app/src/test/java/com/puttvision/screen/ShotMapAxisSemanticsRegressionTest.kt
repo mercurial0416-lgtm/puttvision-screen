@@ -31,6 +31,17 @@ class ShotMapAxisSemanticsRegressionTest {
     }
 
     @Test
+    fun resultIndicatorsRenderAboveStaticAxisLabels() {
+        val script = asset("v197_shot_map_make_window.gd")
+        assertTrue(script.contains("const V197_RESULT_Z_INDEX := 2"))
+        assertTrue(script.contains("_v188_vector.z_index = V197_RESULT_Z_INDEX"))
+        assertTrue(script.contains("_v188_overflow_tick.z_index = V197_RESULT_Z_INDEX"))
+        assertTrue(script.contains("_v188_dot.z_index = V197_RESULT_Z_INDEX"))
+        assertTrue(script.contains("_v188_overflow_label.z_index = V197_RESULT_Z_INDEX"))
+        assertTrue(script.contains("_v197_promote_shot_indicators()"))
+    }
+
+    @Test
     fun presentationLabelsDoNotMutateAuthoritativeSystems() {
         val script = asset("v197_shot_map_make_window.gd")
         assertFalse(script.contains("GreenTerrain.set"))
