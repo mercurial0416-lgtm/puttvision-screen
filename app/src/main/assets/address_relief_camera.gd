@@ -15,6 +15,23 @@ const ADDRESS_FOV_FAR := 38.0
 const ADDRESS_RELIEF_SAMPLES := 5
 const ADDRESS_RELIEF_FOCUS_BLEND := 0.58
 
+# Mirror the presentation-only relief shell so the low address camera is grounded against what the
+# player actually sees, not the un-exaggerated physics surface. These values are regression-locked
+# against terrain_relief_visibility.gd; no result is ever fed back into physics/read/scoring.
+const ADDRESS_RELIEF_VISUAL_SCALE := 4.6
+const ADDRESS_RELIEF_EXTRA_CAP_M := 0.72
+const ADDRESS_CLEARANCE_SAMPLES := 9
+const ADDRESS_SIGHTLINE_CLEARANCE_M := 0.055
+const ADDRESS_MAX_CLEARANCE_RAISE_M := 0.26
+
+func _address_visual_height(terrain_height_m: float) -> float:
+    var relief_delta := clampf(
+        terrain_height_m * (ADDRESS_RELIEF_VISUAL_SCALE - 1.0),
+        -ADDRESS_RELIEF_EXTRA_CAP_M,
+        ADDRESS_RELIEF_EXTRA_CAP_M
+    )
+    return terrain_height_m + relief_delta
+
 func _address_relief_focus_fraction(ball_xz: Vector2, cup_xz: Vector2) -> float:
     var span := cup_xz - ball_xz
     var span_len := span.length()
@@ -49,6 +66,26 @@ func _address_adaptive_side_offset(look_xz: Vector2, right: Vector2) -> float:
     var adaptive := -signf(cross_component) * ADDRESS_CAMERA_SIDE_ADAPT * cross_signal
     return ADDRESS_CAMERA_SIDE + adaptive
 
+func _address_sightline_raise(camera_xz: Vector2, look_xz: Vector2, camera_y: float, look_y: float) -> float:
+    # A low grazing camera can be visually buried by the exaggerated shell or lose the cup behind a
+    # crown. Sample only a handful of points and raise the eye by the minimum bounded amount needed
+    # to keep a slim air gap above the visible relief. This is presentation-only and runs only for
+    # the stationary address camera, keeping Forward Mobile cost negligible.
+    var required_raise := 0.0
+    for i in range(1, ADDRESS_CLEARANCE_SAMPLES):
+        var fraction := float(i) / float(ADDRESS_CLEARANCE_SAMPLES)
+        var point := camera_xz.lerp(look_xz, fraction)
+        var physical_h := _v166_sample(point.x, -point.y).x
+        var visible_h := _address_visual_height(physical_h)
+        var sight_y := lerpf(camera_y, look_y, fraction)
+        var intrusion := visible_h + ADDRESS_SIGHTLINE_CLEARANCE_M - sight_y
+        if intrusion > required_raise:
+            # Raising the camera affects the line progressively less toward the look target. Convert
+            # the local intrusion into the eye-height delta required at this fraction.
+            var eye_weight := maxf(0.18, 1.0 - fraction)
+            required_raise = intrusion / eye_weight
+    return clampf(required_raise, 0.0, ADDRESS_MAX_CLEARANCE_RAISE_M)
+
 func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) -> Dictionary:
     var cup_world := target_root.global_position if target_root != null else ball_world + Vector3(0.0, 0.0, -maxf(0.5, distance_to_cup))
     var ball_xz := Vector2(ball_world.x, ball_world.z)
@@ -67,11 +104,21 @@ func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) ->
 
     var camera_terrain := _v166_sample(camera_xz.x, -camera_xz.y).x
     var look_terrain := _v166_sample(look_xz.x, -look_xz.y).x
-    var desired_pos := Vector3(camera_xz.x, camera_terrain + ADDRESS_CAMERA_HEIGHT, camera_xz.y)
-    var desired_look := Vector3(look_xz.x, look_terrain + ADDRESS_LOOK_LIFT, look_xz.y)
+    var camera_visible_y := _address_visual_height(camera_terrain) + ADDRESS_CAMERA_HEIGHT
+    var look_visible_y := _address_visual_height(look_terrain) + ADDRESS_LOOK_LIFT
+    var clearance_raise := _address_sightline_raise(camera_xz, look_xz, camera_visible_y, look_visible_y)
+    var desired_pos := Vector3(camera_xz.x, camera_visible_y + clearance_raise, camera_xz.y)
+    var desired_look := Vector3(look_xz.x, look_visible_y, look_xz.y)
     var distance_mix := clampf((flat_length - 2.0) / 8.0, 0.0, 1.0)
     var desired_fov := lerpf(ADDRESS_FOV_NEAR, ADDRESS_FOV_FAR, distance_mix)
-    return {"position": desired_pos, "look": desired_look, "fov": desired_fov, "look_fraction": look_fraction, "side_offset": side_offset}
+    return {
+        "position": desired_pos,
+        "look": desired_look,
+        "fov": desired_fov,
+        "look_fraction": look_fraction,
+        "side_offset": side_offset,
+        "clearance_raise": clearance_raise
+    }
 
 func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_to_cup: float, immediate: bool, delta: float) -> void:
     # Never fight inherited rolling/cup/replay cameras.
