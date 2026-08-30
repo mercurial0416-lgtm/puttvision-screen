@@ -52,6 +52,24 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
+    fun terrainReliefAddsSparsePhysicalElevationRibbons() {
+        val script = asset("terrain_relief_visibility.gd")
+
+        assertTrue(script.contains("RELIEF_MINOR_CONTOUR_M := 0.05"))
+        assertTrue(script.contains("RELIEF_MAJOR_CONTOUR_M := 0.10"))
+        assertTrue(script.contains("terrain_height / 0.05"))
+        assertTrue(script.contains("terrain_height / 0.10"))
+        assertTrue(script.contains("float elevation_ribbon = max(minor_ribbon * 0.42, major_ribbon)"))
+        assertTrue(script.contains("float ribbon_strength = elevation_ribbon * active * 0.18"))
+        assertTrue(script.contains("relief_color = mix(relief_color, ribbon_color, ribbon_strength)"))
+
+        // Ribbons must remain presentation-only and modest enough not to become a heat-map mask.
+        assertFalse(script.contains("VERTEX.y += elevation_ribbon"))
+        assertFalse(script.contains("ALPHA += elevation_ribbon"))
+        assertFalse(script.contains("ribbon_strength = elevation_ribbon * active * 0.5"))
+    }
+
+    @Test
     fun terrainReliefRetainsContinuousDirectionalReadabilityWithoutDarkMaskRegression() {
         val script = asset("terrain_relief_visibility.gd")
 
