@@ -15,6 +15,7 @@ const RELIEF_VISUAL_SCALE := 4.6
 const RELIEF_EXTRA_CAP_M := 0.72
 const RELIEF_MINOR_CONTOUR_M := 0.05
 const RELIEF_MAJOR_CONTOUR_M := 0.10
+const RELIEF_TRAIL_CLEARANCE_M := 0.0075
 
 var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
@@ -153,6 +154,41 @@ func _terrain_relief_sync_anchors(s: Dictionary) -> void:
     if aim_line != null and aim_line.visible:
         var mid_y: float = cup_y * 0.5
         aim_line.position.y = _terrain_relief_visual_height(_v166_sample(0.0, mid_y).x) + 0.003
+
+# The authoritative predicted/actual trails are generated in Android coordinates, but the inherited
+# ribbon builder grounds them on the physical mesh. Once the TV shell exaggerates that mesh, those
+# ribbons can disappear inside hills or float through bowls. Override presentation height only: the
+# X/Z path, timing, widths and solver truth stay untouched.
+func _v166_ribbon_mesh(points: Array, width: float) -> ArrayMesh:
+    var vertices := PackedVector3Array()
+    var indices := PackedInt32Array()
+    if points.size() < 2:
+        return ArrayMesh.new()
+    var half_width: float = width * 0.5
+    for i in range(points.size() - 1):
+        var a := points[i] as Vector2
+        var b := points[i + 1] as Vector2
+        var render_dir := Vector2(b.x - a.x, -(b.y - a.y))
+        if render_dir.length_squared() < 0.0000001:
+            continue
+        render_dir = render_dir.normalized()
+        var perp := Vector2(-render_dir.y, render_dir.x) * half_width
+        var ah: float = _terrain_relief_visual_height(_v166_sample(a.x, a.y).x) + RELIEF_TRAIL_CLEARANCE_M
+        var bh: float = _terrain_relief_visual_height(_v166_sample(b.x, b.y).x) + RELIEF_TRAIL_CLEARANCE_M
+        var base: int = vertices.size()
+        vertices.append(Vector3(a.x + perp.x, ah, -a.y + perp.y))
+        vertices.append(Vector3(a.x - perp.x, ah, -a.y - perp.y))
+        vertices.append(Vector3(b.x + perp.x, bh, -b.y + perp.y))
+        vertices.append(Vector3(b.x - perp.x, bh, -b.y - perp.y))
+        indices.append_array(PackedInt32Array([base, base + 2, base + 1, base + 1, base + 2, base + 3]))
+    var arrays: Array = []
+    arrays.resize(Mesh.ARRAY_MAX)
+    arrays[Mesh.ARRAY_VERTEX] = vertices
+    arrays[Mesh.ARRAY_INDEX] = indices
+    var mesh := ArrayMesh.new()
+    if vertices.size() >= 4:
+        mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+    return mesh
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
