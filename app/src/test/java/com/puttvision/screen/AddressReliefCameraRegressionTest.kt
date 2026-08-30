@@ -47,6 +47,28 @@ class AddressReliefCameraRegressionTest {
     }
 
     @Test
+    fun addressCameraTracksVisibleReliefAndProtectsCupSightline() {
+        val camera = asset("address_relief_camera.gd")
+        val relief = asset("terrain_relief_visibility.gd")
+
+        assertTrue(camera.contains("ADDRESS_RELIEF_VISUAL_SCALE := 4.6"))
+        assertTrue(camera.contains("ADDRESS_RELIEF_EXTRA_CAP_M := 0.72"))
+        assertTrue(relief.contains("RELIEF_VISUAL_SCALE := 4.6"))
+        assertTrue(relief.contains("RELIEF_EXTRA_CAP_M := 0.72"))
+        assertTrue(camera.contains("ADDRESS_CLEARANCE_SAMPLES := 9"))
+        assertTrue(camera.contains("ADDRESS_SIGHTLINE_CLEARANCE_M := 0.055"))
+        assertTrue(camera.contains("ADDRESS_MAX_CLEARANCE_RAISE_M := 0.26"))
+        assertTrue(camera.contains("visible_h + ADDRESS_SIGHTLINE_CLEARANCE_M - sight_y"))
+        assertTrue(camera.contains("required_raise = intrusion / eye_weight"))
+        assertTrue(camera.contains("camera_visible_y + clearance_raise"))
+        assertTrue(camera.contains("\"clearance_raise\": clearance_raise"))
+
+        // Presentation-only: no camera clearance value can leak into authoritative systems.
+        assertFalse(camera.contains("GreenTerrain" + ".set"))
+        assertFalse(camera.contains("GreenReadAdvisor" + ".set"))
+    }
+
+    @Test
     fun tvSceneUsesReliefAwareCameraTopLayer() {
         val scene = asset("v143_tv.tscn")
         assertTrue(scene.contains("res://address_relief_camera.gd"))
