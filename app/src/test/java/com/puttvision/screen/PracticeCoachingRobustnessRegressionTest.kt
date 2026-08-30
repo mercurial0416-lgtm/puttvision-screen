@@ -61,4 +61,22 @@ class PracticeCoachingRobustnessRegressionTest {
         assertTrue(refresh.contains("_v179_line_mean_label.text = \"%+.0f cm\" % _v179_mean(0)"))
         assertTrue(refresh.contains("_v179_pace_mean_label.text = \"%+.0f cm\" % _v179_mean(1)"))
     }
+
+    @Test
+    fun biasVectorUsesSameRobustCoachingCenterAndShowsMagnitude() {
+        val script = asset("v195_practice_bias_vector.gd")
+
+        assertTrue(script.contains("func _v195_coaching_bias() -> Vector2:"))
+        assertTrue(script.contains("Vector2(_v179_coaching_center(0), _v179_coaching_center(1))"))
+        assertTrue(script.contains("line_text = \"R %.0f CM\" % absf(mean.x)"))
+        assertTrue(script.contains("line_text = \"L %.0f CM\" % absf(mean.x)"))
+        assertTrue(script.contains("pace_text = \"LONG %.0f CM\" % absf(mean.y)"))
+        assertTrue(script.contains("pace_text = \"SHORT %.0f CM\" % absf(mean.y)"))
+
+        val refreshStart = script.indexOf("func _v195_refresh_bias()")
+        val refreshEnd = script.indexOf("func _v188_refresh", refreshStart)
+        val refresh = script.substring(refreshStart, refreshEnd)
+        assertTrue(refresh.contains("var bias := _v195_coaching_bias()"))
+        assertTrue(!refresh.contains("_v194_mean_sample()"))
+    }
 }

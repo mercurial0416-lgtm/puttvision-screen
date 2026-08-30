@@ -1,8 +1,9 @@
 extends "res://v194_dispersion_envelope.gd"
 
-# Presentation-only session bias vector. It turns the recent-shot centroid into an immediate
-# coaching read (push/pull + long/short) and never feeds back into Android physics,
-# GreenTerrain, GreenReadAdvisor, scoring, aiming, or shot capture.
+# Presentation-only session bias vector. It turns the robust coaching center into an immediate
+# push/pull + long/short read while preserving raw averages and every individual shot in the
+# dispersion panel. It never feeds back into Android physics, GreenTerrain, GreenReadAdvisor,
+# scoring, aiming, or shot capture.
 
 var _v195_bias_line: Line2D
 var _v195_bias_tip: Line2D
@@ -12,18 +13,23 @@ const V195_MIN_SAMPLES := 3
 const V195_LINE_DEADBAND_CM := 2.5
 const V195_PACE_DEADBAND_CM := 8.0
 
+func _v195_coaching_bias() -> Vector2:
+    # Keep this read consistent with NEXT REP coaching. A single gross mishit must stay visible in
+    # the raw AVG/plot without flipping the player's actionable bias in the opposite direction.
+    return Vector2(_v179_coaching_center(0), _v179_coaching_center(1))
+
 func _v195_bias_text(mean: Vector2) -> String:
-    var line_text := "CENTERED"
+    var line_text := "CENTER"
     if mean.x > V195_LINE_DEADBAND_CM:
-        line_text = "PUSH RIGHT"
+        line_text = "R %.0f CM" % absf(mean.x)
     elif mean.x < -V195_LINE_DEADBAND_CM:
-        line_text = "PULL LEFT"
+        line_text = "L %.0f CM" % absf(mean.x)
 
     var pace_text := "PACE OK"
     if mean.y > V195_PACE_DEADBAND_CM:
-        pace_text = "LONG"
+        pace_text = "LONG %.0f CM" % absf(mean.y)
     elif mean.y < -V195_PACE_DEADBAND_CM:
-        pace_text = "SHORT"
+        pace_text = "SHORT %.0f CM" % absf(mean.y)
 
     return "%s · %s" % [line_text, pace_text]
 
@@ -60,8 +66,8 @@ func _build_hud() -> void:
 
     _v195_bias_label = _v174_text(
         _v188_panel,
-        Vector2(14, 140),
-        Vector2(122, 10),
+        Vector2(8, 140),
+        Vector2(134, 10),
         "BIAS —",
         7,
         Color(0.96, 0.76, 0.38, 0.94),
@@ -80,13 +86,13 @@ func _v195_refresh_bias() -> void:
     if not show:
         return
 
-    var mean := _v194_mean_sample()
+    var bias := _v195_coaching_bias()
     var origin := _v188_point(0.0, 0.0)
-    var target := _v188_point(mean.x, mean.y)
+    var target := _v188_point(bias.x, bias.y)
     _v195_bias_line.points = PackedVector2Array([origin, target])
     _v195_bias_tip.position = target
     _v195_bias_tip.points = _v195_arrow_head(target - origin)
-    _v195_bias_label.text = "BIAS %s" % _v195_bias_text(mean)
+    _v195_bias_label.text = "BIAS %s" % _v195_bias_text(bias)
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
     super._v188_refresh(line_delta_cm, pace_delta_cm, visible)
