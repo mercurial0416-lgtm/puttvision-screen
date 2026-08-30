@@ -32,7 +32,7 @@ func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m:
 
 func _terrain_relief_hillshade_contrast(slope_percent: float) -> float:
     var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
-    return lerpf(0.0, 0.22, slope_signal)
+    return lerpf(0.0, 0.16, slope_signal)
 
 func _terrain_relief_material() -> ShaderMaterial:
     var shader := Shader.new()
@@ -48,8 +48,6 @@ void vertex() {
     terrain_height = (COLOR.r - 0.5) * 4.0;
     local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
     slope_pct = length(local_slope);
-    // Bounded presentation-only relief: enough for a real TV silhouette without turning
-    // steep/custom greens into giant floating slabs.
     float relief_delta = clamp(
         terrain_height * (3.2 - 1.0),
         -0.55,
@@ -64,39 +62,39 @@ void fragment() {
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
 
-    // Geometry carries the grade. Keep color modulation intentionally modest so the shell reads as
-    // one coherent putting surface instead of the large dark translucent islands seen in preview.
+    // The geometry is the primary depth cue. Keep the shell close to the native turf color so
+    // transparent overlap cannot form the large dark islands visible in the previous preview.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
     float primary_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
     float cross_hillshade = clamp(cross_facing * slope_signal, -1.0, 1.0);
-    float hillshade_exposure = mix(0.90, 1.10, primary_hillshade * 0.5 + 0.5);
-    vec3 cross_tint = vec3(1.0) + vec3(0.024, 0.008, -0.020) * cross_hillshade;
+    float hillshade_exposure = mix(0.94, 1.06, primary_hillshade * 0.5 + 0.5);
+    vec3 cross_tint = vec3(1.0) + vec3(0.014, 0.005, -0.012) * cross_hillshade;
 
-    vec3 low_green = vec3(0.100, 0.245, 0.085);
-    vec3 high_green = vec3(0.180, 0.335, 0.125);
+    vec3 low_green = vec3(0.120, 0.300, 0.100);
+    vec3 high_green = vec3(0.180, 0.380, 0.140);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
     relief_color *= hillshade_exposure;
     relief_color *= cross_tint;
 
     // Sparse, physically-derived elevation ribbons make crowns and bowls readable even when their
     // silhouette is hidden by the address camera. They come directly from authoritative terrain
-    // height, remain subtle, and never alter geometry or physics. Major 10 cm ribbons are slightly
-    // stronger than 5 cm intermediates so the TV gets depth structure without a heat-map look.
+    // height and never alter geometry or physics. Major 10 cm ribbons are stronger than 5 cm
+    // intermediates, creating a restrained screen-golf topographic read rather than a heat map.
     float minor_phase = abs(fract(terrain_height / 0.05 + 0.5) - 0.5);
     float major_phase = abs(fract(terrain_height / 0.10 + 0.5) - 0.5);
     float minor_ribbon = 1.0 - smoothstep(0.055, 0.115, minor_phase);
     float major_ribbon = 1.0 - smoothstep(0.070, 0.145, major_phase);
     float elevation_ribbon = max(minor_ribbon * 0.42, major_ribbon);
-    float ribbon_strength = elevation_ribbon * active * 0.18;
-    vec3 ribbon_color = relief_color * 1.08 + vec3(0.010, 0.018, 0.004);
+    float ribbon_strength = elevation_ribbon * active * 0.26;
+    vec3 ribbon_color = relief_color * 1.22 + vec3(0.018, 0.026, 0.008);
     relief_color = mix(relief_color, ribbon_color, ribbon_strength);
 
     ALBEDO = relief_color;
-    // The overlay is now deliberately light-touch. Geometry + ribbons provide the read; opacity
-    // only binds them to the turf and must not paint broad dark masks over the course surface.
-    ALPHA = 0.030 + active * (0.115 + 0.025 * abs(height_bias));
+    // Very low shell opacity avoids painted polygons. The exaggerated geometry and physically
+    // derived ribbons now carry the readability budget.
+    ALPHA = 0.015 + active * (0.065 + 0.015 * abs(height_bias));
 }
 """
     var material := ShaderMaterial.new()
@@ -129,8 +127,6 @@ func _terrain_relief_rebuild() -> void:
     _terrain_relief.mesh = _v166_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, true)
 
 func _terrain_relief_sync_anchors(s: Dictionary) -> void:
-    # Physics reports exact ball/cup Z against the authoritative, unexaggerated terrain. Move only
-    # the presentation nodes by the same extra relief delta so they remain visually grounded.
     var ball_x: float = float(s.get("ballX", 0.0))
     var ball_y: float = float(s.get("ballY", 0.0))
     var ball_surface: float = _v166_sample(ball_x, ball_y).x
@@ -144,7 +140,6 @@ func _terrain_relief_sync_anchors(s: Dictionary) -> void:
     if target_root != null:
         target_root.position.y = float(s.get("cupZ", last_cup_z)) + cup_delta
 
-    # The temporary pre-solver aim bar is a presentation guide; keep its center above the shell.
     if aim_line != null and aim_line.visible:
         var mid_y: float = cup_y * 0.5
         aim_line.position.y = _terrain_relief_visual_height(_v166_sample(0.0, mid_y).x) + 0.003
