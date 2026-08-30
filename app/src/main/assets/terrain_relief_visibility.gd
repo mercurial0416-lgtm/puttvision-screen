@@ -53,22 +53,25 @@ void fragment() {
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
 
-    // Omnidirectional TV-readable hillshade. The old single key vector had a blind axis: a real
-    // slope nearly perpendicular to that key could collapse to neutral and still look flat from
-    // address. Use the orthogonal axis only as a bounded fallback, preserving a signed broad-face
-    // cue without contour stripes, extra lights, displaced geometry, or physics changes.
+    // Continuous dual-axis relief cue. A previous fallback flipped sign when the primary facing
+    // crossed a small threshold, which could create a visible shading seam as the downhill vector
+    // rotated across the green. Keep the primary axis as luminance and encode the orthogonal axis
+    // as a restrained warm/cool tint. Both channels are continuous and derived only from the
+    // authoritative local slope, so every downhill direction remains readable without fake bands,
+    // extra lights, geometry exaggeration or a branch discontinuity.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
-    float hillshade_sign = abs(facing) > 0.06 ? sign(facing) : sign(cross_facing);
-    float hillshade_axis = max(abs(facing), abs(cross_facing) * 0.34);
-    float signed_hillshade = clamp(hillshade_sign * hillshade_axis * slope_signal, -1.0, 1.0);
-    float hillshade_exposure = mix(0.68, 1.32, signed_hillshade * 0.5 + 0.5);
+    float primary_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
+    float cross_hillshade = clamp(cross_facing * slope_signal, -1.0, 1.0);
+    float hillshade_exposure = mix(0.72, 1.28, primary_hillshade * 0.5 + 0.5);
+    vec3 cross_tint = vec3(1.0) + vec3(0.090, 0.020, -0.080) * cross_hillshade;
 
     vec3 low_green = vec3(0.036, 0.095, 0.046);
     vec3 high_green = vec3(0.235, 0.320, 0.125);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
     relief_color *= hillshade_exposure;
+    relief_color *= cross_tint;
 
     ALBEDO = relief_color;
     // Enough opacity to make macro slope survive TV scaling while keeping underlying turf visible.
