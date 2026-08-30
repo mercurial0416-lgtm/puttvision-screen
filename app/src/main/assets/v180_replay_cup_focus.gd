@@ -61,7 +61,9 @@ func _v180_cup_point() -> Vector2:
 func _v180_distance_to_cup_cm(progress: float) -> float:
     if _v171_replay_actual.size() < 2:
         return 0.0
-    var current := _v175_trail_point(_v171_replay_actual, smoothstep(0.0, 1.0, progress))
+    # The distance readout describes the replay ball, so sample the same exact replay clock used by
+    # the shot trace and trail-follow camera. Easing belongs to camera choreography, not telemetry.
+    var current := _v175_trail_point(_v171_replay_actual, clampf(progress, 0.0, 1.0))
     return current.distance_to(_v180_cup_point()) * 100.0
 
 func _v180_finish_verdict(actual: Vector2, predicted: Vector2, predicted_heading: Vector2) -> String:
