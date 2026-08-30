@@ -62,8 +62,6 @@ void fragment() {
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
 
-    // The geometry is the primary depth cue. Keep the shell close to the native turf color so
-    // transparent overlap cannot form the large dark islands visible in the previous preview.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
@@ -78,10 +76,6 @@ void fragment() {
     relief_color *= hillshade_exposure;
     relief_color *= cross_tint;
 
-    // Sparse, physically-derived elevation ribbons make crowns and bowls readable even when their
-    // silhouette is hidden by the address camera. They come directly from authoritative terrain
-    // height and never alter geometry or physics. Major 10 cm ribbons are stronger than 5 cm
-    // intermediates, creating a restrained screen-golf topographic read rather than a heat map.
     float minor_phase = abs(fract(terrain_height / 0.05 + 0.5) - 0.5);
     float major_phase = abs(fract(terrain_height / 0.10 + 0.5) - 0.5);
     float minor_ribbon = 1.0 - smoothstep(0.055, 0.115, minor_phase);
@@ -92,8 +86,6 @@ void fragment() {
     relief_color = mix(relief_color, ribbon_color, ribbon_strength);
 
     ALBEDO = relief_color;
-    // Very low shell opacity avoids painted polygons. The exaggerated geometry and physically
-    // derived ribbons now carry the readability budget.
     ALPHA = 0.015 + active * (0.065 + 0.015 * abs(height_bias));
 }
 """
@@ -127,18 +119,30 @@ func _terrain_relief_rebuild() -> void:
     _terrain_relief.mesh = _v166_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, true)
 
 func _terrain_relief_sync_anchors(s: Dictionary) -> void:
+    # The inherited renderer has already resolved bridge offsets, cup phases and ball pose. Apply
+    # only the extra visual relief delta on top of those grounded positions; never reconstruct them
+    # from snapshot Z, or the 2 cm cup bridge offset and cup-entry pose are lost.
     var ball_x: float = float(s.get("ballX", 0.0))
     var ball_y: float = float(s.get("ballY", 0.0))
     var ball_surface: float = _v166_sample(ball_x, ball_y).x
     var ball_delta: float = _terrain_relief_visual_offset(ball_surface)
     if ball != null:
-        ball.position.y = float(s.get("ballZ", BALL_RADIUS)) + ball_delta
+        ball.position.y += ball_delta
+
+    # All inherited contact shadows were positioned before the relief delta. Lift each active
+    # presentation shadow by exactly the same amount so the ball does not appear to float.
+    if _v155_ball_shadow != null:
+        _v155_ball_shadow.position.y += ball_delta
+    if _v162_ball_shadow != null:
+        _v162_ball_shadow.position.y += ball_delta
+    if _v173_ball_shadow != null:
+        _v173_ball_shadow.position.y += ball_delta
 
     var cup_y: float = clampf(float(s.get("holeDistance", target_distance)), 0.5, 30.0)
     var cup_surface: float = _v166_sample(0.0, cup_y).x
     var cup_delta: float = _terrain_relief_visual_offset(cup_surface)
     if target_root != null:
-        target_root.position.y = float(s.get("cupZ", last_cup_z)) + cup_delta
+        target_root.position.y += cup_delta
 
     if aim_line != null and aim_line.visible:
         var mid_y: float = cup_y * 0.5
