@@ -49,4 +49,23 @@ class V175ReplayArcLengthPacingTest {
         // Regression: don't collapse replay orientation back to one short tangent that can snap at corners.
         assertFalse(script.contains("var ahead := _v175_trail_point(points, min(1.0, progress + sample_progress))\n    var behind := _v175_trail_point(points, max(0.0, progress - sample_progress))\n    var heading: Vector2 = ahead - behind"))
     }
+
+    @Test
+    fun replayCameraStaysTimeLockedWhileRigChoreographyCanEase() {
+        val script = asset("v175_cinematic_replay.gd")
+
+        assertTrue(script.contains("var progress: float = _v175_replay_progress()"))
+        assertTrue(script.contains("var choreography: float = smoothstep(0.0, 1.0, progress)"))
+        assertTrue(script.contains("var current := _v175_trail_point(_v171_replay_actual, progress)"))
+        assertTrue(script.contains("var heading := _v175_trail_heading(_v171_replay_actual, progress)"))
+        assertTrue(script.contains("0.28 * choreography"))
+        assertTrue(script.contains("0.55 * choreography"))
+        assertTrue(script.contains("0.42 * choreography"))
+        assertTrue(script.contains("lerp(41.0, 35.5, choreography)"))
+
+        // Regression: easing the path clock desynchronizes the camera from the actual replay trace.
+        assertFalse(script.contains("var progress: float = smoothstep(0.0, 1.0, _v175_replay_progress())"))
+        assertFalse(script.contains("_v175_trail_point(_v171_replay_actual, choreography)"))
+        assertFalse(script.contains("_v175_trail_heading(_v171_replay_actual, choreography)"))
+    }
 }

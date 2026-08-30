@@ -155,16 +155,20 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
         super._update_camera(ball_world, running, phase, distance_to_cup, immediate, delta)
         return
 
-    var progress: float = smoothstep(0.0, 1.0, _v175_replay_progress())
+    # Track the trail on the exact replay clock. Applying smoothstep to path progress made the
+    # camera lag the actual replay early, rush through the middle and lead it late. Keep cinematic
+    # easing only on rig distance/FOV so the shot trace and camera remain temporally locked.
+    var progress: float = _v175_replay_progress()
+    var choreography: float = smoothstep(0.0, 1.0, progress)
     var current := _v175_trail_point(_v171_replay_actual, progress)
     var heading := _v175_trail_heading(_v171_replay_actual, progress)
     var side := Vector2(-heading.y, heading.x)
 
     # Stay slightly behind and outside the rolling line so the cup/trace remains readable.
-    var look2 := current + heading * (0.34 + 0.28 * progress)
-    var cam2 := current - heading * (1.55 + 0.55 * progress) + side * 0.58
+    var look2 := current + heading * (0.34 + 0.28 * choreography)
+    var cam2 := current - heading * (1.55 + 0.55 * choreography) + side * 0.58
     var look_y: float = _v166_sample(look2.x, look2.y).x + 0.055
-    var cam_y: float = _v166_sample(cam2.x, cam2.y).x + 0.72 + 0.42 * progress
+    var cam_y: float = _v166_sample(cam2.x, cam2.y).x + 0.72 + 0.42 * choreography
     var desired_look := Vector3(look2.x, look_y, -look2.y)
     var desired_pos := Vector3(cam2.x, cam_y, -cam2.y)
 
@@ -174,6 +178,6 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     camera_pos = camera_pos.lerp(desired_pos, pos_alpha)
     camera_look = camera_look.lerp(desired_look, look_alpha)
     camera.position = camera_pos
-    var target_fov: float = lerp(41.0, 35.5, progress)
+    var target_fov: float = lerp(41.0, 35.5, choreography)
     camera.fov = lerp(camera.fov, target_fov, 1.0 if immediate else min(1.0, delta * 4.8))
     camera.look_at(camera_look, Vector3.UP)
