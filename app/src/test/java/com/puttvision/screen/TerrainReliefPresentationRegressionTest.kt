@@ -67,6 +67,25 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
+    fun authoritativePhysicsTrailsStayVisibleOnPresentationRelief() {
+        val script = asset("terrain_relief_visibility.gd")
+        val source = asset("v166_true_physics_green_read.gd")
+
+        assertTrue(script.contains("RELIEF_TRAIL_CLEARANCE_M := 0.0075"))
+        assertTrue(script.contains("func _v166_ribbon_mesh(points: Array, width: float) -> ArrayMesh:"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(a.x, a.y).x) + RELIEF_TRAIL_CLEARANCE_M"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(b.x, b.y).x) + RELIEF_TRAIL_CLEARANCE_M"))
+
+        // Preserve Android solver truth: only presentation Y changes. The inherited physics ribbon
+        // remains documented as physical-height grounding, while this subclass overrides it.
+        assertTrue(source.contains("var ah: float = _v166_sample(a.x, a.y).x + 0.0075"))
+        assertFalse(script.contains("a.x +="))
+        assertFalse(script.contains("a.y +="))
+        assertFalse(script.contains("predictedTrail] ="))
+        assertFalse(script.contains("actualTrail] ="))
+    }
+
+    @Test
     fun terrainReliefUsesStrongButSparsePhysicalElevationRibbons() {
         val script = asset("terrain_relief_visibility.gd")
         assertTrue(script.contains("RELIEF_MINOR_CONTOUR_M := 0.05"))
