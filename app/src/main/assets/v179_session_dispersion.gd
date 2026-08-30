@@ -33,11 +33,30 @@ func _v179_mean(axis: int) -> float:
         total += sample.x if axis == 0 else sample.y
     return total / float(_v179_samples.size())
 
+func _v179_median(axis: int) -> float:
+    if _v179_samples.is_empty():
+        return 0.0
+    var values: Array[float] = []
+    for sample in _v179_samples:
+        values.append(sample.x if axis == 0 else sample.y)
+    values.sort()
+    var middle := int(values.size() / 2)
+    if values.size() % 2 == 1:
+        return values[middle]
+    return (values[middle - 1] + values[middle]) * 0.5
+
+func _v179_coaching_center(axis: int) -> float:
+    # A single gross mishit should remain visible in the raw AVG and dispersion plot,
+    # but must not invert the next-rep instruction for an otherwise stable pattern.
+    if _v179_samples.size() < V179_COACH_MIN_SAMPLES:
+        return _v179_mean(axis)
+    return _v179_median(axis)
+
 func _v179_tendency() -> String:
     if _v179_samples.is_empty():
         return "BUILDING PATTERN"
-    var line := _v179_mean(0)
-    var pace := _v179_mean(1)
+    var line := _v179_coaching_center(0)
+    var pace := _v179_coaching_center(1)
     var line_text := "CENTERED" if abs(line) < 3.0 else ("RIGHT" if line > 0.0 else "LEFT")
     var pace_text := "CUP PACE" if abs(pace) < 10.0 else ("LONG" if pace > 0.0 else "SHORT")
     return "%s  •  %s" % [line_text, pace_text]
@@ -59,8 +78,8 @@ func _v179_next_rep_text() -> String:
     if _v179_samples.size() < V179_COACH_MIN_SAMPLES:
         return "NEXT · BUILD 3 SHOTS"
 
-    var line := _v179_mean(0)
-    var pace := _v179_mean(1)
+    var line := _v179_coaching_center(0)
+    var pace := _v179_coaching_center(1)
     var line_text := "HOLD LINE"
     if line > V179_COACH_LINE_DEADBAND_CM:
         line_text = "%dcm LEFT" % clampi(int(round(absf(line))), 3, 9)
