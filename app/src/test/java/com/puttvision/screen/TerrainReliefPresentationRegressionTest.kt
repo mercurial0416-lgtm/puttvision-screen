@@ -20,7 +20,6 @@ class TerrainReliefPresentationRegressionTest {
         assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.72"))
         assertTrue(script.contains("terrain_height * (4.6 - 1.0)"))
         assertTrue(script.contains("VERTEX.y = terrain_height + relief_delta + 0.0030"))
-        assertTrue(script.contains("ALPHA = 0.015 + active * (0.065 + 0.015 * abs(height_bias))"))
         assertFalse(script.contains("RELIEF_VISUAL_SCALE := 3.2"))
         assertFalse(script.contains("GreenTerrain("))
         assertFalse(script.contains("GreenReadAdvisor("))
@@ -29,9 +28,19 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
+    fun reliefSurfaceDepthWritesInsteadOfGhostingOverFlatBase() {
+        val script = asset("terrain_relief_visibility.gd")
+        assertTrue(script.contains("render_mode unshaded, cull_disabled;"))
+        assertTrue(script.contains("surface now depth-writes"))
+        assertFalse(script.contains("blend_mix"))
+        assertFalse(script.contains("depth_draw_never"))
+        assertFalse(script.contains("ALPHA ="))
+    }
+
+    @Test
     fun subtleGradeReliefBudgetIsMateriallyStrongerButStillCapped() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("# The previous 3.2x pass still read too flat"))
+        assertTrue(script.contains("previous 3.2x translucent pass still read too flat"))
         assertTrue(script.contains("-0.72,\n        0.72"))
         assertFalse(script.contains("RELIEF_EXTRA_CAP_M := 1."))
     }
@@ -44,8 +53,6 @@ class TerrainReliefPresentationRegressionTest {
         assertTrue(script.contains("aim_line.position.y = _terrain_relief_visual_height"))
         assertTrue(script.contains("super._apply_snapshot(s, immediate, delta)\n    _terrain_relief_sync_anchors(s)"))
 
-        // Regression: rebuilding absolute positions from bridge Z loses the inherited cup -20 mm
-        // offset and can also stomp cup-entry/settled ball pose.
         assertFalse(script.contains("ball.position.y = float(s.get(\"ballZ\""))
         assertFalse(script.contains("target_root.position.y = float(s.get(\"cupZ\""))
         assertFalse(script.contains("s[\"ballZ\"] ="))
@@ -68,10 +75,9 @@ class TerrainReliefPresentationRegressionTest {
         assertTrue(script.contains("terrain_height / 0.05"))
         assertTrue(script.contains("terrain_height / 0.10"))
         assertTrue(script.contains("float elevation_ribbon = max(minor_ribbon * 0.42, major_ribbon)"))
-        assertTrue(script.contains("float ribbon_strength = elevation_ribbon * active * 0.26"))
+        assertTrue(script.contains("float ribbon_strength = elevation_ribbon * active * 0.18"))
         assertTrue(script.contains("relief_color = mix(relief_color, ribbon_color, ribbon_strength)"))
         assertFalse(script.contains("VERTEX.y += elevation_ribbon"))
-        assertFalse(script.contains("ALPHA += elevation_ribbon"))
     }
 
     @Test
@@ -82,8 +88,6 @@ class TerrainReliefPresentationRegressionTest {
         assertTrue(script.contains("vec3 low_green = vec3(0.120, 0.300, 0.100)"))
         assertTrue(script.contains("vec3 high_green = vec3(0.180, 0.380, 0.140)"))
         assertFalse(script.contains("mix(0.84, 1.16"))
-        assertFalse(script.contains("ALPHA = 0.055 + active * (0.205"))
-        assertFalse(script.contains("ALPHA = 0.030 + active * (0.115"))
         assertFalse(script.contains("DirectionalLight3D.new()"))
         assertFalse(script.contains("contour_wave"))
     }
