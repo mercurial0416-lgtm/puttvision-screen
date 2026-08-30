@@ -1,6 +1,8 @@
 package com.puttvision.screen
 
 import android.app.Activity
+import android.app.ProgressDialog
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -13,6 +15,7 @@ import java.io.File
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.Executors
@@ -35,6 +38,7 @@ class AppUpdater(
     private val prefs = activity.getSharedPreferences("puttvision_updater", Context.MODE_PRIVATE)
     private val checkInFlight = AtomicBoolean(false)
     private val downloadInFlight = AtomicBoolean(false)
+    private var transferDialog: ProgressDialog? = null
 
     private companion object {
         const val KEY_PENDING_APK = "pending_apk_path"
@@ -158,6 +162,7 @@ class AppUpdater(
 
     private fun downloadAndInstall(info: UpdateInfo) {
         if (!downloadInFlight.compareAndSet(false, true)) return
+        onUi { showTransferDialog(info.versionName) }
         executor.execute {
             var failedApk: File? = null
             try {
@@ -179,7 +184,28 @@ class AppUpdater(
                     openHttpStream(info.apkUrl)
                 }
 
-                input.use { source -> targetApk.outputStream().use { output -> source.copyTo(output) } }
+                var downloadedBytes = 0L
+                var lastPublishedBytes = -1L
+                input.use { source ->
+                    targetApk.outputStream().use { output ->
+                        val buffer = ByteArray(128 * 1024)
+                        while (true) {
+                            val read = source.read(buffer)
+                            if (read < 0) break
+                            if (read == 0) continue
+                            output.write(buffer, 0, read)
+                            downloadedBytes += read
+                            if (UpdateTransferUi.shouldPublish(lastPublishedBytes, downloadedBytes)) {
+                                lastPublishedBytes = downloadedBytes
+                                val message = UpdateTransferUi.downloadMessage(downloadedBytes)
+                                onUi { updateTransferDialog(message) }
+                            }
+                        }
+                        output.flush()
+                    }
+                }
+                onUi { updateTransferDialog("다운로드 완료 · APK 무결성 검증 중…") }
+
                 val sizeCheck = V49UpdatePolicy.validateDownloadedApkSize(targetApk.length())
                 require(sizeCheck.valid) { sizeCheck.reason ?: "다운로드된 APK 파일 크기가 비정상적입니다." }
 
@@ -197,14 +223,52 @@ class AppUpdater(
                 require(artifactCheck.valid) { artifactCheck.reason ?: "다운로드 APK 버전 검증 실패" }
 
                 failedApk = null
-                onUi { install(targetApk, info) }
+                onUi {
+                    updateTransferDialog("검증 완료 · 설치 화면 여는 중…")
+                    dismissTransferDialog()
+                    install(targetApk, info)
+                }
             } catch (t: Throwable) {
                 runCatching { failedApk?.takeIf { it.exists() }?.delete() }
-                onUi { activity.pvMessageDialog("업데이트 실패", t.message ?: "다운로드 오류").show() }
+                val detail = if (t is SocketTimeoutException) {
+                    "네트워크에서 45초 이상 데이터가 오지 않았습니다. 연결을 확인한 뒤 다시 시도하세요."
+                } else {
+                    t.message ?: "다운로드 오류"
+                }
+                onUi {
+                    dismissTransferDialog()
+                    activity.pvMessageDialog("업데이트 실패", detail).show()
+                }
             } finally {
                 downloadInFlight.set(false)
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showTransferDialog(versionName: String) {
+        dismissTransferDialog()
+        transferDialog = ProgressDialog(activity).apply {
+            setTitle("PuttVision $versionName 업데이트")
+            setMessage("다운로드 준비 중…")
+            setProgressStyle(ProgressDialog.STYLE_SPINNER)
+            isIndeterminate = true
+            setCancelable(false)
+            setCanceledOnTouchOutside(false)
+            show()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun updateTransferDialog(message: String) {
+        val dialog = transferDialog ?: return
+        if (dialog.isShowing) dialog.setMessage(message)
+    }
+
+    private fun dismissTransferDialog() {
+        val dialog = transferDialog
+        transferDialog = null
+        if (dialog != null) runCatching { if (dialog.isShowing) dialog.dismiss() }
     }
 
     private fun openHttpStream(url: String): InputStream {
@@ -437,12 +501,25 @@ class AppUpdater(
     private fun launchInstaller(apk: File) {
         if (activity.isFinishing || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return
         val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", apk)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
+        val clip = ClipData.newRawUri("PuttVision update", uri)
+        val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            data = uri
+            clipData = clip
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        runCatching { activity.startActivity(intent) }
-            .onFailure { error -> onUi { activity.pvMessageDialog("설치 실행 실패", error.message ?: "APK 설치 화면을 열 수 없습니다.").show() } }
+        val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            clipData = clip
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        val failure = runCatching { activity.startActivity(installIntent) }.exceptionOrNull()
+            ?: return
+        runCatching { activity.startActivity(viewIntent) }
+            .onFailure { fallbackFailure ->
+                val detail = fallbackFailure.message ?: failure.message ?: "APK 설치 화면을 열 수 없습니다."
+                onUi { activity.pvMessageDialog("설치 실행 실패", detail).show() }
+            }
     }
 
     private fun sha256(file: File): String {
@@ -465,5 +542,8 @@ class AppUpdater(
         }
     }
 
-    fun close() { executor.shutdownNow() }
+    fun close() {
+        onUi { dismissTransferDialog() }
+        executor.shutdownNow()
+    }
 }
