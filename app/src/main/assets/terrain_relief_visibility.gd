@@ -1,15 +1,25 @@
 extends "res://practice_trend_vector.gd"
 
-# Presentation-only macro relief pass. The exact Android terrain mesh remains authoritative;
-# this layer only makes its existing height/slope field readable on a TV without exaggerating
-# geometry or feeding anything back into physics, GreenTerrain, GreenReadAdvisor, aim or scoring.
+# Presentation-only macro relief shell. Android GreenTerrain / GreenReadAdvisor remain authoritative.
+# This shell deliberately exaggerates vertical displacement for TV readability only; it never feeds
+# coordinates back into physics, aim, scoring, replay truth, or the authoritative terrain payload.
 
 const RELIEF_GREEN_SIZE := Vector2(11.8, 34.5)
 const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
+const RELIEF_VISUAL_SCALE := 3.6
+const RELIEF_EXTRA_CAP_M := 0.78
 
 var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
+
+func _terrain_relief_visual_height(terrain_height_m: float) -> float:
+    var relief_delta := clampf(
+        terrain_height_m * (RELIEF_VISUAL_SCALE - 1.0),
+        -RELIEF_EXTRA_CAP_M,
+        RELIEF_EXTRA_CAP_M
+    )
+    return terrain_height_m + relief_delta + 0.003
 
 func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m: float) -> float:
     # A crown peak or bowl floor is physically important even though its instantaneous local
@@ -39,8 +49,15 @@ void vertex() {
     terrain_height = (COLOR.r - 0.5) * 4.0;
     local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
     slope_pct = length(local_slope);
-    // Tiny z-fight separation only; physical/display geometry is not vertically exaggerated.
-    VERTEX.y += 0.0016;
+    // Presentation-only vertical relief. The source mesh already contains the exact physical
+    // height. Add a bounded visual delta so 1-2% grades produce a real silhouette on a TV while
+    // steep/custom greens cannot balloon into cartoon terrain.
+    float relief_delta = clamp(
+        terrain_height * (3.6 - 1.0),
+        -0.78,
+        0.78
+    );
+    VERTEX.y = terrain_height + relief_delta + 0.0030;
 }
 
 void fragment() {
@@ -58,7 +75,7 @@ void fragment() {
     // rotated across the green. Keep the primary axis as luminance and encode the orthogonal axis
     // as a restrained warm/cool tint. Both channels are continuous and derived only from the
     // authoritative local slope, so every downhill direction remains readable without fake bands,
-    // extra lights, geometry exaggeration or a branch discontinuity.
+    // extra lights or a branch discontinuity.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
@@ -74,8 +91,9 @@ void fragment() {
     relief_color *= cross_tint;
 
     ALBEDO = relief_color;
-    // Enough opacity to make macro slope survive TV scaling while keeping underlying turf visible.
-    ALPHA = active * (0.235 + 0.115 * abs(height_bias));
+    // Keep a quiet full-surface shell so the exaggerated silhouette stays continuous through
+    // nearly-level transitions; authoritative turf remains visible underneath.
+    ALPHA = 0.10 + active * (0.38 + 0.14 * abs(height_bias));
 }
 """
     var material := ShaderMaterial.new()
