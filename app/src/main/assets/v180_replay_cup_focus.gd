@@ -19,6 +19,7 @@ const V180_FOCUS_START := 0.72
 const V180_FOCUS_FULL := 0.90
 const V180_COMPARE_SAMPLES := 20
 const V180_FINISH_DEADBAND_CM := 2.0
+const V180_CAMERA_SIDE_DEADBAND_M := 0.04
 
 func _build_hud() -> void:
     super._build_hud()
@@ -65,6 +66,18 @@ func _v180_distance_to_cup_cm(progress: float) -> float:
     # the shot trace and trail-follow camera. Easing belongs to camera choreography, not telemetry.
     var current := _v175_trail_point(_v171_replay_actual, clampf(progress, 0.0, 1.0))
     return current.distance_to(_v180_cup_point()) * 100.0
+
+func _v180_cup_camera_side_sign(final_point: Vector2, cup_point: Vector2, final_heading: Vector2) -> float:
+    var heading := final_heading.normalized()
+    if heading.length_squared() < 0.000001:
+        heading = Vector2.UP
+    var side := Vector2(-heading.y, heading.x)
+    var lateral_m := (final_point - cup_point).dot(side)
+    if absf(lateral_m) <= V180_CAMERA_SIDE_DEADBAND_M:
+        return 1.0
+    # Put the lens on the opposite side of a meaningful final miss. That preserves visual separation
+    # between ball, cup and finishing line instead of letting the ball collapse behind the flag/cup.
+    return -1.0 if lateral_m > 0.0 else 1.0
 
 func _v180_finish_verdict(actual: Vector2, predicted: Vector2, predicted_heading: Vector2) -> String:
     var heading := predicted_heading.normalized()
@@ -150,7 +163,8 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     var cup2 := _v180_cup_point()
     var final_heading := _v175_trail_heading(_v171_replay_actual, 0.965)
     var side := Vector2(-final_heading.y, final_heading.x)
-    var approach_side := side * 0.82
+    var side_sign := _v180_cup_camera_side_sign(_v180_final_point(), cup2, final_heading)
+    var approach_side := side * 0.82 * side_sign
     var cup_cam2 := cup2 + final_heading * 0.76 + approach_side
     var cup_h := _v166_sample(cup2.x, cup2.y).x
     var cam_h := _v166_sample(cup_cam2.x, cup_cam2.y).x
