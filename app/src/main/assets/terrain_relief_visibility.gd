@@ -7,8 +7,8 @@ extends "res://practice_trend_vector.gd"
 const RELIEF_GREEN_SIZE := Vector2(11.8, 34.5)
 const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
-const RELIEF_VISUAL_SCALE := 3.6
-const RELIEF_EXTRA_CAP_M := 0.78
+const RELIEF_VISUAL_SCALE := 3.2
+const RELIEF_EXTRA_CAP_M := 0.55
 
 var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
@@ -22,18 +22,13 @@ func _terrain_relief_visual_height(terrain_height_m: float) -> float:
     return terrain_height_m + relief_delta + 0.003
 
 func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m: float) -> float:
-    # A crown peak or bowl floor is physically important even though its instantaneous local
-    # slope approaches zero. Keep a restrained height-driven floor so macro relief does not
-    # visually disappear at exactly those turning points.
     var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
     var elevation_signal := smoothstep(0.035, 0.14, absf(terrain_height_m))
     return maxf(slope_signal, elevation_signal * 0.48)
 
 func _terrain_relief_hillshade_contrast(slope_percent: float) -> float:
-    # Presentation-only contrast budget. A 1% plane should be unmistakable from the address
-    # camera, while nearly level turf remains visually quiet. Kept bounded for TV/mobile safety.
     var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
-    return lerpf(0.0, 0.32, slope_signal)
+    return lerpf(0.0, 0.22, slope_signal)
 
 func _terrain_relief_material() -> ShaderMaterial:
     var shader := Shader.new()
@@ -49,51 +44,41 @@ void vertex() {
     terrain_height = (COLOR.r - 0.5) * 4.0;
     local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
     slope_pct = length(local_slope);
-    // Presentation-only vertical relief. The source mesh already contains the exact physical
-    // height. Add a bounded visual delta so 1-2% grades produce a real silhouette on a TV while
-    // steep/custom greens cannot balloon into cartoon terrain.
+    // Bounded presentation-only relief: enough for a real TV silhouette without turning
+    // steep/custom greens into giant floating slabs.
     float relief_delta = clamp(
-        terrain_height * (3.6 - 1.0),
-        -0.78,
-        0.78
+        terrain_height * (3.2 - 1.0),
+        -0.55,
+        0.55
     );
     VERTEX.y = terrain_height + relief_delta + 0.0030;
 }
 
 void fragment() {
-    // Preserve relief continuity through crown peaks and bowl floors. Local slope naturally
-    // approaches zero at those turning points, but the authoritative physical elevation still
-    // carries useful shape information. The height signal is intentionally capped well below
-    // the slope response so flat baseline turf stays quiet instead of looking heat-mapped.
     float slope_signal = smoothstep(0.18, 0.90, slope_pct);
     float elevation_signal = smoothstep(0.035, 0.14, abs(terrain_height));
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
 
-    // Continuous dual-axis relief cue. A previous fallback flipped sign when the primary facing
-    // crossed a small threshold, which could create a visible shading seam as the downhill vector
-    // rotated across the green. Keep the primary axis as luminance and encode the orthogonal axis
-    // as a restrained warm/cool tint. Both channels are continuous and derived only from the
-    // authoritative local slope, so every downhill direction remains readable without fake bands,
-    // extra lights or a branch discontinuity.
+    // Keep directional shading secondary to the actual geometry. This avoids the dark painted
+    // 'blob' look that made the first relief pass feel detached from the turf in replay preview.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
     float primary_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
     float cross_hillshade = clamp(cross_facing * slope_signal, -1.0, 1.0);
-    float hillshade_exposure = mix(0.72, 1.28, primary_hillshade * 0.5 + 0.5);
-    vec3 cross_tint = vec3(1.0) + vec3(0.090, 0.020, -0.080) * cross_hillshade;
+    float hillshade_exposure = mix(0.84, 1.16, primary_hillshade * 0.5 + 0.5);
+    vec3 cross_tint = vec3(1.0) + vec3(0.040, 0.012, -0.035) * cross_hillshade;
 
-    vec3 low_green = vec3(0.036, 0.095, 0.046);
-    vec3 high_green = vec3(0.235, 0.320, 0.125);
+    vec3 low_green = vec3(0.070, 0.165, 0.070);
+    vec3 high_green = vec3(0.165, 0.275, 0.105);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
     relief_color *= hillshade_exposure;
     relief_color *= cross_tint;
 
     ALBEDO = relief_color;
-    // Keep a quiet full-surface shell so the exaggerated silhouette stays continuous through
-    // nearly-level transitions; authoritative turf remains visible underneath.
-    ALPHA = 0.10 + active * (0.38 + 0.14 * abs(height_bias));
+    // Continuous but restrained shell: geometry communicates the grade, not a giant dark mask.
+    ALPHA = 0.055 + active * (0.205 + 0.055 * abs(height_bias));
 }
 """
     var material := ShaderMaterial.new()
