@@ -240,8 +240,8 @@ func _live_trace_push(cross_track_cm: float, traveled_m: float = -1.0) -> void:
 # accepted samples is not collapsed into a shorter chord. Peak telemetry preserves the side of the
 # largest excursion so the player can distinguish left- and right-breaking rolls at a glance.
 # When the roll stops, the final telemetry remains visible briefly as a read-only summary so the
-# player can actually inspect the outcome before the HUD clears. Nothing feeds back into
-# GreenTerrain, GreenReadAdvisor, scoring, aim, or physics.
+# player can actually inspect the outcome before the HUD clears.
+# Nothing feeds back into GreenTerrain, GreenReadAdvisor, scoring, aim, or physics.
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
     var running := bool(s.get("running", false))
