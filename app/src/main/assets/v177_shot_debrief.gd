@@ -17,6 +17,8 @@ var _v177_pace_bar: ColorRect
 var _v177_preview_force_visible := false
 
 const V177_BAR_MAX_PX := 150.0
+const V177_BAR_HALF_PX := V177_BAR_MAX_PX * 0.5
+const V177_BAR_LEFT_PX := 22.0
 
 func _v177_metric_score(line_delta_cm: float, pace_delta_cm: float, holed: bool) -> int:
     if holed:
@@ -62,7 +64,23 @@ func _v177_coach(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_ou
     return "GOOD WINDOW  •  REPEAT THE STROKE"
 
 func _v177_bar_width(delta_cm: float, full_scale_cm: float) -> float:
-    return V177_BAR_MAX_PX * clamp(abs(delta_cm) / max(1.0, full_scale_cm), 0.0, 1.0)
+    return V177_BAR_HALF_PX * clamp(abs(delta_cm) / max(1.0, full_scale_cm), 0.0, 1.0)
+
+func _v177_bar_geometry(delta_cm: float, full_scale_cm: float) -> Vector2:
+    # Center is zero. Negative error grows left; positive error grows right. This makes the
+    # debrief readable peripherally on a TV instead of forcing the player to parse label text.
+    var width := _v177_bar_width(delta_cm, full_scale_cm)
+    var center_x := V177_BAR_LEFT_PX + V177_BAR_HALF_PX
+    var start_x := center_x if delta_cm >= 0.0 else center_x - width
+    return Vector2(start_x, width)
+
+func _v177_add_zero_marker(parent: Control, y: float) -> void:
+    var marker := ColorRect.new()
+    marker.position = Vector2(V177_BAR_LEFT_PX + V177_BAR_HALF_PX, y - 3.0)
+    marker.size = Vector2(1.0, 11.0)
+    marker.color = Color(0.90, 0.94, 0.88, 0.48)
+    marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    parent.add_child(marker)
 
 func _build_hud() -> void:
     super._build_hud()
@@ -85,32 +103,34 @@ func _build_hud() -> void:
     _v174_text(_v177_panel, Vector2(22, 52), Vector2(150, 20), "START LINE", 11, Color(0.58, 0.67, 0.64, 0.92))
     _v177_line_value = _v174_text(_v177_panel, Vector2(174, 48), Vector2(352, 28), "ON LINE", 17, Color("#f1f4ef"), HORIZONTAL_ALIGNMENT_RIGHT)
     var line_track := ColorRect.new()
-    line_track.position = Vector2(22, 82)
+    line_track.position = Vector2(V177_BAR_LEFT_PX, 82)
     line_track.size = Vector2(V177_BAR_MAX_PX, 5)
     line_track.color = Color(0.74, 0.80, 0.75, 0.14)
     line_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(line_track)
     _v177_line_bar = ColorRect.new()
-    _v177_line_bar.position = Vector2(22, 82)
+    _v177_line_bar.position = Vector2(V177_BAR_LEFT_PX + V177_BAR_HALF_PX, 82)
     _v177_line_bar.size = Vector2(0, 5)
     _v177_line_bar.color = Color("#76d7b6")
     _v177_line_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(_v177_line_bar)
+    _v177_add_zero_marker(_v177_panel, 82.0)
 
     _v174_text(_v177_panel, Vector2(22, 105), Vector2(150, 20), "PACE", 11, Color(0.58, 0.67, 0.64, 0.92))
     _v177_pace_value = _v174_text(_v177_panel, Vector2(174, 101), Vector2(160, 28), "CUP PACE", 15, Color("#f1f4ef"), HORIZONTAL_ALIGNMENT_RIGHT)
     var pace_track := ColorRect.new()
-    pace_track.position = Vector2(22, 135)
+    pace_track.position = Vector2(V177_BAR_LEFT_PX, 135)
     pace_track.size = Vector2(V177_BAR_MAX_PX, 5)
     pace_track.color = Color(0.74, 0.80, 0.75, 0.14)
     pace_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(pace_track)
     _v177_pace_bar = ColorRect.new()
-    _v177_pace_bar.position = Vector2(22, 135)
+    _v177_pace_bar.position = Vector2(V177_BAR_LEFT_PX + V177_BAR_HALF_PX, 135)
     _v177_pace_bar.size = Vector2(0, 5)
     _v177_pace_bar.color = Color("#d6b85c")
     _v177_pace_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(_v177_pace_bar)
+    _v177_add_zero_marker(_v177_panel, 135.0)
 
     _v174_text(_v177_panel, Vector2(358, 80), Vector2(168, 20), "FINAL LEAVE", 11, Color(0.58, 0.67, 0.64, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
     _v177_leave_value = _v174_text(_v177_panel, Vector2(358, 101), Vector2(168, 38), "0.00 m", 23, Color("#b9dda6"), HORIZONTAL_ALIGNMENT_RIGHT)
@@ -159,8 +179,13 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     _v177_pace_value.text = _v177_pace_text(pace_delta)
     _v177_leave_value.text = "%.2f m" % leave_m
     _v177_coach_label.text = _v177_coach(line_delta, pace_delta, holed, lip_out)
-    _v177_line_bar.size.x = _v177_bar_width(line_delta, 30.0)
-    _v177_pace_bar.size.x = _v177_bar_width(pace_delta, 70.0)
+
+    var line_bar := _v177_bar_geometry(line_delta, 30.0)
+    _v177_line_bar.position.x = line_bar.x
+    _v177_line_bar.size.x = line_bar.y
+    var pace_bar := _v177_bar_geometry(pace_delta, 70.0)
+    _v177_pace_bar.position.x = pace_bar.x
+    _v177_pace_bar.size.x = pace_bar.y
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
