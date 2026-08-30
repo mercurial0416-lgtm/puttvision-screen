@@ -64,18 +64,18 @@ void fragment() {
     float active = max(slope_signal, elevation_signal * 0.48);
     float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
 
-    // Keep directional shading secondary to the actual geometry. This avoids the dark painted
-    // 'blob' look that made the first relief pass feel detached from the turf in replay preview.
+    // Geometry carries the grade. Keep color modulation intentionally modest so the shell reads as
+    // one coherent putting surface instead of the large dark translucent islands seen in preview.
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
     float primary_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
     float cross_hillshade = clamp(cross_facing * slope_signal, -1.0, 1.0);
-    float hillshade_exposure = mix(0.84, 1.16, primary_hillshade * 0.5 + 0.5);
-    vec3 cross_tint = vec3(1.0) + vec3(0.040, 0.012, -0.035) * cross_hillshade;
+    float hillshade_exposure = mix(0.90, 1.10, primary_hillshade * 0.5 + 0.5);
+    vec3 cross_tint = vec3(1.0) + vec3(0.024, 0.008, -0.020) * cross_hillshade;
 
-    vec3 low_green = vec3(0.070, 0.165, 0.070);
-    vec3 high_green = vec3(0.165, 0.275, 0.105);
+    vec3 low_green = vec3(0.100, 0.245, 0.085);
+    vec3 high_green = vec3(0.180, 0.335, 0.125);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
     relief_color *= hillshade_exposure;
     relief_color *= cross_tint;
@@ -94,8 +94,9 @@ void fragment() {
     relief_color = mix(relief_color, ribbon_color, ribbon_strength);
 
     ALBEDO = relief_color;
-    // Continuous but restrained shell: geometry communicates the grade, not a giant dark mask.
-    ALPHA = 0.055 + active * (0.205 + 0.055 * abs(height_bias));
+    // The overlay is now deliberately light-touch. Geometry + ribbons provide the read; opacity
+    // only binds them to the turf and must not paint broad dark masks over the course surface.
+    ALPHA = 0.030 + active * (0.115 + 0.025 * abs(height_bias));
 }
 """
     var material := ShaderMaterial.new()
