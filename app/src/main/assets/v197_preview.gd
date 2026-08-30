@@ -72,11 +72,11 @@ func _process(delta: float) -> void:
 
     _v188_refresh(13.0, 34.0, true)
     var correction_target := _v197_correction_target(13.0, 34.0)
-    if correction_target.distance_to(Vector2(8.99, 21.99)) > 0.02:
-        push_error("Shot map correction target does not project to nearest strict window point")
+    if correction_target.distance_to(Vector2(8.0, 21.0)) > 0.02:
+        push_error("Shot map correction target safety-margin regression")
         get_tree().quit(28)
         return
-    if _v196_center_legend.text != "FIX  L 4  ·  SHORT 12":
+    if _v196_center_legend.text != "FIX  L 5  ·  SHORT 13":
         push_error("Shot map correction copy regression: %s" % _v196_center_legend.text)
         get_tree().quit(28)
         return
@@ -94,13 +94,13 @@ func _process(delta: float) -> void:
         return
 
     _v188_refresh(-15.0, -30.0, true)
-    if _v196_center_legend.text != "FIX  R 6  ·  LONG 8":
+    if _v196_center_legend.text != "FIX  R 7  ·  LONG 9":
         push_error("Shot map opposite-quadrant correction regression: %s" % _v196_center_legend.text)
         get_tree().quit(28)
         return
 
     _v188_refresh(9.0, 20.0, true)
-    if _v196_center_legend.text != "FIX  L 0":
+    if _v196_center_legend.text != "FIX  L 1":
         push_error("Shot map strict boundary correction regression: %s" % _v196_center_legend.text)
         get_tree().quit(28)
         return
