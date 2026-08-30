@@ -13,13 +13,15 @@ const RELIEF_EXTRA_CAP_M := 0.55
 var _terrain_relief: MeshInstance3D
 var _terrain_relief_mat: ShaderMaterial
 
-func _terrain_relief_visual_height(terrain_height_m: float) -> float:
-    var relief_delta := clampf(
+func _terrain_relief_visual_offset(terrain_height_m: float) -> float:
+    return clampf(
         terrain_height_m * (RELIEF_VISUAL_SCALE - 1.0),
         -RELIEF_EXTRA_CAP_M,
         RELIEF_EXTRA_CAP_M
     )
-    return terrain_height_m + relief_delta + 0.003
+
+func _terrain_relief_visual_height(terrain_height_m: float) -> float:
+    return terrain_height_m + _terrain_relief_visual_offset(terrain_height_m) + 0.003
 
 func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m: float) -> float:
     var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
@@ -109,6 +111,31 @@ func _terrain_relief_rebuild() -> void:
         return
     _terrain_relief.position = green.position
     _terrain_relief.mesh = _v166_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, true)
+
+func _terrain_relief_sync_anchors(s: Dictionary) -> void:
+    # Physics reports exact ball/cup Z against the authoritative, unexaggerated terrain. Move only
+    # the presentation nodes by the same extra relief delta so they remain visually grounded.
+    var ball_x: float = float(s.get("ballX", 0.0))
+    var ball_y: float = float(s.get("ballY", 0.0))
+    var ball_surface: float = _v166_sample(ball_x, ball_y).x
+    var ball_delta: float = _terrain_relief_visual_offset(ball_surface)
+    if ball != null:
+        ball.position.y = float(s.get("ballZ", BALL_RADIUS)) + ball_delta
+
+    var cup_y: float = clampf(float(s.get("holeDistance", target_distance)), 0.5, 30.0)
+    var cup_surface: float = _v166_sample(0.0, cup_y).x
+    var cup_delta: float = _terrain_relief_visual_offset(cup_surface)
+    if target_root != null:
+        target_root.position.y = float(s.get("cupZ", last_cup_z)) + cup_delta
+
+    # The temporary pre-solver aim bar is a presentation guide; keep its center above the shell.
+    if aim_line != null and aim_line.visible:
+        var mid_y: float = cup_y * 0.5
+        aim_line.position.y = _terrain_relief_visual_height(_v166_sample(0.0, mid_y).x) + 0.003
+
+func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
+    super._apply_snapshot(s, immediate, delta)
+    _terrain_relief_sync_anchors(s)
 
 func _v166_refresh_terrain(key: String) -> void:
     var previous_key := _v166_terrain_key
