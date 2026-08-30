@@ -16,15 +16,24 @@ class TerrainReliefPresentationRegressionTest {
     @Test
     fun terrainReliefUsesBoundedPresentationOnlyGeometryExaggeration() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("RELIEF_VISUAL_SCALE := 3.2"))
-        assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.55"))
-        assertTrue(script.contains("terrain_height * (3.2 - 1.0)"))
+        assertTrue(script.contains("RELIEF_VISUAL_SCALE := 4.6"))
+        assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.72"))
+        assertTrue(script.contains("terrain_height * (4.6 - 1.0)"))
         assertTrue(script.contains("VERTEX.y = terrain_height + relief_delta + 0.0030"))
         assertTrue(script.contains("ALPHA = 0.015 + active * (0.065 + 0.015 * abs(height_bias))"))
+        assertFalse(script.contains("RELIEF_VISUAL_SCALE := 3.2"))
         assertFalse(script.contains("GreenTerrain("))
         assertFalse(script.contains("GreenReadAdvisor("))
         assertFalse(script.contains("_v166_samples["))
         assertFalse(script.contains("shadow_enabled = true"))
+    }
+
+    @Test
+    fun subtleGradeReliefBudgetIsMateriallyStrongerButStillCapped() {
+        val script = asset("terrain_relief_visibility.gd")
+        assertTrue(script.contains("# The previous 3.2x pass still read too flat"))
+        assertTrue(script.contains("-0.72,\n        0.72"))
+        assertFalse(script.contains("RELIEF_EXTRA_CAP_M := 1."))
     }
 
     @Test
