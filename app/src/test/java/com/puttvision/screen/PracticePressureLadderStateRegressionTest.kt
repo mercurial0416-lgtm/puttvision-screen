@@ -30,6 +30,26 @@ class PracticePressureLadderStateRegressionTest {
     }
 
     @Test
+    fun resetCoachingExplainsMinimumCorrectionBackIntoWindow() {
+        val source = asset("v191_practice_streak.gd")
+        assertTrue(source.contains("absf(sample.x) - V190_LINE_TOLERANCE_CM"))
+        assertTrue(source.contains("absf(sample.y) - V190_PACE_TOLERANCE_CM"))
+        assertTrue(source.contains("\"LEFT\" if sample.x > 0.0 else \"RIGHT\""))
+        assertTrue(source.contains("\"SHORTEN\" if sample.y > 0.0 else \"ADD\""))
+        assertTrue(source.contains("maxi(1, int(ceil(line_excess)))"))
+        assertTrue(source.contains("maxi(1, int(ceil(pace_excess)))"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  RESET  ·  %s"))
+    }
+
+    @Test
+    fun resetCoachingSupportsCombinedLineAndPaceMisses() {
+        val source = asset("v191_practice_streak.gd")
+        assertTrue(source.contains("if axis == \"LINE\" or axis == \"BOTH\":"))
+        assertTrue(source.contains("if axis == \"PACE\" or axis == \"BOTH\":"))
+        assertTrue(source.contains("return \" · \".join(corrections)"))
+    }
+
+    @Test
     fun pressureLadderRemainsPresentationOnly() {
         val source = asset("v191_practice_streak.gd")
         assertFalse(source.contains("GreenTerrain.set"))
