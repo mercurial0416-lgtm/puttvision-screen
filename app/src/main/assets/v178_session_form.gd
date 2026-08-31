@@ -11,6 +11,8 @@ var _v178_attempt_label: Label
 var _v178_score_labels: Array[Label] = []
 var _v178_scores: Array[int] = []
 var _v178_last_signature := ""
+var _v178_completion_armed := false
+var _v178_completed_shot_serial := 0
 var _v178_preview_force_visible := false
 
 const V178_HISTORY := 5
@@ -110,17 +112,27 @@ func _v178_refresh() -> void:
         _v178_consistency_label.text = "%d%%" % _v178_consistency(_v178_scores)
 
 func _v178_capture_completed_shot(s: Dictionary) -> void:
+    var running := bool(s.get("running", false))
+    if running:
+        # Arm on the live roll rather than relying only on the result payload. Two genuinely
+        # separate putts can finish with byte-for-byte identical metrics and must both count.
+        _v178_completion_armed = true
+        return
+
     var trail_variant: Variant = s.get("actualTrail", [])
     var has_shot := trail_variant is Array and (trail_variant as Array).size() >= 2
     var has_metrics := s.has("readLineDeltaCm") and s.has("paceDeltaCm")
-    var running := bool(s.get("running", false))
-    if not has_shot or not has_metrics or running or _v171_replay_remaining > 0.0:
+    if not has_shot or not has_metrics or _v171_replay_remaining > 0.0:
         return
 
     var signature := _v178_signature(s)
-    if signature == _v178_last_signature:
+    # Signature dedupe still protects reconnect/static snapshots when no live-roll edge was seen.
+    # An armed completion always wins, allowing consecutive identical putts to remain distinct.
+    if not _v178_completion_armed and signature == _v178_last_signature:
         return
+    _v178_completion_armed = false
     _v178_last_signature = signature
+    _v178_completed_shot_serial += 1
 
     var score := _v177_metric_score(
         float(s.get("readLineDeltaCm", 0.0)),

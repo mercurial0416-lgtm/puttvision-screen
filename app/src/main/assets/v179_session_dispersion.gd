@@ -12,7 +12,7 @@ var _v179_window_label: Label
 var _v179_window_detail: Label
 var _v179_points: Array[ColorRect] = []
 var _v179_samples: Array[Vector2] = []
-var _v179_last_signature := ""
+var _v179_last_completion_serial := 0
 var _v179_preview_force_visible := false
 
 const V179_HISTORY := 5
@@ -190,14 +190,16 @@ func _v179_refresh() -> void:
             dot.visible = false
 
 func _v179_capture(s: Dictionary) -> void:
-    var signature := _v178_signature(s)
-    if signature == _v179_last_signature or signature == "0|0.00|0.00|0.000|false|false":
+    # Session form owns the live-roll edge detector and advances this serial exactly once per
+    # completed putt. Following that identity keeps dispersion in lock-step even when two real
+    # putts produce identical trail size, finish distance and coaching deltas.
+    if _v178_completed_shot_serial <= 0 or _v178_completed_shot_serial == _v179_last_completion_serial:
         return
     var trail_variant: Variant = s.get("actualTrail", [])
     var complete := trail_variant is Array and (trail_variant as Array).size() >= 2 and s.has("readLineDeltaCm") and s.has("paceDeltaCm") and not bool(s.get("running", false)) and _v171_replay_remaining <= 0.0
     if not complete:
         return
-    _v179_last_signature = signature
+    _v179_last_completion_serial = _v178_completed_shot_serial
     _v179_push_sample(float(s.get("readLineDeltaCm", 0.0)), float(s.get("paceDeltaCm", 0.0)))
     _v179_refresh()
 
