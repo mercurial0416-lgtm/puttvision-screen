@@ -50,8 +50,18 @@ class PracticePressureLadderStateRegressionTest {
     }
 
     @Test
+    fun productionDrillOverridePreservesActionableResetCoaching() {
+        val source = asset("v192_drill_progression.gd")
+        assertTrue(source.contains("var correction := _v191_reset_coaching(axis)"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  RESET  ·  %s  ·  -0.5 m EASIER"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  RESET  ·  %s  ·  0/3"))
+        assertFalse(source.contains("return \"START STREAK  ·  -0.5 m EASIER\""))
+        assertFalse(source.contains("return \"START STREAK  ·  BUILD  ·  0/3\""))
+    }
+
+    @Test
     fun pressureLadderRemainsPresentationOnly() {
-        val source = asset("v191_practice_streak.gd")
+        val source = asset("v191_practice_streak.gd") + asset("v192_drill_progression.gd")
         assertFalse(source.contains("GreenTerrain.set"))
         assertFalse(source.contains("GreenReadAdvisor.set"))
         assertFalse(source.contains("ballVelocity ="))

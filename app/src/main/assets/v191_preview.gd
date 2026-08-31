@@ -46,8 +46,8 @@ func _process(delta: float) -> void:
         Vector2(8.0, 1.0)
     ]
     _v179_refresh()
-    if _v191_streak != 0 or not _v191_streak_label.text.contains("START STREAK"):
-        push_error("Practice pressure ladder reset regression")
+    if _v191_streak != 0 or not _v191_streak_label.text.contains("RESET") or not _v191_streak_label.text.contains("LEFT"):
+        push_error("Practice pressure ladder reset coaching regression")
         get_tree().quit(22)
         return
 
