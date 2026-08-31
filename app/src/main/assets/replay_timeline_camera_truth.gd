@@ -68,6 +68,25 @@ func _suppress_unlocked_live_break() -> void:
     if _live_curve_pace_label != null:
         _live_curve_pace_label.text = "PACE --"
 
+func _finalize_unlocked_live_break() -> void:
+    # If a whole roll ends before any trustworthy launch vector arrives, inherited presentation
+    # state may still contain the previous shot's axis/origin. Never turn that stale state into a
+    # plausible-looking REST L/R result. Finish neutral instead; physics/read/scoring stay untouched.
+    _live_curve_peak_cm = 0.0
+    _live_curve_peak_signed_cm = 0.0
+    _live_curve_launch_speed = 0.0
+    _live_curve_history.clear()
+    _live_curve_distance_history.clear()
+    _live_curve_has_trace_pos = false
+    if _live_curve_trace != null:
+        _live_curve_trace.clear_points()
+    if _live_curve_value != null:
+        _live_curve_value.text = "REST --"
+    if _live_curve_peak_label != null:
+        _live_curve_peak_label.text = "PEAK --"
+    if _live_curve_pace_label != null:
+        _live_curve_pace_label.text = "PACE --"
+
 func _relock_live_break_launch(s: Dictionary, velocity: Vector2) -> void:
     # Rebuild presentation telemetry from the first trustworthy launch vector while preserving the
     # already accumulated roll distance. This only repairs HUD orientation; no physics/read/scoring
@@ -139,6 +158,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     var was_running := _live_curve_was_running
     var running := bool(s.get("running", false))
     var launch_velocity := _live_launch_velocity(s)
+    var launch_lock_was_pending := _live_launch_lock_pending
     super._apply_snapshot(s, immediate, delta)
 
     if running and not was_running:
@@ -155,4 +175,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         _live_launch_lock_pending = false
 
     if was_running and not running:
-        _finalize_live_roll_truth(s)
+        if launch_lock_was_pending:
+            _finalize_unlocked_live_break()
+        else:
+            _finalize_live_roll_truth(s)
