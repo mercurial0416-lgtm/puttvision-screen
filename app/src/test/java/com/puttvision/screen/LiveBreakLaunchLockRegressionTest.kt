@@ -50,4 +50,12 @@ class LiveBreakLaunchLockRegressionTest {
         assertTrue(script.contains("_live_curve_trace.clear_points()"))
         assertTrue(script.contains("Never turn that stale state into a"))
     }
+
+    @Test
+    fun terminalFrameWithoutCoordinatesCannotPresentRunningSampleAsFinalRest() {
+        val script = asset("replay_timeline_camera_truth.gd")
+        assertTrue(script.contains("if not s.has(\"ballX\") or not s.has(\"ballY\"):\n        # A terminal bridge frame"))
+        assertTrue(script.contains("_finalize_unlocked_live_break()\n        return"))
+        assertTrue(script.contains("misrepresent an in-flight sample as the final rest"))
+    }
 }
