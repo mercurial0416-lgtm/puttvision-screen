@@ -6,6 +6,8 @@ extends "res://green_read_direction_truth.gd"
 # Android V135-V137, GreenTerrain and GreenReadAdvisor remain authoritative and untouched.
 
 const LIVE_FINISH_DISTANCE_EPS_M := 0.0005
+const SESSION_HISTORY_DOT_COLOR := Color("#76d7b6")
+const SESSION_LATEST_DOT_COLOR := Color("#f4dda0")
 
 func _focus_replay_stage(progress: float) -> String:
     var p := clampf(progress, 0.0, 1.0)
@@ -61,6 +63,19 @@ func _finalize_live_roll_truth(s: Dictionary) -> void:
         _live_curve_peak_label.text = _live_peak_readout(_live_curve_peak_signed_cm)
     if _live_curve_pace_label != null:
         _live_curve_pace_label.text = _live_summary_pace_readout()
+
+func _v179_refresh() -> void:
+    super._v179_refresh()
+    # The base map preallocates all five history dots and used to color only slot five gold.
+    # During reps 1-4 that slot is invisible, so the current shot had no emphasis at all. Keep the
+    # established production inheritance chain and recolor only the visible tail after refresh.
+    var visible_count := mini(_v179_samples.size(), _v179_points.size())
+    var latest_index := visible_count - 1
+    for index in range(_v179_points.size()):
+        var dot := _v179_points[index]
+        if dot == null:
+            continue
+        dot.color = SESSION_LATEST_DOT_COLOR if index == latest_index and latest_index >= 0 else SESSION_HISTORY_DOT_COLOR
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     var was_running := _live_curve_was_running
