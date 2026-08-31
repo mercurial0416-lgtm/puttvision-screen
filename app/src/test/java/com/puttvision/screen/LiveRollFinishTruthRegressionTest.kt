@@ -14,7 +14,7 @@ class LiveRollFinishTruthRegressionTest {
 
     @Test
     fun stoppedSnapshotFinalizesRestPositionPeakAndTravel() {
-        val live = asset("live_roll_finish_truth.gd")
+        val live = asset("replay_timeline_camera_truth.gd")
         assertTrue(live.contains("var was_running := _live_curve_was_running"))
         assertTrue(live.contains("if was_running and not running:"))
         assertTrue(live.contains("_finalize_live_roll_truth(s)"))
@@ -25,11 +25,11 @@ class LiveRollFinishTruthRegressionTest {
     }
 
     @Test
-    fun tvRoutesThroughTerminalTelemetryWithoutMutatingPhysics() {
+    fun terminalTelemetryRemainsPresentationOnlyInEstablishedTvChain() {
         val scene = asset("v143_tv.tscn")
-        val live = asset("live_roll_finish_truth.gd")
-        assertTrue(scene.contains("res://live_roll_finish_truth.gd"))
-        assertTrue(live.contains("extends \"res://replay_timeline_camera_truth.gd\""))
+        val live = asset("replay_timeline_camera_truth.gd")
+        assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
+        assertTrue(live.contains("extends \"res://green_read_direction_truth.gd\""))
         assertTrue(live.contains("Android V135-V137, GreenTerrain and GreenReadAdvisor remain authoritative"))
         assertFalse(live.contains("GreenTerrain.set"))
         assertFalse(live.contains("GreenReadAdvisor.set"))
