@@ -8,7 +8,10 @@ extends "res://read_launch_vector.gd"
 const PRACTICE_TREND_MIN_SAMPLES := 4
 const PRACTICE_TREND_GROUP_SIZE := 2
 const PRACTICE_TREND_STABLE_GROUP_SIZE := 3
-const PRACTICE_TREND_STABLE_MIN_SAMPLES := 6
+# Session dispersion intentionally keeps five reps. Stabilization must become reachable when that
+# bounded history fills; waiting for a sixth rep made this branch dead and left late-session trend
+# coaching unnecessarily sensitive to one miss.
+const PRACTICE_TREND_STABLE_MIN_SAMPLES := 5
 const PRACTICE_TREND_MIN_PIXELS := 5.0
 const PRACTICE_TREND_STATE_DEADBAND := 0.05
 const PRACTICE_TREND_MAX_CHANGE_PERCENT := 999
@@ -56,9 +59,9 @@ func _practice_group_spread(samples: Array[Vector2], from_index: int, count: int
     return total / float(finish - start)
 
 func _practice_trend_group_size(samples: Array[Vector2]) -> int:
-    # Two-shot windows keep the first useful result responsive at four/five samples. Once the
-    # session has enough history, three-shot windows damp a single miss from flipping the coaching
-    # state while staying bounded and cheap on Forward Mobile.
+    # Two-shot windows keep the first useful result responsive at four samples. Once the bounded
+    # five-rep session history is full, three-shot windows damp a single miss from flipping the
+    # coaching state while staying bounded and cheap on Forward Mobile.
     return PRACTICE_TREND_STABLE_GROUP_SIZE if samples.size() >= PRACTICE_TREND_STABLE_MIN_SAMPLES else PRACTICE_TREND_GROUP_SIZE
 
 func _practice_trend_change_percent(early_spread: float, recent_spread: float) -> int:
