@@ -1,0 +1,41 @@
+package com.puttvision.screen
+
+import java.io.File
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class GreenReadDirectionTruthRegressionTest {
+    private fun asset(path: String): String {
+        val candidates = listOf(File("src/main/assets/$path"), File("app/src/main/assets/$path"))
+        return candidates.firstOrNull { it.isFile }?.readText()
+            ?: error("Unable to locate asset $path from ${File(".").absolutePath}")
+    }
+
+    @Test
+    fun aimDirectionFollowsRecommendedOffsetSign() {
+        val script = asset("green_read_direction_truth.gd")
+        assertTrue(script.contains("var aim_dir := \"R\" if _v165_recommended_offset > 0.0 else \"L\""))
+        assertFalse(script.contains("var aim_dir := \"R\" if side_pct > 0.0 else \"L\""))
+    }
+
+    @Test
+    fun breakDirectionMatchesGreenOverviewSlopeSemantics() {
+        val script = asset("green_read_direction_truth.gd")
+        assertTrue(script.contains("break_dir = \"BREAK R\" if side_pct > 0.0 else \"BREAK L\""))
+        val overview = asset("v183_green_overview.gd")
+        assertTrue(overview.contains("positive means the right side is lower"))
+        assertTrue(overview.contains("therefore the ball's gravity break is right"))
+    }
+
+    @Test
+    fun correctionStaysPresentationOnlyAndIsLiveSceneRoot() {
+        val script = asset("green_read_direction_truth.gd")
+        val scene = asset("v143_tv.tscn")
+        assertTrue(scene.contains("res://green_read_direction_truth.gd"))
+        assertTrue(script.contains("GreenTerrain and GreenReadAdvisor remain authoritative"))
+        assertFalse(script.contains("GreenTerrain.set"))
+        assertFalse(script.contains("GreenReadAdvisor.set"))
+        assertFalse(script.contains("bridge."))
+    }
+}
