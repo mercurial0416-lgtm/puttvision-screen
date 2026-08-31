@@ -22,6 +22,15 @@ func _process(delta: float) -> void:
         push_error("Adaptive drill advance regression")
         get_tree().quit(23)
         return
+    if absf(_v191_streak_label.size.x - V191_COPY_COMPACT_WIDTH) > 0.1:
+        push_error("Adaptive drill compact copy width regression")
+        get_tree().quit(23)
+        return
+    for segment in _v191_segments:
+        if not segment.visible:
+            push_error("Adaptive drill progress meter visibility regression")
+            get_tree().quit(23)
+            return
 
     _v179_samples = [
         Vector2(2.0, 2.0),
@@ -39,6 +48,15 @@ func _process(delta: float) -> void:
         push_error("Adaptive drill reset emphasis regression")
         get_tree().quit(23)
         return
+    if absf(_v191_streak_label.size.x - V191_COPY_RESET_WIDTH) > 0.1:
+        push_error("Adaptive drill reset copy width regression")
+        get_tree().quit(23)
+        return
+    for segment in _v191_segments:
+        if segment.visible:
+            push_error("Adaptive drill reset meter collision regression")
+            get_tree().quit(23)
+            return
 
     _v179_samples = [
         Vector2(14.0, 4.0),
