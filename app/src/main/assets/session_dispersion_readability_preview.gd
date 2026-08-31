@@ -45,15 +45,18 @@ func _process(delta: float) -> void:
         if _v179_panel != null:
             _v179_panel.visible = true
         return
-    if _preview_frames < 24:
+
+    # Seed immediately after the inherited preview's first process pass so the panel exists before
+    # the workflow captures its reference frame. Waiting for the later assertion frame made the
+    # runtime check green while the visual artifact still showed the pre-seed UI.
+    if _v179_panel == null or _v179_points.size() < 3:
         return
     _session_dispersion_readability_checked = true
 
     _v179_samples = [Vector2(-7.0, -18.0), Vector2(3.0, 8.0), Vector2(8.0, 22.0)]
     _v179_preview_force_visible = true
     _v179_refresh()
-    if _v179_panel != null:
-        _v179_panel.visible = true
+    _v179_panel.visible = true
 
     if _session_line_average_text(6.0) != "R 6 cm" or _session_line_average_text(-6.0) != "L 6 cm":
         push_error("Session dispersion line semantics regression")
@@ -63,7 +66,7 @@ func _process(delta: float) -> void:
         push_error("Session dispersion pace semantics regression")
         get_tree().quit(31)
         return
-    if _v179_points.size() < 3 or _v179_points[2].color != SESSION_DISPERSION_RECENT_COLOR or _v179_points[2].size != SESSION_DISPERSION_RECENT_SIZE:
+    if _v179_points[2].color != SESSION_DISPERSION_RECENT_COLOR or _v179_points[2].size != SESSION_DISPERSION_RECENT_SIZE:
         push_error("Newest practice rep emphasis regression")
         get_tree().quit(31)
         return
