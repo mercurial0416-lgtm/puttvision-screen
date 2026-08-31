@@ -41,6 +41,12 @@ func _v191_copy(streak: int, axis: String) -> String:
         return "PRESSURE LADDER  ·  HOLD IT"
     return "PRESSURE LADDER  ·  START STREAK"
 
+func _v191_base_target_color(axis: String) -> Color:
+    # Keep this aligned with v190's normal target-window palette. The pressure ladder owns its
+    # temporary completion highlight, so it must also restore the non-complete state when refreshed
+    # directly by inherited drill/presentation layers rather than relying on a parent refresh first.
+    return Color(0.96, 0.86, 0.49, 0.13) if axis == "BOTH" else Color(0.46, 0.84, 0.71, 0.11)
+
 func _build_hud() -> void:
     super._build_hud()
     var layer := get_node_or_null("V174BroadcastHUD") as CanvasLayer
@@ -98,10 +104,13 @@ func _v191_refresh() -> void:
 
     if complete:
         _v191_streak_label.modulate = Color("#f4dda0")
-        if _v190_target_zone != null:
-            _v190_target_zone.color = Color(0.96, 0.86, 0.49, 0.18)
     else:
         _v191_streak_label.modulate = Color(0.76, 0.88, 0.84, 0.96)
+
+    # Completion gold is transient UI state. Always write both branches so a direct ladder refresh
+    # after a miss cannot leave the target window looking ADVANCE READY.
+    if _v190_target_zone != null:
+        _v190_target_zone.color = Color(0.96, 0.86, 0.49, 0.18) if complete else _v191_base_target_color(axis)
 
     if _v191_bar != null:
         _v191_bar.visible = _v179_preview_force_visible or (_v179_panel != null and _v179_panel.visible)
