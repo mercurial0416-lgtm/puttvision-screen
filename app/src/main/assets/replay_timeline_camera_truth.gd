@@ -119,6 +119,10 @@ func _relock_live_break_launch(s: Dictionary, velocity: Vector2) -> void:
 
 func _finalize_live_roll_truth(s: Dictionary) -> void:
     if not s.has("ballX") or not s.has("ballY"):
+        # A terminal bridge frame can legitimately omit coordinates after the running frame. Leaving
+        # the last live value on screen would misrepresent an in-flight sample as the final rest.
+        # Finish neutral instead of fabricating a terminal result from stale presentation state.
+        _finalize_unlocked_live_break()
         return
 
     var ball_pos := Vector2(float(s.get("ballX", 0.0)), float(s.get("ballY", 0.0)))
