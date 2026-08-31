@@ -20,6 +20,7 @@ const V180_FOCUS_FULL := 0.90
 const V180_COMPARE_SAMPLES := 20
 const V180_FINISH_DEADBAND_CM := 2.0
 const V180_CAMERA_SIDE_DEADBAND_M := 0.04
+const V180_FOV_RESPONSE := 5.5
 
 func _build_hud() -> void:
     super._build_hud()
@@ -47,6 +48,13 @@ func _build_hud() -> void:
 
 func _v180_focus_amount(progress: float) -> float:
     return smoothstep(V180_FOCUS_START, V180_FOCUS_FULL, clampf(progress, 0.0, 1.0))
+
+func _v180_damping_alpha(response_rate: float, delta: float) -> float:
+    if not is_finite(response_rate) or response_rate <= 0.0 or not is_finite(delta) or delta <= 0.0:
+        return 0.0
+    # Exponential response composes exactly across frame slices, keeping replay lens settling
+    # consistent through 30/60/120 Hz playback and transient Forward Mobile frame drops.
+    return 1.0 - exp(-delta * response_rate)
 
 func _v180_final_point() -> Vector2:
     if _v171_replay_actual.is_empty():
@@ -179,5 +187,6 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     camera_pos = camera_pos.lerp(desired_pos, alpha)
     camera_look = camera_look.lerp(desired_look, alpha)
     camera.position = camera_pos
-    camera.fov = lerp(camera.fov, 30.5, (1.0 if immediate else min(1.0, delta * 5.5)) * blend)
+    var fov_alpha := 1.0 if immediate else _v180_damping_alpha(V180_FOV_RESPONSE, delta)
+    camera.fov = lerp(camera.fov, 30.5, fov_alpha * blend)
     camera.look_at(camera_look, Vector3.UP)
