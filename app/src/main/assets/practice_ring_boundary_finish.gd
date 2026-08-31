@@ -10,7 +10,10 @@ func _practice_ring_boundary_snap(center: Vector2, radius: float, inside_point: 
     if radius <= 0.0:
         return inside_point
     var inside_angle := atan2(inside_point.y - center.y, inside_point.x - center.x)
-    var outside := outside_angle
+    # Keep the outside endpoint on the same local angular arc as the inside sample. Without this,
+    # a boundary crossing around +PI/-PI averages through angle zero and the bisection can jump to
+    # the opposite side of the ring instead of snapping the visible arc to the nearby plot edge.
+    var outside := inside_angle + wrapf(outside_angle - inside_angle, -PI, PI)
     for _step in range(PRACTICE_RING_BOUNDARY_BISECT_STEPS):
         var mid := (inside_angle + outside) * 0.5
         var point := center + Vector2(cos(mid), sin(mid)) * radius
