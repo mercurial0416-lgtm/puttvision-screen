@@ -71,9 +71,11 @@ class AddressReliefCameraRegressionTest {
     @Test
     fun tvSceneKeepsReliefAwareCameraInProductionInheritanceChain() {
         val scene = asset("v143_tv.tscn")
-        val topLayer = asset("green_read_direction_truth.gd")
-        assertTrue(scene.contains("res://green_read_direction_truth.gd"))
-        assertTrue(topLayer.contains("extends \"res://address_relief_camera.gd\""))
+        val liveLayer = asset("replay_timeline_camera_truth.gd")
+        val greenRead = asset("green_read_direction_truth.gd")
+        assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
+        assertTrue(liveLayer.contains("extends \"res://green_read_direction_truth.gd\""))
+        assertTrue(greenRead.contains("extends \"res://address_relief_camera.gd\""))
     }
 
     @Test
