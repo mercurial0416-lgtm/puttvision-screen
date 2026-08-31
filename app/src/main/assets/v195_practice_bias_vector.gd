@@ -10,8 +10,11 @@ var _v195_bias_tip: Line2D
 var _v195_bias_label: Label
 
 const V195_MIN_SAMPLES := 3
+const V195_STABLE_SAMPLES := 5
 const V195_LINE_DEADBAND_CM := 2.5
 const V195_PACE_DEADBAND_CM := 8.0
+const V195_EARLY_COLOR := Color(0.93, 0.75, 0.43, 0.88)
+const V195_STABLE_COLOR := Color(0.96, 0.76, 0.38, 0.98)
 
 func _v195_coaching_bias() -> Vector2:
     # Keep this read consistent with NEXT REP coaching. A single gross mishit must stay visible in
@@ -32,6 +35,12 @@ func _v195_bias_text(mean: Vector2) -> String:
         pace_text = "SHORT %.0f CM" % absf(mean.y)
 
     return "%s · %s" % [line_text, pace_text]
+
+func _v195_confidence_text(sample_count: int) -> String:
+    return "STABLE" if sample_count >= V195_STABLE_SAMPLES else "EARLY"
+
+func _v195_confidence_color(sample_count: int) -> Color:
+    return V195_STABLE_COLOR if sample_count >= V195_STABLE_SAMPLES else V195_EARLY_COLOR
 
 func _v195_arrow_head(direction: Vector2) -> PackedVector2Array:
     if direction.length() < 0.5:
@@ -70,7 +79,7 @@ func _build_hud() -> void:
         Vector2(134, 10),
         "BIAS —",
         7,
-        Color(0.96, 0.76, 0.38, 0.94),
+        V195_STABLE_COLOR,
         HORIZONTAL_ALIGNMENT_CENTER
     )
     _v195_bias_label.visible = false
@@ -79,7 +88,8 @@ func _build_hud() -> void:
 func _v195_refresh_bias() -> void:
     if _v195_bias_line == null or _v195_bias_tip == null or _v195_bias_label == null:
         return
-    var show := _v188_panel != null and _v188_panel.visible and _v179_samples.size() >= V195_MIN_SAMPLES
+    var sample_count := _v179_samples.size()
+    var show := _v188_panel != null and _v188_panel.visible and sample_count >= V195_MIN_SAMPLES
     _v195_bias_line.visible = show
     _v195_bias_tip.visible = show
     _v195_bias_label.visible = show
@@ -92,7 +102,8 @@ func _v195_refresh_bias() -> void:
     _v195_bias_line.points = PackedVector2Array([origin, target])
     _v195_bias_tip.position = target
     _v195_bias_tip.points = _v195_arrow_head(target - origin)
-    _v195_bias_label.text = "BIAS %s" % _v195_bias_text(bias)
+    _v195_bias_label.text = "%s BIAS · %s" % [_v195_confidence_text(sample_count), _v195_bias_text(bias)]
+    _v195_bias_label.add_theme_color_override("font_color", _v195_confidence_color(sample_count))
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
     super._v188_refresh(line_delta_cm, pace_delta_cm, visible)
