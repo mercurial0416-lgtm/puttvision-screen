@@ -31,8 +31,8 @@ func _process(delta: float) -> void:
         Vector2(9.0, 1.0)
     ]
     _v179_refresh()
-    if _v191_streak != 0 or _v192_trailing_failures("LINE") < 3 or not _v191_streak_label.text.contains("START STREAK") or not _v191_streak_label.text.contains("-0.5 m EASIER"):
-        push_error("Adaptive drill reset regression")
+    if _v191_streak != 0 or _v192_trailing_failures("LINE") < 3 or not _v191_streak_label.text.contains("RESET") or not _v191_streak_label.text.contains("LEFT") or not _v191_streak_label.text.contains("-0.5 m EASIER"):
+        push_error("Adaptive drill reset coaching regression")
         get_tree().quit(23)
         return
     if _v191_streak_label.modulate.r < 0.8:
@@ -48,8 +48,8 @@ func _process(delta: float) -> void:
         Vector2(8.0, 1.0)
     ]
     _v179_refresh()
-    if not _v191_streak_label.text.contains("START STREAK") or not _v191_streak_label.text.contains("BUILD"):
-        push_error("Adaptive drill rebuild regression")
+    if not _v191_streak_label.text.contains("RESET") or not _v191_streak_label.text.contains("LEFT") or not _v191_streak_label.text.contains("0/3"):
+        push_error("Adaptive drill rebuild coaching regression")
         get_tree().quit(23)
         return
 
