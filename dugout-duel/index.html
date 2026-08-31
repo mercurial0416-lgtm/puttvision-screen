@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#080b0e" />
+  <title>DUGOUT DUEL — 2인 야구 커리어</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main id="app">
+    <section class="shell home" id="homeView">
+      <div class="eyebrow">TWO PLAYER BASEBALL CAREER</div>
+      <h1>DUGOUT<br><span>DUEL</span></h1>
+      <p class="lede">고3부터 시작해서 드래프트, 프로, FA까지. 친구 한 명이랑 같은 시간선에서 커리어를 굴린다.</p>
+
+      <div class="mode-grid">
+        <button class="mode-card primary" id="createModeBtn">
+          <small>HOST</small><b>새 커리어 만들기</b><span>방 코드 생성 → 친구 초대</span>
+        </button>
+        <button class="mode-card" id="joinModeBtn">
+          <small>GUEST</small><b>친구 방 참가</b><span>초대 코드로 바로 입장</span>
+        </button>
+      </div>
+
+      <button class="resume hidden" id="resumeBtn">저장된 커리어 이어하기</button>
+      <div class="footnote">한 방 최대 2명 · 진행상태 서버 저장 · 상대가 접속 안 해도 방은 유지됨</div>
+    </section>
+
+    <section class="shell hidden" id="createView">
+      <button class="back" data-back>← BACK</button>
+      <div class="eyebrow" id="formEyebrow">PLAYER CREATION</div>
+      <h2 id="formTitle">네 선수부터 만들자.</h2>
+
+      <form id="playerForm" class="player-form">
+        <label>이름<input id="playerName" maxlength="16" placeholder="김야구" required /></label>
+        <div class="two-col">
+          <label>등번호<input id="playerNumber" type="number" min="0" max="99" value="7" required /></label>
+          <label>포지션<select id="playerPosition">
+            <option value="SS">유격수 SS</option><option value="2B">2루수 2B</option><option value="3B">3루수 3B</option>
+            <option value="1B">1루수 1B</option><option value="CF">중견수 CF</option><option value="RF">우익수 RF</option>
+            <option value="LF">좌익수 LF</option><option value="C">포수 C</option>
+          </select></label>
+        </div>
+
+        <div class="field-title">플레이스타일</div>
+        <div class="choice-grid" id="archetypeChoices">
+          <button type="button" class="choice selected" data-arch="balanced"><b>밸런스</b><span>약점 없이 시작</span></button>
+          <button type="button" class="choice" data-arch="contact"><b>교타자</b><span>컨택 + 수비</span></button>
+          <button type="button" class="choice" data-arch="slugger"><b>거포</b><span>파워 몰빵</span></button>
+          <button type="button" class="choice" data-arch="speed"><b>호타준족</b><span>주력 + 컨택</span></button>
+        </div>
+
+        <label>희망 구단<select id="wishTeam">
+          <option>서울 블레이즈</option><option>부산 마리너스</option><option>인천 웨이브</option><option>대전 볼츠</option>
+          <option>광주 타이탄스</option><option>대구 레드폭스</option><option>수원 나이츠</option><option>창원 레이븐스</option>
+        </select></label>
+
+        <div id="joinCodeWrap" class="hidden">
+          <label>친구가 준 방 코드<input id="joinCode" maxlength="10" autocomplete="off" placeholder="A1B2C3D4E5" /></label>
+        </div>
+
+        <button class="cta" type="submit" id="startBtn">방 만들기</button>
+      </form>
+    </section>
+
+    <section class="game hidden" id="gameView">
+      <header class="game-head">
+        <div><div class="eyebrow">PRIVATE LEAGUE</div><div class="room-line">ROOM <button id="roomCodeBtn"></button></div></div>
+        <div class="season-badge"><span id="seasonLabel">SEASON 1</span><b id="weekLabel">WEEK 1 / 12</b></div>
+      </header>
+
+      <section class="waiting hidden" id="waitingPanel">
+        <div class="pulse"></div><h2>친구 입장 대기중</h2>
+        <p>아래 코드를 보내면 바로 같은 커리어에 들어온다.</p>
+        <button class="invite-code" id="inviteCode"></button>
+        <button class="cta compact" id="shareBtn">초대 링크 복사</button>
+      </section>
+
+      <section id="matchPanel" class="hidden">
+        <div class="versus" id="versusCards"></div>
+
+        <section class="decision">
+          <div class="decision-head"><div><div class="eyebrow">THIS WEEK</div><h3>이번 주 집중 훈련</h3></div><div id="readyState" class="ready-state"></div></div>
+          <div class="action-grid" id="actionGrid">
+            <button data-action="contact"><b>컨택 집중</b><span>CON +2 · 체력 -8</span></button>
+            <button data-action="power"><b>장타 훈련</b><span>POW +2 · 체력 -10</span></button>
+            <button data-action="discipline"><b>선구안 훈련</b><span>DISC +2 · 체력 -6</span></button>
+            <button data-action="speed"><b>주루·수비</b><span>SPD +2 · DEF +1</span></button>
+            <button data-action="recovery"><b>휴식</b><span>컨디션 +22</span></button>
+          </div>
+          <p class="lock-note">둘 다 선택하면 서버가 그 주 결과를 동시에 계산한다. 먼저 고른 내용은 상대에게 안 보임.</p>
+        </section>
+
+        <section class="feed-card"><div class="eyebrow">LEAGUE FEED</div><div id="feed"></div></section>
+      </section>
+
+      <button class="ghost-danger" id="leaveBtn">이 기기에서 저장 지우기</button>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
