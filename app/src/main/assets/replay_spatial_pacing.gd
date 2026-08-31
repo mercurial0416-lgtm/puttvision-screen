@@ -16,6 +16,11 @@ func _replay_spatial_valid_points(points: Array) -> Array[Vector2]:
             valid.append(point)
     return valid
 
+func _v175_trail_heading(points: Array, progress: float) -> Vector2:
+    var valid_points := _replay_spatial_valid_points(points)
+    var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
+    return super._v175_trail_heading(valid_points, p)
+
 func _v175_trail_point(points: Array, progress: float) -> Vector2:
     var valid_points := _replay_spatial_valid_points(points)
     if valid_points.is_empty():
