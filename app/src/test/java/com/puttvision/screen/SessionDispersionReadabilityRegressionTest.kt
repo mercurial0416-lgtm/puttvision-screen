@@ -14,7 +14,7 @@ class SessionDispersionReadabilityRegressionTest {
 
     @Test
     fun averagesUseSemanticDirectionsInsteadOfSignedNumbers() {
-        val source = asset("session_dispersion_readability.gd")
+        val source = asset("address_relief_camera.gd")
         assertTrue(source.contains("CENTER 0 cm"))
         assertTrue(source.contains("R %.0f cm"))
         assertTrue(source.contains("L %.0f cm"))
@@ -27,7 +27,7 @@ class SessionDispersionReadabilityRegressionTest {
 
     @Test
     fun newestRepIsEmphasizedForEveryPartialHistorySize() {
-        val source = asset("session_dispersion_readability.gd")
+        val source = asset("address_relief_camera.gd")
         assertTrue(source.contains("var active_count := mini(_v179_samples.size(), _v179_points.size())"))
         assertTrue(source.contains("var latest := index == active_count - 1"))
         assertTrue(source.contains("SESSION_DISPERSION_RECENT_SIZE if latest else SESSION_DISPERSION_HISTORY_SIZE"))
@@ -36,10 +36,10 @@ class SessionDispersionReadabilityRegressionTest {
     }
 
     @Test
-    fun productionAndRenderedPreviewRouteThroughReadabilityLayer() {
+    fun productionKeepsEstablishedTvRootAndPreviewExercisesReadability() {
         val tvScene = asset("v143_tv.tscn")
         val previewScene = asset("v143_preview.tscn")
-        assertTrue(tvScene.contains("res://session_dispersion_readability.gd"))
+        assertTrue(tvScene.contains("res://address_relief_camera.gd"))
         assertTrue(previewScene.contains("res://session_dispersion_readability_preview.gd"))
         val preview = asset("session_dispersion_readability_preview.gd")
         assertTrue(preview.contains("SESSION_DISPERSION_READABILITY_OK=1"))
@@ -48,7 +48,7 @@ class SessionDispersionReadabilityRegressionTest {
 
     @Test
     fun presentationPolishCannotMutateAuthoritativePuttingInputs() {
-        for (path in listOf("session_dispersion_readability.gd", "session_dispersion_readability_preview.gd")) {
+        for (path in listOf("address_relief_camera.gd", "session_dispersion_readability_preview.gd")) {
             val source = asset(path)
             assertFalse(source.contains("GreenTerrain.set"))
             assertFalse(source.contains("GreenReadAdvisor.set"))
