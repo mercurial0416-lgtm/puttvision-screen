@@ -25,9 +25,14 @@ func _v191_copy(streak: int, axis: String) -> String:
         return "PRESSURE LADDER  ·  ONE MORE  ·  2/3"
     if streak == 1:
         return "PRESSURE LADDER  ·  HOLD IT  ·  1/3"
+
+    # v191 owns the actionable endpoint correction. Keep it visible in the production override
+    # instead of replacing it with generic START STREAK copy. The adaptive distance suggestion is
+    # appended only after repeated misses, so coaching remains specific without touching physics.
+    var correction := _v191_reset_coaching(axis)
     if _v192_trailing_failures(axis) >= V192_RESET_FAILURES:
-        return "START STREAK  ·  -0.5 m EASIER"
-    return "START STREAK  ·  BUILD  ·  0/3"
+        return "PRESSURE LADDER  ·  RESET  ·  %s  ·  -0.5 m EASIER" % correction
+    return "PRESSURE LADDER  ·  RESET  ·  %s  ·  0/3" % correction
 
 func _v191_refresh() -> void:
     super._v191_refresh()
