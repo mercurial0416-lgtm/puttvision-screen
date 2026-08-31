@@ -29,6 +29,8 @@ const V197_RESULT_Z_INDEX := 2
 const V197_CORRECTION_Z_INDEX := 1
 const V197_CORRECTION_MARGIN_CM := 1.0
 const V197_WINDOW_EPSILON_CM := 0.01
+const V197_CORRECTION_CUE_MAX_PX := 18.0
+const V197_DIRECTION_EPSILON := 0.0001
 
 func _v197_window_radius_px() -> Vector2:
     return Vector2(
@@ -84,6 +86,44 @@ func _v197_correction_text(line_delta_cm: float, pace_delta_cm: float) -> String
     if absf(correction.y) > V197_WINDOW_EPSILON_CM:
         parts.append("SHORT %.0f" % absf(correction.y) if correction.y < 0.0 else "LONG %.0f" % absf(correction.y))
     return "FIX  %s" % "  ·  ".join(parts)
+
+func _v197_correction_screen_delta(line_delta_cm: float, pace_delta_cm: float, target_delta: Vector2) -> Vector2:
+    # Convert the raw coaching correction into SHOT MAP screen-space before either endpoint is
+    # radially clipped. This preserves the correction's semantic left/right and long/short direction.
+    return Vector2(
+        (target_delta.x - line_delta_cm) / V188_LINE_WINDOW_CM,
+        -(target_delta.y - pace_delta_cm) / V188_PACE_WINDOW_CM
+    )
+
+func _v197_component_direction_matches(mapped_delta: float, truthful_delta: float) -> bool:
+    if absf(truthful_delta) <= V197_DIRECTION_EPSILON:
+        return true
+    return mapped_delta * truthful_delta > 0.0
+
+func _v197_correction_visual_target(line_delta_cm: float, pace_delta_cm: float, target_delta: Vector2, start: Vector2) -> Vector2:
+    var mapped_target := _v188_point(target_delta.x, target_delta.y)
+    var raw_normalized := _v188_normalized_miss(line_delta_cm, pace_delta_cm)
+    if raw_normalized.length() <= 1.0:
+        return mapped_target
+
+    var truthful_delta := _v197_correction_screen_delta(line_delta_cm, pace_delta_cm, target_delta)
+    var mapped_delta := mapped_target - start
+    if _v197_component_direction_matches(mapped_delta.x, truthful_delta.x) and _v197_component_direction_matches(mapped_delta.y, truthful_delta.y):
+        return mapped_target
+    if truthful_delta.length_squared() <= V197_DIRECTION_EPSILON:
+        return mapped_target
+
+    # Off-scale result points are radially clipped to the circle. Connecting that clipped point to
+    # the independently mapped make-window target can reverse one visual component (for example the
+    # label says FIX L while the arrow points right). In that case draw a short, bounded cue in the
+    # actual correction direction. Clamp the cue to the inward chord so it remains inside the map.
+    var direction := truthful_delta.normalized()
+    var from_center := start - V188_CENTER
+    var inward_chord_px := maxf(0.0, -2.0 * from_center.dot(direction))
+    var cue_px := minf(V197_CORRECTION_CUE_MAX_PX, inward_chord_px * 0.45)
+    if cue_px < 2.0:
+        return start
+    return start + direction * cue_px
 
 func _v197_correction_arrow(start: Vector2, target: Vector2) -> PackedVector2Array:
     var delta := target - start
@@ -177,7 +217,7 @@ func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) ->
 
     var target_delta := _v197_correction_target(line_delta_cm, pace_delta_cm)
     var start := _v188_point(line_delta_cm, pace_delta_cm)
-    var target := _v188_point(target_delta.x, target_delta.y)
+    var target := _v197_correction_visual_target(line_delta_cm, pace_delta_cm, target_delta, start)
     if _v197_correction_line != null:
         _v197_correction_line.points = PackedVector2Array([start, target])
         _v197_correction_line.visible = start.distance_to(target) >= 2.0
