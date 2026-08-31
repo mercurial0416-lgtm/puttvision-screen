@@ -91,7 +91,11 @@ func _relock_live_break_launch(s: Dictionary, velocity: Vector2) -> void:
     # Rebuild presentation telemetry from the first trustworthy launch vector while preserving the
     # already accumulated roll distance. This only repairs HUD orientation; no physics/read/scoring
     # state is modified.
-    _live_curve_origin = Vector2(float(s.get("startX", 0.0)), float(s.get("startY", 0.0)))
+    # Delayed velocity frames are not guaranteed to repeat startX/startY. Preserve the origin that
+    # the inherited launch frame already established unless both coordinates are explicitly present;
+    # otherwise defaulting missing values to zero would rotate a correct axis around a fake origin.
+    if s.has("startX") and s.has("startY"):
+        _live_curve_origin = Vector2(float(s.get("startX", 0.0)), float(s.get("startY", 0.0)))
     _live_curve_forward = velocity.normalized()
     _live_curve_launch_speed = velocity.length()
     _live_curve_peak_cm = 0.0
