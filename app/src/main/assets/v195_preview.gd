@@ -31,7 +31,7 @@ func _process(delta: float) -> void:
         push_error("Practice bias vector geometry regression")
         get_tree().quit(26)
         return
-    if _v195_bias_label.text != "BIAS R 8 CM · LONG 19 CM":
+    if _v195_bias_label.text != "EARLY BIAS · R 8 CM · LONG 19 CM":
         push_error("Practice bias quantitative classification regression: %s" % _v195_bias_label.text)
         get_tree().quit(26)
         return
@@ -39,7 +39,7 @@ func _process(delta: float) -> void:
     _v179_samples = [Vector2(0.5, 2.0), Vector2(-0.5, -2.0), Vector2(0.2, 1.0)]
     _v188_refresh(0.2, 1.0, true)
     _v179_refresh()
-    if _v195_bias_label.text != "BIAS CENTER · PACE OK":
+    if _v195_bias_label.text != "EARLY BIAS · CENTER · PACE OK":
         push_error("Practice bias deadband regression: %s" % _v195_bias_label.text)
         get_tree().quit(26)
         return
@@ -55,7 +55,7 @@ func _process(delta: float) -> void:
     ]
     _v188_refresh(-30.0, -70.0, true)
     _v179_refresh()
-    if _v195_bias_label.text != "BIAS R 5 CM · LONG 12 CM":
+    if _v195_bias_label.text != "STABLE BIAS · R 5 CM · LONG 12 CM":
         push_error("Practice bias outlier robustness regression: %s" % _v195_bias_label.text)
         get_tree().quit(26)
         return
