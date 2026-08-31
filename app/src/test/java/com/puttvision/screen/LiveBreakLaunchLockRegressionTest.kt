@@ -40,4 +40,14 @@ class LiveBreakLaunchLockRegressionTest {
         assertTrue(script.contains("is_finite(velocity.x) and is_finite(velocity.y)"))
         assertTrue(script.contains("velocity.length_squared() >= LIVE_LAUNCH_LOCK_MIN_SPEED_MPS * LIVE_LAUNCH_LOCK_MIN_SPEED_MPS"))
     }
+
+    @Test
+    fun rollThatNeverGetsLaunchLockCannotReusePreviousShotAxisAtFinish() {
+        val script = asset("replay_timeline_camera_truth.gd")
+        assertTrue(script.contains("var launch_lock_was_pending := _live_launch_lock_pending"))
+        assertTrue(script.contains("if launch_lock_was_pending:\n            _finalize_unlocked_live_break()"))
+        assertTrue(script.contains("_live_curve_value.text = \"REST --\""))
+        assertTrue(script.contains("_live_curve_trace.clear_points()"))
+        assertTrue(script.contains("Never turn that stale state into a"))
+    }
 }
