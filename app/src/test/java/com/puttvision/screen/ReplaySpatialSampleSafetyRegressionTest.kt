@@ -25,6 +25,15 @@ class ReplaySpatialSampleSafetyRegressionTest {
     }
 
     @Test
+    fun replayHeadingUsesTheSameSanitizedTrail() {
+        val production = asset("replay_spatial_pacing.gd")
+
+        assertTrue(production.contains("func _v175_trail_heading(points: Array, progress: float) -> Vector2:"))
+        assertTrue(production.contains("return super._v175_trail_heading(valid_points, p)"))
+        assertTrue(production.contains("var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0"))
+    }
+
+    @Test
     fun replaySampleSafetyRemainsPresentationOnly() {
         val production = asset("replay_spatial_pacing.gd")
 
