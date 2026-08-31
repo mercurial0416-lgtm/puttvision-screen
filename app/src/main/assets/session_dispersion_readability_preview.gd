@@ -41,7 +41,11 @@ func _v179_refresh() -> void:
 
 func _process(delta: float) -> void:
     super._process(delta)
-    if _session_dispersion_readability_checked or _preview_frames < 24:
+    if _session_dispersion_readability_checked:
+        if _v179_panel != null:
+            _v179_panel.visible = true
+        return
+    if _preview_frames < 24:
         return
     _session_dispersion_readability_checked = true
 
