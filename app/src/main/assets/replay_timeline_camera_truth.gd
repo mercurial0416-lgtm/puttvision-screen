@@ -106,6 +106,18 @@ func _relock_live_break_launch(s: Dictionary, velocity: Vector2) -> void:
     if _live_curve_trace != null:
         _live_curve_trace.clear_points()
 
+    # The relock frame can also omit ballX/ballY. The old fallback turned that absence into (0, 0),
+    # immediately drawing a fabricated break sample and possibly a huge false PEAK. Lock the launch
+    # axis now, but keep telemetry neutral until a real ball coordinate arrives on a later frame.
+    if not s.has("ballX") or not s.has("ballY"):
+        if _live_curve_value != null:
+            _live_curve_value.text = "TRACKING"
+        if _live_curve_peak_label != null:
+            _live_curve_peak_label.text = "PEAK --"
+        if _live_curve_pace_label != null:
+            _live_curve_pace_label.text = "PACE --"
+        return
+
     var ball_pos := Vector2(float(s.get("ballX", 0.0)), float(s.get("ballY", 0.0)))
     var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
     var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
