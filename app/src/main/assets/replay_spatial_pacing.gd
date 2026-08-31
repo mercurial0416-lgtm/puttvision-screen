@@ -8,12 +8,16 @@ const REPLAY_SPATIAL_EPSILON := 0.0001
 
 func _replay_spatial_valid_points(points: Array) -> Array[Vector2]:
     var valid: Array[Vector2] = []
+    var epsilon_sq := REPLAY_SPATIAL_EPSILON * REPLAY_SPATIAL_EPSILON
     for value in points:
         if typeof(value) != TYPE_VECTOR2:
             continue
         var point := value as Vector2
-        if point.is_finite():
-            valid.append(point)
+        if not point.is_finite():
+            continue
+        if not valid.is_empty() and valid[valid.size() - 1].distance_squared_to(point) <= epsilon_sq:
+            continue
+        valid.append(point)
     return valid
 
 func _v175_trail_heading(points: Array, progress: float) -> Vector2:

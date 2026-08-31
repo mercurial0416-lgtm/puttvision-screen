@@ -19,9 +19,18 @@ class ReplaySpatialSampleSafetyRegressionTest {
         assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
         assertTrue(production.contains("func _replay_spatial_valid_points(points: Array) -> Array[Vector2]:"))
         assertTrue(production.contains("typeof(value) != TYPE_VECTOR2"))
-        assertTrue(production.contains("point.is_finite()"))
+        assertTrue(production.contains("if not point.is_finite():"))
         assertTrue(production.contains("var valid_points := _replay_spatial_valid_points(points)"))
         assertTrue(production.contains("if valid_points.is_empty():\n        return Vector2.ZERO"))
+    }
+
+    @Test
+    fun replayTrailCollapsesDegenerateConsecutiveSamples() {
+        val production = asset("replay_spatial_pacing.gd")
+
+        assertTrue(production.contains("var epsilon_sq := REPLAY_SPATIAL_EPSILON * REPLAY_SPATIAL_EPSILON"))
+        assertTrue(production.contains("distance_squared_to(point) <= epsilon_sq"))
+        assertTrue(production.contains("if not valid.is_empty() and valid[valid.size() - 1].distance_squared_to(point) <= epsilon_sq:\n            continue"))
     }
 
     @Test
