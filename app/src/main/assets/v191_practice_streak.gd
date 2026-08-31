@@ -30,6 +30,32 @@ func _v191_trailing_streak(axis: String) -> int:
         streak += 1
     return mini(streak, V191_ADVANCE_STREAK)
 
+func _v191_reset_coaching(axis: String) -> String:
+    if axis == "BUILDING" or _v179_samples.is_empty():
+        return "START STREAK"
+    var sample := _v179_samples[_v179_samples.size() - 1]
+    if _v191_sample_in_window(sample, axis):
+        return "START STREAK"
+
+    # Show the minimum endpoint correction needed to re-enter the active target window. This is
+    # intentionally derived only from already-captured presentation telemetry; it never modifies
+    # aim, physics, terrain, advisor output, scoring, or shot capture.
+    var corrections: Array[String] = []
+    if axis == "LINE" or axis == "BOTH":
+        var line_excess := absf(sample.x) - V190_LINE_TOLERANCE_CM
+        if line_excess > 0.0:
+            var direction := "LEFT" if sample.x > 0.0 else "RIGHT"
+            corrections.append("%s %dcm" % [direction, maxi(1, int(ceil(line_excess)))])
+    if axis == "PACE" or axis == "BOTH":
+        var pace_excess := absf(sample.y) - V190_PACE_TOLERANCE_CM
+        if pace_excess > 0.0:
+            var action := "SHORTEN" if sample.y > 0.0 else "ADD"
+            corrections.append("%s %dcm" % [action, maxi(1, int(ceil(pace_excess)))])
+
+    if corrections.is_empty():
+        return "START STREAK"
+    return " · ".join(corrections)
+
 func _v191_copy(streak: int, axis: String) -> String:
     if axis == "BUILDING":
         return "PRESSURE LADDER  ·  BUILDING"
@@ -39,7 +65,7 @@ func _v191_copy(streak: int, axis: String) -> String:
         return "PRESSURE LADDER  ·  ONE MORE"
     if streak == 1:
         return "PRESSURE LADDER  ·  HOLD IT"
-    return "PRESSURE LADDER  ·  START STREAK"
+    return "PRESSURE LADDER  ·  RESET  ·  %s" % _v191_reset_coaching(axis)
 
 func _v191_base_target_color(axis: String) -> Color:
     # Keep this aligned with v190's normal target-window palette. The pressure ladder owns its
@@ -65,7 +91,7 @@ func _build_hud() -> void:
     _v191_streak_label = _v174_text(
         _v191_bar,
         Vector2(18, 5),
-        Vector2(270, 18),
+        Vector2(300, 18),
         "PRESSURE LADDER  ·  BUILDING",
         9,
         Color(0.76, 0.88, 0.84, 0.96)
