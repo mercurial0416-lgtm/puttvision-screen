@@ -44,8 +44,9 @@ class LiveBreakLaunchLockRegressionTest {
     @Test
     fun delayedVelocityFrameWithoutStartCoordinatesPreservesEstablishedOrigin() {
         val script = asset("replay_timeline_camera_truth.gd")
-        assertTrue(script.contains("if s.has(\"startX\") and s.has(\"startY\"):\n        _live_curve_origin = Vector2"))
-        assertFalse(script.contains("_live_curve_origin = Vector2(float(s.get(\"startX\", 0.0)), float(s.get(\"startY\", 0.0)))\n    _live_curve_forward"))
+        val guard = "if s.has(\"startX\") and s.has(\"startY\"):\n        _live_curve_origin = Vector2"
+        assertTrue(script.contains(guard))
+        assertTrue(script.indexOf(guard) < script.indexOf("_live_curve_forward = velocity.normalized()"))
         assertTrue(script.contains("Delayed velocity frames are not guaranteed to repeat startX/startY"))
         assertTrue(script.contains("otherwise defaulting missing values to zero would rotate a correct axis around a fake origin"))
     }
