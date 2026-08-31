@@ -50,6 +50,16 @@ class PracticePressureLadderStateRegressionTest {
     }
 
     @Test
+    fun resetCoachingOwnsFullFooterWidthWithoutMeterCollision() {
+        val source = asset("v191_practice_streak.gd")
+        assertTrue(source.contains("const V191_COPY_COMPACT_WIDTH := 300.0"))
+        assertTrue(source.contains("const V191_COPY_RESET_WIDTH := 524.0"))
+        assertTrue(source.contains("_v191_streak_label.size.x = V191_COPY_RESET_WIDTH if reset_focus else V191_COPY_COMPACT_WIDTH"))
+        assertTrue(source.contains("segment.visible = not reset_focus"))
+        assertTrue(source.contains("axis != \"BUILDING\" and _v191_streak == 0 and not _v179_samples.is_empty()"))
+    }
+
+    @Test
     fun productionDrillOverridePreservesActionableResetCoaching() {
         val source = asset("v192_drill_progression.gd")
         assertTrue(source.contains("var correction := _v191_reset_coaching(axis)"))
