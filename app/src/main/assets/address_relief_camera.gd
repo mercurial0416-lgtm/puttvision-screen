@@ -12,6 +12,7 @@ const ADDRESS_LOOK_FRACTION := 0.46
 const ADDRESS_LOOK_LIFT := 0.065
 const ADDRESS_FOV_NEAR := 42.5
 const ADDRESS_FOV_FAR := 38.0
+const ADDRESS_FOV_RESPONSE := 5.0
 const ADDRESS_RELIEF_SAMPLES := 5
 const ADDRESS_RELIEF_FOCUS_BLEND := 0.58
 
@@ -160,6 +161,14 @@ func _v179_refresh() -> void:
         _v179_pace_mean_label.text = _session_pace_average_text(_v179_mean(1))
     _session_apply_rep_hierarchy()
 
+func _address_damping_alpha(response_rate: float, delta: float) -> float:
+    # Exponential damping is invariant to frame slicing: two 1/120s frames converge by the same
+    # amount as one 1/60s frame. That keeps camera position, look target and lens breathing visually
+    # consistent when Forward Mobile or a TV briefly changes frame cadence.
+    if not is_finite(response_rate) or response_rate <= 0.0 or not is_finite(delta) or delta <= 0.0:
+        return 0.0
+    return 1.0 - exp(-delta * response_rate)
+
 func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_to_cup: float, immediate: bool, delta: float) -> void:
     # Never fight inherited rolling/cup/replay cameras.
     if running or phase != "NONE" or (_v171_replay_remaining > 0.0 and _v171_replay_actual.size() >= 2):
@@ -170,10 +179,11 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     var desired_pos: Vector3 = plan["position"]
     var desired_look: Vector3 = plan["look"]
     var desired_fov: float = float(plan["fov"])
-    var pos_alpha := 1.0 if immediate else 1.0 - exp(-delta * 5.8)
-    var look_alpha := 1.0 if immediate else 1.0 - exp(-delta * 6.6)
+    var pos_alpha := 1.0 if immediate else _address_damping_alpha(5.8, delta)
+    var look_alpha := 1.0 if immediate else _address_damping_alpha(6.6, delta)
+    var fov_alpha := 1.0 if immediate else _address_damping_alpha(ADDRESS_FOV_RESPONSE, delta)
     camera_pos = camera_pos.lerp(desired_pos, pos_alpha)
     camera_look = camera_look.lerp(desired_look, look_alpha)
     camera.position = camera_pos
-    camera.fov = lerpf(camera.fov, desired_fov, 1.0 if immediate else minf(1.0, delta * 5.0))
+    camera.fov = lerpf(camera.fov, desired_fov, fov_alpha)
     camera.look_at(camera_look, Vector3.UP)
