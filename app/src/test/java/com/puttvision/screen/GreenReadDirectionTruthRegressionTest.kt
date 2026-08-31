@@ -29,10 +29,12 @@ class GreenReadDirectionTruthRegressionTest {
     }
 
     @Test
-    fun correctionStaysPresentationOnlyAndIsLiveSceneRoot() {
+    fun correctionStaysPresentationOnlyAndIsInLiveSceneInheritance() {
         val script = asset("green_read_direction_truth.gd")
         val scene = asset("v143_tv.tscn")
-        assertTrue(scene.contains("res://green_read_direction_truth.gd"))
+        val live = asset("replay_timeline_camera_truth.gd")
+        assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
+        assertTrue(live.contains("extends \"res://green_read_direction_truth.gd\""))
         assertTrue(script.contains("GreenTerrain and GreenReadAdvisor remain authoritative"))
         assertFalse(script.contains("GreenTerrain.set"))
         assertFalse(script.contains("GreenReadAdvisor.set"))
