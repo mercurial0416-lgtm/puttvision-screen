@@ -14,26 +14,26 @@ class SessionDispersionLatestShotRegressionTest {
 
     @Test
     fun newestVisiblePracticeRepOwnsTheHighlightBeforeHistoryIsFull() {
-        val polish = asset("session_dispersion_latest_shot.gd")
+        val production = asset("replay_timeline_camera_truth.gd")
         val scene = asset("v143_tv.tscn")
 
-        assertTrue(scene.contains("res://session_dispersion_latest_shot.gd"))
-        assertTrue(polish.contains("var visible_count := mini(_v179_samples.size(), _v179_points.size())"))
-        assertTrue(polish.contains("var latest_index := visible_count - 1"))
-        assertTrue(polish.contains("index == latest_index and latest_index >= 0"))
-        assertFalse(polish.contains("index == V179_HISTORY - 1"))
+        assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
+        assertTrue(production.contains("var visible_count := mini(_v179_samples.size(), _v179_points.size())"))
+        assertTrue(production.contains("var latest_index := visible_count - 1"))
+        assertTrue(production.contains("index == latest_index and latest_index >= 0"))
+        assertFalse(production.contains("index == V179_HISTORY - 1"))
     }
 
     @Test
     fun latestShotPolishStaysPresentationOnlyAndBounded() {
-        val polish = asset("session_dispersion_latest_shot.gd")
+        val production = asset("replay_timeline_camera_truth.gd")
 
-        assertTrue(polish.contains("extends \"res://replay_timeline_camera_truth.gd\""))
-        assertTrue(polish.contains("for index in range(_v179_points.size())"))
-        assertFalse(polish.contains("GreenTerrain.set"))
-        assertFalse(polish.contains("GreenReadAdvisor.set"))
-        assertFalse(polish.contains("ballVelocity ="))
-        assertFalse(polish.contains("readLineDeltaCm ="))
-        assertFalse(polish.contains("paceDeltaCm ="))
+        assertTrue(production.contains("extends \"res://green_read_direction_truth.gd\""))
+        assertTrue(production.contains("for index in range(_v179_points.size())"))
+        assertFalse(production.contains("GreenTerrain.set"))
+        assertFalse(production.contains("GreenReadAdvisor.set"))
+        assertFalse(production.contains("ballVelocity ="))
+        assertFalse(production.contains("readLineDeltaCm ="))
+        assertFalse(production.contains("paceDeltaCm ="))
     }
 }
