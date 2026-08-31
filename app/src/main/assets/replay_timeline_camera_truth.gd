@@ -6,8 +6,11 @@ extends "res://green_read_direction_truth.gd"
 # Android V135-V137, GreenTerrain and GreenReadAdvisor remain authoritative and untouched.
 
 const LIVE_FINISH_DISTANCE_EPS_M := 0.0005
+const LIVE_LAUNCH_LOCK_MIN_SPEED_MPS := 0.03
 const SESSION_HISTORY_DOT_COLOR := Color("#76d7b6")
 const SESSION_LATEST_DOT_COLOR := Color("#f4dda0")
+
+var _live_launch_lock_pending := false
 
 func _focus_replay_stage(progress: float) -> String:
     var p := clampf(progress, 0.0, 1.0)
@@ -39,6 +42,61 @@ func _live_finish_readout(cross_track_cm: float) -> String:
     if absf(cross_track_cm) < 0.05:
         return "REST CENTER"
     return "REST %s %.1f cm" % ["R" if cross_track_cm > 0.0 else "L", absf(cross_track_cm)]
+
+func _live_launch_velocity(s: Dictionary) -> Vector2:
+    return Vector2(float(s.get("vx", 0.0)), float(s.get("vy", 0.0)))
+
+func _live_launch_velocity_is_trustworthy(velocity: Vector2) -> bool:
+    return is_finite(velocity.x) and is_finite(velocity.y) and velocity.length_squared() >= LIVE_LAUNCH_LOCK_MIN_SPEED_MPS * LIVE_LAUNCH_LOCK_MIN_SPEED_MPS
+
+func _suppress_unlocked_live_break() -> void:
+    # A bridge can publish running=true one frame before launch velocity is populated. Do not let
+    # that transient frame establish Vector2.UP as the shot axis and poison left/right telemetry for
+    # the entire roll. Keep the card neutral until a real launch vector arrives.
+    _live_curve_peak_cm = 0.0
+    _live_curve_peak_signed_cm = 0.0
+    _live_curve_launch_speed = 0.0
+    _live_curve_history.clear()
+    _live_curve_distance_history.clear()
+    _live_curve_has_trace_pos = false
+    if _live_curve_trace != null:
+        _live_curve_trace.clear_points()
+    if _live_curve_value != null:
+        _live_curve_value.text = "TRACKING"
+    if _live_curve_peak_label != null:
+        _live_curve_peak_label.text = "PEAK --"
+    if _live_curve_pace_label != null:
+        _live_curve_pace_label.text = "PACE --"
+
+func _relock_live_break_launch(s: Dictionary, velocity: Vector2) -> void:
+    # Rebuild presentation telemetry from the first trustworthy launch vector while preserving the
+    # already accumulated roll distance. This only repairs HUD orientation; no physics/read/scoring
+    # state is modified.
+    _live_curve_origin = Vector2(float(s.get("startX", 0.0)), float(s.get("startY", 0.0)))
+    _live_curve_forward = velocity.normalized()
+    _live_curve_launch_speed = velocity.length()
+    _live_curve_peak_cm = 0.0
+    _live_curve_peak_signed_cm = 0.0
+    _live_curve_history.clear()
+    _live_curve_distance_history.clear()
+    _live_curve_has_trace_pos = false
+    if _live_curve_trace != null:
+        _live_curve_trace.clear_points()
+
+    var ball_pos := Vector2(float(s.get("ballX", 0.0)), float(s.get("ballY", 0.0)))
+    var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
+    var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
+    _live_curve_peak_cm = absf(cross_track_cm)
+    _live_curve_peak_signed_cm = cross_track_cm
+    _live_trace_push(cross_track_cm, _live_curve_travel_m)
+    _live_curve_last_trace_pos = ball_pos
+    _live_curve_has_trace_pos = true
+    if _live_curve_value != null:
+        _live_curve_value.text = _live_curve_readout(cross_track_cm)
+    if _live_curve_peak_label != null:
+        _live_curve_peak_label.text = _live_peak_readout(_live_curve_peak_signed_cm)
+    if _live_curve_pace_label != null:
+        _live_curve_pace_label.text = _live_pace_readout(velocity.length(), _live_curve_launch_speed)
 
 func _finalize_live_roll_truth(s: Dictionary) -> void:
     if not s.has("ballX") or not s.has("ballY"):
@@ -80,6 +138,21 @@ func _v179_refresh() -> void:
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     var was_running := _live_curve_was_running
     var running := bool(s.get("running", false))
+    var launch_velocity := _live_launch_velocity(s)
     super._apply_snapshot(s, immediate, delta)
+
+    if running and not was_running:
+        _live_launch_lock_pending = not _live_launch_velocity_is_trustworthy(launch_velocity)
+        if _live_launch_lock_pending:
+            _suppress_unlocked_live_break()
+    elif running and _live_launch_lock_pending:
+        if _live_launch_velocity_is_trustworthy(launch_velocity):
+            _relock_live_break_launch(s, launch_velocity)
+            _live_launch_lock_pending = false
+        else:
+            _suppress_unlocked_live_break()
+    elif not running:
+        _live_launch_lock_pending = false
+
     if was_running and not running:
         _finalize_live_roll_truth(s)
