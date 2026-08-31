@@ -10,6 +10,8 @@ var _v191_segments: Array[ColorRect] = []
 var _v191_streak := 0
 
 const V191_ADVANCE_STREAK := 3
+const V191_COPY_COMPACT_WIDTH := 300.0
+const V191_COPY_RESET_WIDTH := 524.0
 
 func _v191_sample_in_window(sample: Vector2, axis: String) -> bool:
     var line_ok := absf(sample.x) <= V190_LINE_TOLERANCE_CM
@@ -73,6 +75,16 @@ func _v191_base_target_color(axis: String) -> Color:
     # directly by inherited drill/presentation layers rather than relying on a parent refresh first.
     return Color(0.96, 0.86, 0.49, 0.13) if axis == "BOTH" else Color(0.46, 0.84, 0.71, 0.11)
 
+func _v191_layout_copy(reset_focus: bool) -> void:
+    if _v191_streak_label == null:
+        return
+    # Reset coaching can contain both line + pace corrections and the adaptive easier-distance cue.
+    # Empty progress pips are low-value in that state, so yield their space to the actionable copy.
+    # As soon as the streak restarts, restore the compact label + three-step progress meter.
+    _v191_streak_label.size.x = V191_COPY_RESET_WIDTH if reset_focus else V191_COPY_COMPACT_WIDTH
+    for segment in _v191_segments:
+        segment.visible = not reset_focus
+
 func _build_hud() -> void:
     super._build_hud()
     var layer := get_node_or_null("V174BroadcastHUD") as CanvasLayer
@@ -91,7 +103,7 @@ func _build_hud() -> void:
     _v191_streak_label = _v174_text(
         _v191_bar,
         Vector2(18, 5),
-        Vector2(300, 18),
+        Vector2(V191_COPY_COMPACT_WIDTH, 18),
         "PRESSURE LADDER  ·  BUILDING",
         9,
         Color(0.76, 0.88, 0.84, 0.96)
@@ -119,6 +131,9 @@ func _v191_refresh() -> void:
     var axis := str(spec.get("axis", "BUILDING"))
     _v191_streak = _v191_trailing_streak(axis)
     _v191_streak_label.text = _v191_copy(_v191_streak, axis)
+
+    var reset_focus := axis != "BUILDING" and _v191_streak == 0 and not _v179_samples.is_empty()
+    _v191_layout_copy(reset_focus)
 
     var complete := _v191_streak >= V191_ADVANCE_STREAK
     for index in range(V191_ADVANCE_STREAK):
