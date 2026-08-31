@@ -9,6 +9,9 @@ var _v193_ghost_label: Label
 
 const V193_LINE_SCALE_CM := 9.0
 const V193_PACE_SCALE_CM := 22.0
+const V193_GHOST_COLOR := Color(0.46, 0.84, 0.72, 0.72)
+const V193_GHOST_LABEL_COLOR := Color(0.50, 0.78, 0.69, 0.88)
+const V193_OFFSCALE_COLOR := Color(1.00, 0.78, 0.36, 0.90)
 
 func _v193_best_prior_sample() -> Dictionary:
     if _v179_samples.size() < 2:
@@ -35,6 +38,18 @@ func _v193_diamond(radius: float) -> PackedVector2Array:
         Vector2(0.0, -radius)
     ])
 
+func _v193_edge_chevron(radius: float) -> PackedVector2Array:
+    # The chevron points outward after rotation so an off-scale prior rep cannot masquerade as a
+    # merely edge-of-window result. Keep it line-only and cheap for Forward Mobile rendering.
+    return PackedVector2Array([
+        Vector2(-radius * 0.62, -radius * 0.72),
+        Vector2(radius, 0.0),
+        Vector2(-radius * 0.62, radius * 0.72)
+    ])
+
+func _v193_map_extent(sample: Vector2) -> float:
+    return _v188_normalized_miss(sample.x, sample.y).length()
+
 func _build_hud() -> void:
     super._build_hud()
     if _v188_panel == null:
@@ -42,7 +57,7 @@ func _build_hud() -> void:
     _v193_ghost = Line2D.new()
     _v193_ghost.name = "BestPriorRepGhost"
     _v193_ghost.width = 1.8
-    _v193_ghost.default_color = Color(0.46, 0.84, 0.72, 0.72)
+    _v193_ghost.default_color = V193_GHOST_COLOR
     _v193_ghost.points = _v193_diamond(6.4)
     _v193_ghost.visible = false
     _v188_panel.add_child(_v193_ghost)
@@ -53,7 +68,7 @@ func _build_hud() -> void:
         Vector2(122, 10),
         "◇ BEST PRIOR",
         7,
-        Color(0.50, 0.78, 0.69, 0.88),
+        V193_GHOST_LABEL_COLOR,
         HORIZONTAL_ALIGNMENT_CENTER
     )
     _v193_ghost_label.visible = false
@@ -68,8 +83,27 @@ func _v193_refresh_ghost() -> void:
     _v193_ghost_label.visible = show
     if not show:
         return
+
     var sample: Vector2 = best.get("sample", Vector2.ZERO)
+    var normalized := _v188_normalized_miss(sample.x, sample.y)
+    var extent := normalized.length()
+    var offscale := extent > 1.0
     _v193_ghost.position = _v188_point(sample.x, sample.y)
+
+    if offscale:
+        _v193_ghost.points = _v193_edge_chevron(6.8)
+        _v193_ghost.rotation = normalized.angle()
+        _v193_ghost.width = 2.2
+        _v193_ghost.default_color = V193_OFFSCALE_COLOR
+        _v193_ghost_label.text = "BEST PRIOR · OUT %.1fx" % extent
+        _v193_ghost_label.add_theme_color_override("font_color", V193_OFFSCALE_COLOR)
+    else:
+        _v193_ghost.points = _v193_diamond(6.4)
+        _v193_ghost.rotation = 0.0
+        _v193_ghost.width = 1.8
+        _v193_ghost.default_color = V193_GHOST_COLOR
+        _v193_ghost_label.text = "◇ BEST PRIOR"
+        _v193_ghost_label.add_theme_color_override("font_color", V193_GHOST_LABEL_COLOR)
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
     super._v188_refresh(line_delta_cm, pace_delta_cm, visible)
