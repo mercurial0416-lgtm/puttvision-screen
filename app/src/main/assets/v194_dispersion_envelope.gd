@@ -11,6 +11,10 @@ var _v194_spread_label: Label
 const V194_MIN_SAMPLES := 3
 const V194_ENVELOPE_SEGMENTS := 28
 const V194_EDGE_INSET := 1.0
+const V194_SIGMA_SCALE := 1.35
+const V194_MIN_AXIS_PX := 5.0
+const V194_MAX_AXIS_PX := 34.0
+const V194_COVARIANCE_EPSILON := 0.0001
 
 func _v194_mean_sample() -> Vector2:
     if _v179_samples.is_empty():
@@ -30,12 +34,71 @@ func _v194_stddev(mean: Vector2) -> Vector2:
     var divisor := float(_v179_samples.size())
     return Vector2(sqrt(sum_sq.x / divisor), sqrt(sum_sq.y / divisor))
 
-func _v194_ellipse(rx: float, ry: float) -> PackedVector2Array:
+func _v194_covariance_pixels(mean: Vector2) -> Vector3:
+    # Work in the shot-map's normalized pixel space so line and pace contribute in the same visual
+    # units. The old axis-aligned ellipse discarded covariance, hiding diagonal patterns such as a
+    # repeatable push-long or pull-short miss even though the individual dots clearly showed it.
+    if _v179_samples.size() < 2:
+        return Vector3.ZERO
+    var xx := 0.0
+    var yy := 0.0
+    var xy := 0.0
+    for sample in _v179_samples:
+        var delta := sample - mean
+        var px := delta.x / V188_LINE_WINDOW_CM * V188_RADIUS
+        var py := -delta.y / V188_PACE_WINDOW_CM * V188_RADIUS
+        xx += px * px
+        yy += py * py
+        xy += px * py
+    var divisor := float(_v179_samples.size())
+    return Vector3(xx / divisor, yy / divisor, xy / divisor)
+
+func _v194_principal_axes(covariance: Vector3) -> Dictionary:
+    var xx := maxf(0.0, covariance.x)
+    var yy := maxf(0.0, covariance.y)
+    var xy := covariance.z
+    var discriminant := sqrt(maxf(0.0, (xx - yy) * (xx - yy) + 4.0 * xy * xy))
+    var major_variance := maxf(0.0, 0.5 * (xx + yy + discriminant))
+    var minor_variance := maxf(0.0, 0.5 * (xx + yy - discriminant))
+    var angle := 0.5 * atan2(2.0 * xy, xx - yy) if discriminant > V194_COVARIANCE_EPSILON else 0.0
+    return {
+        "major": clampf(sqrt(major_variance) * V194_SIGMA_SCALE, V194_MIN_AXIS_PX, V194_MAX_AXIS_PX),
+        "minor": clampf(sqrt(minor_variance) * V194_SIGMA_SCALE, V194_MIN_AXIS_PX, V194_MAX_AXIS_PX),
+        "angle": angle
+    }
+
+func _v194_oriented_ellipse(major: float, minor: float, angle: float) -> PackedVector2Array:
     var points := PackedVector2Array()
+    var major_axis := Vector2(cos(angle), sin(angle))
+    var minor_axis := Vector2(-major_axis.y, major_axis.x)
     for index in range(V194_ENVELOPE_SEGMENTS + 1):
-        var angle := TAU * float(index) / float(V194_ENVELOPE_SEGMENTS)
-        points.append(Vector2(cos(angle) * rx, sin(angle) * ry))
+        var phase := TAU * float(index) / float(V194_ENVELOPE_SEGMENTS)
+        points.append(major_axis * cos(phase) * major + minor_axis * sin(phase) * minor)
     return points
+
+func _v194_fit_envelope_to_plot(center: Vector2, points: PackedVector2Array) -> PackedVector2Array:
+    # Off-scale session centroids legitimately sit on the circular target rim. Requiring the entire
+    # envelope to stay inside that circle collapses it to zero there, so fit against the compact
+    # shot-map plot bounds instead. This preserves both the true centroid and covariance direction
+    # while preventing the rotated envelope from touching adjacent HUD content.
+    var plot_min := V188_CENTER - Vector2(V188_RADIUS, V188_RADIUS) + Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
+    var plot_max := V188_CENTER + Vector2(V188_RADIUS, V188_RADIUS) - Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
+    var scale := 1.0
+    for local_point in points:
+        if local_point.x > V194_COVARIANCE_EPSILON:
+            scale = minf(scale, maxf(0.0, (plot_max.x - center.x) / local_point.x))
+        elif local_point.x < -V194_COVARIANCE_EPSILON:
+            scale = minf(scale, maxf(0.0, (plot_min.x - center.x) / local_point.x))
+        if local_point.y > V194_COVARIANCE_EPSILON:
+            scale = minf(scale, maxf(0.0, (plot_max.y - center.y) / local_point.y))
+        elif local_point.y < -V194_COVARIANCE_EPSILON:
+            scale = minf(scale, maxf(0.0, (plot_min.y - center.y) / local_point.y))
+    if scale >= 0.9999:
+        return points
+    var fitted := PackedVector2Array()
+    for local_point in points:
+        fitted.append(local_point * scale)
+    return fitted
 
 func _v194_cross(radius: float) -> PackedVector2Array:
     return PackedVector2Array([
@@ -45,21 +108,24 @@ func _v194_cross(radius: float) -> PackedVector2Array:
     ])
 
 # Preserve the true session centroid while shrinking only the presentation envelope to the visible
-# shot-map plot. Without this guard, a biased group near an extreme line/pace edge could draw the
-# ellipse outside the target plot (and even nick the panel edge on the right).
+# shot-map plot. Covariance rotates the ellipse to match the actual miss pattern; edge fitting then
+# scales it uniformly without flattening that directional signal.
 func _v194_envelope_geometry(mean: Vector2, spread: Vector2) -> Dictionary:
     var center := _v188_point(mean.x, mean.y)
-    var desired_rx: float = clampf(spread.x / 30.0 * V188_RADIUS * 1.35, 5.0, 34.0)
-    var desired_ry: float = clampf(spread.y / 70.0 * V188_RADIUS * 1.35, 5.0, 34.0)
-    var plot_min := V188_CENTER - Vector2(V188_RADIUS, V188_RADIUS) + Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
-    var plot_max := V188_CENTER + Vector2(V188_RADIUS, V188_RADIUS) - Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
-    var available_x := maxf(0.0, minf(center.x - plot_min.x, plot_max.x - center.x))
-    var available_y := maxf(0.0, minf(center.y - plot_min.y, plot_max.y - center.y))
-    var radii := Vector2(minf(desired_rx, available_x), minf(desired_ry, available_y))
+    var axes := _v194_principal_axes(_v194_covariance_pixels(mean))
+    var raw_points := _v194_oriented_ellipse(float(axes["major"]), float(axes["minor"]), float(axes["angle"]))
+    var points := _v194_fit_envelope_to_plot(center, raw_points)
+    var max_radius := 0.0
+    for point in points:
+        max_radius = maxf(max_radius, point.length())
     return {
         "center": center,
-        "radii": radii,
-        "visible": radii.x > 0.5 and radii.y > 0.5
+        "points": points,
+        "angle": float(axes["angle"]),
+        "major": float(axes["major"]),
+        "minor": float(axes["minor"]),
+        "visible": points.size() == V194_ENVELOPE_SEGMENTS + 1 and max_radius > 0.5,
+        "spread": spread
     }
 
 func _build_hud() -> void:
@@ -109,11 +175,10 @@ func _v194_refresh_envelope() -> void:
     var spread := _v194_stddev(mean)
     var geometry := _v194_envelope_geometry(mean, spread)
     var center: Vector2 = geometry["center"]
-    var radii: Vector2 = geometry["radii"]
     _v194_envelope.visible = bool(geometry["visible"])
     _v194_envelope.position = center
     if _v194_envelope.visible:
-        _v194_envelope.points = _v194_ellipse(radii.x, radii.y)
+        _v194_envelope.points = geometry["points"]
     else:
         _v194_envelope.points = PackedVector2Array()
     _v194_centroid.position = center

@@ -43,8 +43,33 @@ func _process(delta: float) -> void:
         get_tree().quit(25)
         return
 
-    # A biased group used to let the statistical ellipse cross the visible shot-map plot boundary.
-    # Keep the true centroid but require every rendered envelope vertex to stay inside the plot.
+    # Correlated misses must rotate the grouping envelope instead of flattening their directional
+    # pattern into an axis-aligned oval. This is the visual signal a player needs to distinguish a
+    # repeatable push-long family from independent line and pace scatter.
+    _v179_samples = [
+        Vector2(-12.0, -28.0),
+        Vector2(-6.0, -14.0),
+        Vector2(0.0, 0.0),
+        Vector2(6.0, 14.0),
+        Vector2(12.0, 28.0)
+    ]
+    _v188_refresh(12.0, 28.0, true)
+    _v179_refresh()
+    var diagonal_mean := _v194_mean_sample()
+    var diagonal_geometry := _v194_envelope_geometry(diagonal_mean, _v194_stddev(diagonal_mean))
+    var diagonal_angle := absf(float(diagonal_geometry["angle"]))
+    if diagonal_angle < 0.20 or diagonal_angle > 1.35:
+        push_error("Session grouping covariance orientation regression")
+        get_tree().quit(25)
+        return
+    if float(diagonal_geometry["major"]) <= float(diagonal_geometry["minor"]) + 2.0:
+        push_error("Session grouping principal-axis regression")
+        get_tree().quit(25)
+        return
+
+    # A biased group may place its true centroid on the circular target rim. Keep that centroid and
+    # covariance direction visible while constraining the envelope to the compact plot rectangle so
+    # it cannot collide with adjacent HUD content.
     _v179_samples = [
         Vector2(20.0, 44.0),
         Vector2(24.0, 54.0),
@@ -67,7 +92,7 @@ func _process(delta: float) -> void:
     var plot_max := V188_CENTER + Vector2(V188_RADIUS, V188_RADIUS) - Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
     for local_point in _v194_envelope.points:
         var point := _v194_envelope.position + local_point
-        if point.x < plot_min.x - 0.01 or point.y < plot_min.y - 0.01 or point.x > plot_max.x + 0.01 or point.y > plot_max.y + 0.01:
+        if point.x < plot_min.x - 0.02 or point.y < plot_min.y - 0.02 or point.x > plot_max.x + 0.02 or point.y > plot_max.y + 0.02:
             push_error("Session grouping envelope escaped shot-map bounds")
             get_tree().quit(25)
             return
@@ -90,4 +115,5 @@ func _process(delta: float) -> void:
     _v188_refresh(3.0, 14.0, true)
     _v179_refresh()
     print("PRACTICE_DISPERSION_ENVELOPE_OK=1")
+    print("PRACTICE_DISPERSION_ORIENTATION_OK=1")
     print("PRACTICE_DISPERSION_ENVELOPE_EDGE_SAFE_OK=1")
