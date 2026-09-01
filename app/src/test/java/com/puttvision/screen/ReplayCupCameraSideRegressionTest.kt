@@ -27,9 +27,26 @@ class ReplayCupCameraSideRegressionTest {
     fun nearCenterFinishesKeepStableDefaultCameraSide() {
         val focus = asset("v180_replay_cup_focus.gd")
         val chooser = focus.substringAfter("func _v180_cup_camera_side_sign")
-            .substringBefore("\nfunc _v180_finish_verdict")
+            .substringBefore("\nfunc _v180_sightline_lift")
         assertTrue(chooser.contains("absf(lateral_m) <= V180_CAMERA_SIDE_DEADBAND_M"))
         assertTrue(chooser.contains("return 1.0"))
+    }
+
+    @Test
+    fun cupFocusClearsIntermediateTerrainWithoutPerFrameScanExplosion() {
+        val focus = asset("v180_replay_cup_focus.gd")
+        val sightline = focus.substringAfter("func _v180_sightline_lift")
+            .substringBefore("\nfunc _v180_finish_verdict")
+        assertTrue(focus.contains("const V180_SIGHTLINE_SAMPLES := 3"))
+        assertTrue(focus.contains("const V180_SIGHTLINE_CLEARANCE_M := 0.10"))
+        assertTrue(focus.contains("const V180_SIGHTLINE_MAX_LIFT_M := 0.72"))
+        assertTrue(sightline.contains("for i in range(V180_SIGHTLINE_SAMPLES):"))
+        assertTrue(sightline.contains("var terrain_y := _v166_sample(probe2.x, probe2.y).x"))
+        assertTrue(sightline.contains("var line_y := lerpf(camera_y, look_y, t)"))
+        assertTrue(sightline.contains("/ maxf(0.12, 1.0 - t)"))
+        assertTrue(sightline.contains("return clampf(needed, 0.0, V180_SIGHTLINE_MAX_LIFT_M)"))
+        assertTrue(focus.contains("var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, cup2, cup_look.y)"))
+        assertTrue(focus.contains("base_cam_y + sightline_lift"))
     }
 
     @Test
