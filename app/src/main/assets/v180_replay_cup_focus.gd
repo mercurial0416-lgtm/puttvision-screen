@@ -21,6 +21,9 @@ const V180_COMPARE_SAMPLES := 20
 const V180_FINISH_DEADBAND_CM := 2.0
 const V180_CAMERA_SIDE_DEADBAND_M := 0.04
 const V180_FOV_RESPONSE := 5.5
+const V180_SIGHTLINE_SAMPLES := 3
+const V180_SIGHTLINE_CLEARANCE_M := 0.10
+const V180_SIGHTLINE_MAX_LIFT_M := 0.72
 
 func _build_hud() -> void:
     super._build_hud()
@@ -86,6 +89,20 @@ func _v180_cup_camera_side_sign(final_point: Vector2, cup_point: Vector2, final_
     # Put the lens on the opposite side of a meaningful final miss. That preserves visual separation
     # between ball, cup and finishing line instead of letting the ball collapse behind the flag/cup.
     return -1.0 if lateral_m > 0.0 else 1.0
+
+func _v180_sightline_lift(camera2: Vector2, camera_y: float, look2: Vector2, look_y: float) -> float:
+    # Three fixed probes are enough for this short cup-focus shot and keep Forward Mobile cost bounded.
+    # Convert each obstruction into the camera-end lift required to clear it; the look endpoint stays
+    # locked to the real cup so the framing never lies about the green or authoritative roll.
+    var needed := 0.0
+    for i in range(V180_SIGHTLINE_SAMPLES):
+        var t := float(i + 1) / float(V180_SIGHTLINE_SAMPLES + 1)
+        var probe2 := camera2.lerp(look2, t)
+        var terrain_y := _v166_sample(probe2.x, probe2.y).x
+        var line_y := lerpf(camera_y, look_y, t)
+        var lift := (terrain_y + V180_SIGHTLINE_CLEARANCE_M - line_y) / maxf(0.12, 1.0 - t)
+        needed = maxf(needed, lift)
+    return clampf(needed, 0.0, V180_SIGHTLINE_MAX_LIFT_M)
 
 func _v180_finish_verdict(actual: Vector2, predicted: Vector2, predicted_heading: Vector2) -> String:
     var heading := predicted_heading.normalized()
@@ -177,7 +194,9 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     var cup_h := _v166_sample(cup2.x, cup2.y).x
     var cam_h := _v166_sample(cup_cam2.x, cup_cam2.y).x
     var cup_look := Vector3(cup2.x, cup_h + 0.045, -cup2.y)
-    var cup_pos := Vector3(cup_cam2.x, cam_h + 0.48, -cup_cam2.y)
+    var base_cam_y := cam_h + 0.48
+    var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, cup2, cup_look.y)
+    var cup_pos := Vector3(cup_cam2.x, base_cam_y + sightline_lift, -cup_cam2.y)
 
     # Smoothly hand off to the cup camera; no teleport and no effect on shot physics.
     var blend := focus * focus * (3.0 - 2.0 * focus)
