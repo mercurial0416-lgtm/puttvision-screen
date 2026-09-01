@@ -38,12 +38,27 @@ class ReplayRollDistanceCueRegressionTest {
     }
 
     @Test
+    fun statusLaneIsWidenedAndPreviewExercisesRestDistance() {
+        val layout = asset("replay_roll_distance_layout.gd")
+        val tvScene = asset("v143_tv.tscn")
+        val previewScene = asset("v143_preview.tscn")
+        assertTrue(layout.contains("const STATUS_WIDTH := 248.0"))
+        assertTrue(layout.contains("PREVIEW_SAMPLE_REST := \"0.9m REST\""))
+        assertTrue(layout.contains("set_process(false)"))
+        assertTrue(tvScene.contains("res://replay_roll_distance_layout.gd"))
+        assertTrue(previewScene.contains("res://replay_roll_distance_layout.gd"))
+    }
+
+    @Test
     fun timelineCannotMutateAuthoritativePuttingSystems() {
         val timeline = asset("replay_timeline_camera_truth.gd")
+        val layout = asset("replay_roll_distance_layout.gd")
         assertFalse(timeline.contains("GreenTerrain.set"))
         assertFalse(timeline.contains("GreenReadAdvisor.set"))
         assertFalse(timeline.contains("ballVelocity ="))
         assertFalse(timeline.contains("readLineDeltaCm ="))
         assertFalse(timeline.contains("paceDeltaCm ="))
+        assertFalse(layout.contains("GreenTerrain"))
+        assertFalse(layout.contains("GreenReadAdvisor"))
     }
 }
