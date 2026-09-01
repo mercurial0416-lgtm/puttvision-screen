@@ -16,7 +16,8 @@ class GreenOverviewAimClarityRegressionTest {
     fun overviewShowsAdvisorAimAsDirectionAndCentimeters() {
         val source = asset("green_read_direction_truth.gd")
         assertTrue(source.contains("return \"AIM %s %d cm\""))
-        assertTrue(source.contains("var direction := \"R\" if offset_m > 0.0 else \"L\""))
+        assertTrue(source.contains("var direction := \"RIGHT\" if offset_m > 0.0 else \"LEFT\""))
+        assertFalse(source.contains("var direction := \"R\" if offset_m > 0.0 else \"L\""))
         assertTrue(source.contains("int(round(absf(offset_m) * 100.0))"))
         assertTrue(source.contains("return \"AIM CENTER\""))
     }
