@@ -22,9 +22,11 @@ class GreenReadDirectionTruthRegressionTest {
     }
 
     @Test
-    fun breakDirectionMatchesGreenOverviewSlopeSemantics() {
+    fun breakDirectionMatchesGreenOverviewSlopeSemanticsAndUsesReadableWords() {
         val script = asset("green_read_direction_truth.gd")
         assertTrue(script.contains("break_dir = \"BREAK RIGHT\" if side_pct > 0.0 else \"BREAK LEFT\""))
+        assertTrue(script.contains("func _v183_break_text(side_pct: float) -> String:"))
+        assertTrue(script.contains("(\"RIGHT\" if side_pct > 0.0 else \"LEFT\")"))
         assertFalse(script.contains("break_dir = \"BREAK R\" if side_pct > 0.0 else \"BREAK L\""))
         val overview = asset("v183_green_overview.gd")
         assertTrue(overview.contains("positive means the right side is lower"))
