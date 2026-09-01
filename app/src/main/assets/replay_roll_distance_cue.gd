@@ -1,17 +1,19 @@
 extends Node
 
-# Presentation-only replay roll-distance cue. It annotates the existing replay detail label with
-# physical distance remaining along the already-recorded actual ball trail. The trail length is
-# cached once when replay starts; per-frame work is constant-time and never touches physics/read data.
+# Presentation-only replay roll-distance cue. It augments the active bottom replay timeline with
+# physical distance remaining along the already-recorded actual ball trail while preserving the
+# timeline's camera-stage/countdown text. Trail length is cached once when replay starts; per-frame
+# work is constant-time and never touches physics/read/scoring data.
 
 var _root: Node
-var _detail: Label
+var _stage_label: Label
 var _was_active := false
 var _trail_length_m := 0.0
 
 const MIN_SEGMENT_M := 0.000001
 
 func _ready() -> void:
+    # Run after the inherited replay HUD so our annotation cannot be overwritten in the same frame.
     process_priority = 100
     _root = get_parent()
 
@@ -30,16 +32,15 @@ func _trail_total_length(points: Array) -> float:
 func _format_remaining(progress: float) -> String:
     var clamped := clampf(progress, 0.0, 1.0)
     var remaining_m := maxf(0.0, _trail_length_m * (1.0 - clamped))
-    var percent := int(round(clamped * 100.0))
     if remaining_m < 1.0:
-        return "%3d%%  •  %d cm TO REST" % [percent, int(round(remaining_m * 100.0))]
-    return "%3d%%  •  %.1f m TO REST" % [percent, remaining_m]
+        return "%dcm REST" % int(round(remaining_m * 100.0))
+    return "%.1fm REST" % remaining_m
 
 func _process(_delta: float) -> void:
     if _root == null:
         return
-    if _detail == null:
-        _detail = _root.get("_v175_replay_detail") as Label
+    if _stage_label == null:
+        _stage_label = _root.get("_focus_replay_stage_label") as Label
 
     var points_value = _root.get("_v171_replay_actual")
     if typeof(points_value) != TYPE_ARRAY:
@@ -52,7 +53,8 @@ func _process(_delta: float) -> void:
         _trail_length_m = _trail_total_length(points)
     _was_active = active
 
-    if not active or _detail == null:
+    if not active or _stage_label == null:
         return
     var progress := float(_root.call("_v175_replay_progress"))
-    _detail.text = _format_remaining(progress)
+    var camera_status := str(_root.call("_focus_replay_status", progress, remaining))
+    _stage_label.text = "%s  ·  %s" % [camera_status, _format_remaining(progress)]
