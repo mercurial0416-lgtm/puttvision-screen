@@ -28,7 +28,7 @@ class LiveBreakMissingCoordinateHoldRegressionTest {
     fun missingLaunchCoordinateCannotSeedSyntheticTelemetry() {
         val script = asset()
         val superCall = "super._apply_snapshot(presentation_snapshot, immediate, delta)"
-        val neutralizeCall = "if missing_ball_position and not had_real_ball_position:\n        _neutralize_missing_live_break_position()"
+        val neutralizeCall = "if missing_running_ball_position and not had_real_ball_position:\n        _neutralize_missing_live_break_position()"
         assertTrue(script.contains(neutralizeCall))
         assertTrue(script.indexOf(superCall) < script.indexOf(neutralizeCall))
         assertTrue(script.contains("_live_curve_travel_m = 0.0"))
