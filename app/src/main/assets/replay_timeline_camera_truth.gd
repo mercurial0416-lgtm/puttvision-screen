@@ -59,14 +59,14 @@ func _focus_update_replay_timeline() -> void:
 func _live_finish_readout(cross_track_cm: float) -> String:
     if absf(cross_track_cm) < 0.05:
         return "REST CENTER"
-    return "REST %s %.1f cm" % ["R" if cross_track_cm > 0.0 else "L", absf(cross_track_cm)]
+    return "REST %s %.1f cm" % ["RIGHT" if cross_track_cm > 0.0 else "LEFT", absf(cross_track_cm)]
 
 func _live_last_observed_readout(cross_track_cm: float) -> String:
     # A stop packet can omit its terminal coordinates even after the bridge supplied real in-roll
     # samples. Preserve that measured information without pretending the last sample is exact rest.
     if absf(cross_track_cm) < 0.05:
         return "LAST OBS CENTER"
-    return "LAST OBS %s %.1f cm" % ["R" if cross_track_cm > 0.0 else "L", absf(cross_track_cm)]
+    return "LAST OBS %s %.1f cm" % ["RIGHT" if cross_track_cm > 0.0 else "LEFT", absf(cross_track_cm)]
 
 func _live_launch_velocity(s: Dictionary) -> Vector2:
     return Vector2(float(s.get("vx", 0.0)), float(s.get("vy", 0.0)))
