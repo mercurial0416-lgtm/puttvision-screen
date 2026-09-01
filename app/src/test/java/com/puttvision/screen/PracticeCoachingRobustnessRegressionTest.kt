@@ -68,8 +68,8 @@ class PracticeCoachingRobustnessRegressionTest {
 
         assertTrue(script.contains("func _v195_coaching_bias() -> Vector2:"))
         assertTrue(script.contains("Vector2(_v179_coaching_center(0), _v179_coaching_center(1))"))
-        assertTrue(script.contains("line_text = \"R %.0f CM\" % absf(mean.x)"))
-        assertTrue(script.contains("line_text = \"L %.0f CM\" % absf(mean.x)"))
+        assertTrue(script.contains("line_text = \"RIGHT %.0f CM\" % absf(mean.x)"))
+        assertTrue(script.contains("line_text = \"LEFT %.0f CM\" % absf(mean.x)"))
         assertTrue(script.contains("pace_text = \"LONG %.0f CM\" % absf(mean.y)"))
         assertTrue(script.contains("pace_text = \"SHORT %.0f CM\" % absf(mean.y)"))
 

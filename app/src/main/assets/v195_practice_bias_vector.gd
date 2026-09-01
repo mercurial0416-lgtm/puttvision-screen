@@ -22,11 +22,11 @@ func _v195_coaching_bias() -> Vector2:
     return Vector2(_v179_coaching_center(0), _v179_coaching_center(1))
 
 func _v195_bias_text(mean: Vector2) -> String:
-    var line_text := "CENTER"
+    var line_text := "LINE OK"
     if mean.x > V195_LINE_DEADBAND_CM:
-        line_text = "R %.0f CM" % absf(mean.x)
+        line_text = "RIGHT %.0f CM" % absf(mean.x)
     elif mean.x < -V195_LINE_DEADBAND_CM:
-        line_text = "L %.0f CM" % absf(mean.x)
+        line_text = "LEFT %.0f CM" % absf(mean.x)
 
     var pace_text := "PACE OK"
     if mean.y > V195_PACE_DEADBAND_CM:
