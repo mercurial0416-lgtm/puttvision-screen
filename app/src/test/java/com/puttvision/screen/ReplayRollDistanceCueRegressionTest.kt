@@ -13,39 +13,37 @@ class ReplayRollDistanceCueRegressionTest {
     }
 
     @Test
-    fun tvSceneWiresPhysicalReplayDistanceCue() {
-        val scene = asset("v143_tv.tscn")
-        assertTrue(scene.contains("res://replay_roll_distance_cue.gd"))
-        assertTrue(scene.contains("ReplayRollDistanceCue"))
+    fun productionTimelineShowsPhysicalDistanceToRest() {
+        val timeline = asset("replay_timeline_camera_truth.gd")
+        assertTrue(timeline.contains("_focus_replay_stage_label.text = \"%s  ·  %s\""))
+        assertTrue(timeline.contains("_focus_replay_roll_distance(progress)"))
+        assertTrue(timeline.contains("REST"))
     }
 
     @Test
-    fun cueAugmentsTheVisibleTimelineUsingRecordedTrailAndExactClock() {
-        val cue = asset("replay_roll_distance_cue.gd")
-        assertTrue(cue.contains("_root.get(\"_focus_replay_stage_label\")"))
-        assertTrue(cue.contains("_root.get(\"_v171_replay_actual\")"))
-        assertTrue(cue.contains("_root.call(\"_v175_replay_progress\")"))
-        assertTrue(cue.contains("_root.call(\"_focus_replay_status\", progress, remaining)"))
-        assertTrue(cue.contains("_trail_length_m * (1.0 - clamped)"))
-        assertTrue(cue.contains("REST"))
-        assertFalse(cue.contains("_v175_replay_detail"))
+    fun distanceUsesRecordedActualTrailAndExistingReplayClock() {
+        val timeline = asset("replay_timeline_camera_truth.gd")
+        assertTrue(timeline.contains("_v171_replay_actual.size() >= 2"))
+        assertTrue(timeline.contains("_v175_trail_total_length(_v171_replay_actual)"))
+        assertTrue(timeline.contains("_focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)"))
+        assertTrue(timeline.contains("_focus_replay_roll_total_m * (1.0 - clampf(progress"))
     }
 
     @Test
-    fun trailLengthIsCachedOnlyWhenReplayActivates() {
-        val cue = asset("replay_roll_distance_cue.gd")
-        assertTrue(cue.contains("if active and not _was_active:"))
-        assertTrue(cue.contains("_trail_length_m = _trail_total_length(points)"))
-        assertFalse(cue.substringAfter("func _format_remaining").substringBefore("func _process").contains("_trail_total_length("))
+    fun trailLengthIsCachedOnceWhenReplayActivates() {
+        val timeline = asset("replay_timeline_camera_truth.gd")
+        assertTrue(timeline.contains("if replay_active and not _focus_replay_roll_was_active:"))
+        assertTrue(timeline.contains("_focus_replay_roll_total_m = _v175_trail_total_length(_v171_replay_actual)"))
+        assertTrue(timeline.contains("_focus_replay_roll_was_active = replay_active"))
     }
 
     @Test
-    fun cueCannotMutateAuthoritativePuttingSystems() {
-        val cue = asset("replay_roll_distance_cue.gd")
-        assertFalse(cue.contains("GreenTerrain.set"))
-        assertFalse(cue.contains("GreenReadAdvisor.set"))
-        assertFalse(cue.contains("ballVelocity ="))
-        assertFalse(cue.contains("readLineDeltaCm ="))
-        assertFalse(cue.contains("paceDeltaCm ="))
+    fun timelineCannotMutateAuthoritativePuttingSystems() {
+        val timeline = asset("replay_timeline_camera_truth.gd")
+        assertFalse(timeline.contains("GreenTerrain.set"))
+        assertFalse(timeline.contains("GreenReadAdvisor.set"))
+        assertFalse(timeline.contains("ballVelocity ="))
+        assertFalse(timeline.contains("readLineDeltaCm ="))
+        assertFalse(timeline.contains("paceDeltaCm ="))
     }
 }
