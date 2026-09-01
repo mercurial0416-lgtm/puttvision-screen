@@ -1,16 +1,13 @@
 extends "res://practice_trend_vector.gd"
 
-# Presentation-only macro relief shell. Android GreenTerrain / GreenReadAdvisor remain authoritative.
-# This shell deliberately exaggerates vertical displacement for TV readability only; it never feeds
-# coordinates back into physics, aim, scoring, replay truth, or the authoritative terrain payload.
+# Presentation-only macro relief. Android GreenTerrain / GreenReadAdvisor remain authoritative.
+# The renderer exaggerates only Y for TV readability; X/Z, solver paths and all physics stay exact.
+# Important: the opaque Green mesh itself is rebuilt on the same presentation geometry. A translucent
+# shell alone cannot show bowls because the physical turf in front of it depth-occludes depressions.
 
 const RELIEF_GREEN_SIZE := Vector2(11.8, 34.5)
 const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
-# The previous 3.2x pass still read too flat from the address camera on subtle 1-2% surfaces.
-# 4.6x is presentation-only and hard-capped so gentle terrain becomes legible without allowing large
-# crowns/bowls to turn into cartoon geometry. The shell stays translucent so existing turf/grid/read
-# cues remain visible; narrow physical-elevation ribbons carry the strongest displaced depth cue.
 const RELIEF_VISUAL_SCALE := 4.6
 const RELIEF_EXTRA_CAP_M := 0.72
 const RELIEF_MINOR_CONTOUR_M := 0.05
@@ -27,8 +24,11 @@ func _terrain_relief_visual_offset(terrain_height_m: float) -> float:
         RELIEF_EXTRA_CAP_M
     )
 
+func _terrain_relief_geometry_height(terrain_height_m: float) -> float:
+    return terrain_height_m + _terrain_relief_visual_offset(terrain_height_m)
+
 func _terrain_relief_visual_height(terrain_height_m: float) -> float:
-    return terrain_height_m + _terrain_relief_visual_offset(terrain_height_m) + 0.003
+    return _terrain_relief_geometry_height(terrain_height_m) + 0.003
 
 func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m: float) -> float:
     var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
@@ -38,6 +38,64 @@ func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m:
 func _terrain_relief_hillshade_contrast(slope_percent: float) -> float:
     var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
     return lerpf(0.0, 0.16, slope_signal)
+
+# Build actual presentation geometry instead of relying only on a transparent vertex-displaced shell.
+# This keeps bowls/crowns visible through normal depth testing and gives the turf shader real silhouette
+# and parallax. The source samples remain untouched and never flow back to Android.
+func _terrain_relief_surface_mesh(size: Vector2, sub_x: int, sub_z: int, world_z_origin: float, encode_read: bool) -> ArrayMesh:
+    var vertices := PackedVector3Array()
+    var normals := PackedVector3Array()
+    var uvs := PackedVector2Array()
+    var colors := PackedColorArray()
+    var indices := PackedInt32Array()
+    var columns: int = sub_x + 1
+
+    for iz in range(sub_z + 1):
+        var fz: float = float(iz) / float(maxi(1, sub_z))
+        var local_z: float = lerpf(-size.y * 0.5, size.y * 0.5, fz)
+        var physics_y: float = -(world_z_origin + local_z)
+        for ix in range(sub_x + 1):
+            var fx: float = float(ix) / float(maxi(1, sub_x))
+            var x: float = lerpf(-size.x * 0.5, size.x * 0.5, fx)
+            var terrain := _v166_sample(x, physics_y)
+            var visible_height := _terrain_relief_geometry_height(terrain.x)
+            vertices.append(Vector3(x, visible_height, local_z))
+            # Scale the authoritative local grade only for the presentation normal. This is evaluated
+            # at terrain rebuild time, not per frame, and stays cheap on Forward Mobile.
+            normals.append(Vector3(
+                terrain.y * 0.01 * RELIEF_VISUAL_SCALE,
+                1.0,
+                -terrain.z * 0.01 * RELIEF_VISUAL_SCALE
+            ).normalized())
+            uvs.append(Vector2(fx, fz))
+            if encode_read:
+                colors.append(Color(
+                    clampf(terrain.x / 4.0 + 0.5, 0.0, 1.0),
+                    clampf(terrain.y / 24.0 + 0.5, 0.0, 1.0),
+                    clampf(terrain.z / 24.0 + 0.5, 0.0, 1.0),
+                    1.0
+                ))
+            else:
+                colors.append(Color.WHITE)
+
+    for iz in range(sub_z):
+        for ix in range(sub_x):
+            var a: int = iz * columns + ix
+            var b: int = a + 1
+            var c: int = a + columns
+            var d: int = c + 1
+            indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
+
+    var arrays: Array = []
+    arrays.resize(Mesh.ARRAY_MAX)
+    arrays[Mesh.ARRAY_VERTEX] = vertices
+    arrays[Mesh.ARRAY_NORMAL] = normals
+    arrays[Mesh.ARRAY_TEX_UV] = uvs
+    arrays[Mesh.ARRAY_COLOR] = colors
+    arrays[Mesh.ARRAY_INDEX] = indices
+    var mesh := ArrayMesh.new()
+    mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+    return mesh
 
 func _terrain_relief_material() -> ShaderMaterial:
     var shader := Shader.new()
@@ -116,14 +174,37 @@ func _build_course() -> void:
     _terrain_relief.mesh = _v166_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, true)
     add_child(_terrain_relief)
 
-func _terrain_relief_rebuild() -> void:
-    if _terrain_relief == null:
+func _terrain_relief_ground_green_blades() -> void:
+    var grass_node := _v163_green_blades as MultiMeshInstance3D
+    if grass_node == null or grass_node.multimesh == null:
         return
+    var mm := grass_node.multimesh
+    for i in range(mm.instance_count):
+        var transform := mm.get_instance_transform(i)
+        var world_x: float = grass_node.position.x + transform.origin.x
+        var physics_y: float = -(grass_node.position.z + transform.origin.z)
+        transform.origin.y = _terrain_relief_geometry_height(_v166_sample(world_x, physics_y).x) + 0.0009
+        mm.set_instance_transform(i, transform)
+
+func _terrain_relief_rebuild() -> void:
     var green := get_node_or_null("Green") as MeshInstance3D
     if green == null:
         return
-    _terrain_relief.position = green.position
-    _terrain_relief.mesh = _v166_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, true)
+    # Replace the opaque turf geometry itself. This is the critical anti-occlusion fix: depressions
+    # can no longer sit behind an un-exaggerated Green mesh and disappear from the address camera.
+    green.mesh = _terrain_relief_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, false)
+    if _v164_grid != null:
+        _v164_grid.mesh = _terrain_relief_surface_mesh(
+            Vector2(V164_GREEN_WIDTH, V164_GREEN_DEPTH),
+            RELIEF_SUB_X,
+            RELIEF_SUB_Z,
+            V164_GREEN_CENTER_Z,
+            true
+        )
+    _terrain_relief_ground_green_blades()
+    if _terrain_relief != null:
+        _terrain_relief.position = green.position
+        _terrain_relief.mesh = _v166_surface_mesh(RELIEF_GREEN_SIZE, RELIEF_SUB_X, RELIEF_SUB_Z, green.position.z, true)
 
 func _terrain_relief_sync_anchors(s: Dictionary) -> void:
     # The inherited renderer has already resolved bridge offsets, cup phases and ball pose. Apply
@@ -136,8 +217,6 @@ func _terrain_relief_sync_anchors(s: Dictionary) -> void:
     if ball != null:
         ball.position.y += ball_delta
 
-    # All inherited contact shadows were positioned before the relief delta. Lift each active
-    # presentation shadow by exactly the same amount so the ball does not appear to float.
     if _v155_ball_shadow != null:
         _v155_ball_shadow.position.y += ball_delta
     if _v162_ball_shadow != null:
@@ -155,10 +234,7 @@ func _terrain_relief_sync_anchors(s: Dictionary) -> void:
         var mid_y: float = cup_y * 0.5
         aim_line.position.y = _terrain_relief_visual_height(_v166_sample(0.0, mid_y).x) + 0.003
 
-# The authoritative predicted/actual trails are generated in Android coordinates, but the inherited
-# ribbon builder grounds them on the physical mesh. Once the TV shell exaggerates that mesh, those
-# ribbons can disappear inside hills or float through bowls. Override presentation height only: the
-# X/Z path, timing, widths and solver truth stay untouched.
+# X/Z and solver truth remain authoritative; only presentation Y follows the visible relief mesh.
 func _v166_ribbon_mesh(points: Array, width: float) -> ArrayMesh:
     var vertices := PackedVector3Array()
     var indices := PackedInt32Array()
