@@ -47,6 +47,7 @@ class GreenReliefMaterialTruthRegressionTest {
         val truth = asset("green_read_direction_truth.gd")
 
         assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
+        assertFalse(scene.contains("green_relief_material_truth.gd"))
         assertTrue(replay.contains("extends \"res://green_read_direction_truth.gd\""))
         assertTrue(truth.contains("extends \"res://relief_depth_finish.gd\""))
     }
