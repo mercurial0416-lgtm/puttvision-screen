@@ -98,3 +98,17 @@ func _v165_update_hud(side_pct: float, long_pct: float) -> void:
 
     _v165_aim_label.text = "%s   |   %s" % [aim_text, _v165_read_level(side_pct, long_pct)]
     _v165_detail_label.text = "%s %.2f%%   |   LIVE FLOW | CONTOUR | CUP 0.125m" % [break_dir, side_abs]
+
+func _lock_sampled_green_material_to_relief_mesh() -> void:
+    # The opaque Green mesh is rebuilt from sampled terrain relief downstream. The inherited turf
+    # shader's side/long vertex warp was for the old flat PlaneMesh; applying both would double-warp
+    # the visible green and detach crowns/bowls from grid, ball and cup presentation anchors.
+    # Fringe/rough remain legacy plane surfaces and intentionally keep their existing global grade.
+    if mat_green == null:
+        return
+    mat_green.set_shader_parameter("side_slope", 0.0)
+    mat_green.set_shader_parameter("long_slope", 0.0)
+
+func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
+    super._apply_snapshot(s, immediate, delta)
+    _lock_sampled_green_material_to_relief_mesh()
