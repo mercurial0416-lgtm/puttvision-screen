@@ -11,6 +11,8 @@ const SESSION_HISTORY_DOT_COLOR := Color("#76d7b6")
 const SESSION_LATEST_DOT_COLOR := Color("#f4dda0")
 
 var _live_launch_lock_pending := false
+var _focus_replay_roll_total_m := 0.0
+var _focus_replay_roll_was_active := false
 
 func _focus_replay_stage(progress: float) -> String:
     var p := clampf(progress, 0.0, 1.0)
@@ -20,10 +22,25 @@ func _focus_replay_stage(progress: float) -> String:
         return "CAM BLEND"
     return "CUP CAM"
 
+func _focus_replay_roll_distance(progress: float) -> String:
+    var remaining_m := maxf(0.0, _focus_replay_roll_total_m * (1.0 - clampf(progress, 0.0, 1.0)))
+    if remaining_m < 1.0:
+        return "%dcm REST" % int(round(remaining_m * 100.0))
+    return "%.1fm REST" % remaining_m
+
 func _focus_update_replay_timeline() -> void:
     if _focus_replay_track == null or _focus_replay_fill == null:
         return
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
+    var replay_active := _v171_replay_remaining > 0.0 and _v171_replay_actual.size() >= 2
+    if replay_active and not _focus_replay_roll_was_active:
+        # Arc length is derived only from the already-recorded actual trail and cached once per replay.
+        # This is presentation telemetry; it never feeds terrain, advisor, scoring or shot physics.
+        _focus_replay_roll_total_m = _v175_trail_total_length(_v171_replay_actual)
+    elif not replay_active:
+        _focus_replay_roll_total_m = 0.0
+    _focus_replay_roll_was_active = replay_active
+
     var track_width := maxf(0.0, _focus_replay_track.size.x)
     var blend_left := track_width * V180_FOCUS_START
     var blend_right := track_width * V180_FOCUS_FULL
@@ -36,7 +53,8 @@ func _focus_update_replay_timeline() -> void:
     if _focus_replay_chapter_end_marker != null:
         _focus_replay_chapter_end_marker.position = Vector2(maxf(0.0, blend_right - 1.0), -4.0)
     if _focus_replay_stage_label != null:
-        _focus_replay_stage_label.text = _focus_replay_status(progress, _v171_replay_remaining)
+        var status := _focus_replay_status(progress, _v171_replay_remaining)
+        _focus_replay_stage_label.text = "%s  ·  %s" % [status, _focus_replay_roll_distance(progress)] if replay_active else status
 
 func _live_finish_readout(cross_track_cm: float) -> String:
     if absf(cross_track_cm) < 0.05:

@@ -1,6 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource path="res://session_dispersion_readability_preview.gd" type="Script" id="1_preview"]
+[ext_resource path="res://replay_roll_distance_layout.gd" type="Script" id="2_replay_layout"]
 
 [node name="V143Preview" type="Node3D"]
 script = ExtResource("1_preview")
+
+[node name="ReplayRollDistanceLayout" type="Node" parent="."]
+script = ExtResource("2_replay_layout")
