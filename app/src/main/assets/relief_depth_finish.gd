@@ -50,10 +50,15 @@ func _terrain_following_aim_mesh(distance_m: float) -> ArrayMesh:
     for i in range(segments + 1):
         var t := float(i) / float(segments)
         var forward_m := lerpf(start_m, end_m, t)
-        var surface_m := _v166_sample(0.0, forward_m).x
-        var height_m := _terrain_relief_visual_height(surface_m) + RELIEF_AIM_CLEARANCE_M
-        vertices.append(Vector3(-half_width, height_m, -forward_m))
-        vertices.append(Vector3(half_width, height_m, -forward_m))
+        # Sample both ribbon shoulders, not only the centerline. A single midpoint height made the
+        # guide slice into the uphill shoulder (or hover above the downhill shoulder) on cross-slope
+        # putts, visually flattening the very break the guide is meant to clarify.
+        var left_surface_m := _v166_sample(-half_width, forward_m).x
+        var right_surface_m := _v166_sample(half_width, forward_m).x
+        var left_height_m := _terrain_relief_visual_height(left_surface_m) + RELIEF_AIM_CLEARANCE_M
+        var right_height_m := _terrain_relief_visual_height(right_surface_m) + RELIEF_AIM_CLEARANCE_M
+        vertices.append(Vector3(-half_width, left_height_m, -forward_m))
+        vertices.append(Vector3(half_width, right_height_m, -forward_m))
 
     for i in range(segments):
         var a := i * 2
