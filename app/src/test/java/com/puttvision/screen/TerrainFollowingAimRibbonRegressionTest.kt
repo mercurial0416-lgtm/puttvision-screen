@@ -21,10 +21,15 @@ class TerrainFollowingAimRibbonRegressionTest {
         assertTrue(base.contains("func _update_aim_line(distance_m: float)"))
         assertTrue(base.contains("var mesh := BoxMesh.new()"))
         assertTrue(finish.contains("func _terrain_following_aim_mesh(distance_m: float)"))
-        assertTrue(finish.contains("_v166_sample(0.0, forward_m).x"))
-        assertTrue(finish.contains("_terrain_relief_visual_height(surface_m)"))
+        assertTrue(finish.contains("_v166_sample(-half_width, forward_m).x"))
+        assertTrue(finish.contains("_v166_sample(half_width, forward_m).x"))
+        assertTrue(finish.contains("_terrain_relief_visual_height(left_surface_m)"))
+        assertTrue(finish.contains("_terrain_relief_visual_height(right_surface_m)"))
+        assertTrue(finish.contains("Vector3(-half_width, left_height_m, -forward_m)"))
+        assertTrue(finish.contains("Vector3(half_width, right_height_m, -forward_m)"))
         assertTrue(finish.contains("aim_line.mesh = _terrain_following_aim_mesh(distance_m)"))
         assertTrue(finish.contains("aim_line.position = Vector3.ZERO"))
+        assertFalse(finish.contains("var surface_m := _v166_sample(0.0, forward_m).x"))
     }
 
     @Test
