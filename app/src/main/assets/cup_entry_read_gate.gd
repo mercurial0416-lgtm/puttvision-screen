@@ -110,7 +110,10 @@ func _refresh() -> void:
     _gate.points = PackedVector2Array([geometry["left"], geometry["right"]])
     _center_ring.position = center
 
+    # Keep the label beside the entry gate, not above the cup where overview annotations are densest.
+    # Flip sides around the panel midpoint and clamp the result so curved reads stay legible at edges.
     var panel_size := _panel.size
-    var badge_x := clampf(center.x - 38.0, 4.0, maxf(4.0, panel_size.x - 80.0))
-    var badge_y := clampf(center.y - 21.0, 4.0, maxf(4.0, panel_size.y - 20.0))
+    var badge_x_unclamped := center.x + 10.0 if center.x <= panel_size.x * 0.5 else center.x - 86.0
+    var badge_x := clampf(badge_x_unclamped, 4.0, maxf(4.0, panel_size.x - 80.0))
+    var badge_y := clampf(center.y - 8.0, 4.0, maxf(4.0, panel_size.y - 20.0))
     _badge.position = Vector2(badge_x, badge_y)
