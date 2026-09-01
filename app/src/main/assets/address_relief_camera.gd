@@ -19,6 +19,10 @@ const ADDRESS_RELIEF_SIGNAL_START_M := 0.018
 const ADDRESS_RELIEF_SIGNAL_FULL_M := 0.090
 const ADDRESS_RELIEF_GRAZE_DROP_M := 0.085
 const ADDRESS_RELIEF_FOV_BOOST_DEG := 3.0
+const ADDRESS_CUP_FRAME_START_M := 2.40
+const ADDRESS_CUP_FRAME_FULL_M := 0.90
+const ADDRESS_CUP_LOOK_FRACTION := 0.82
+const ADDRESS_CUP_FOCUS_BLEND := 0.75
 
 # Mirror the presentation-only relief shell so the low address camera is grounded against what the
 # player actually sees, not the un-exaggerated physics surface. These values are regression-locked
@@ -72,6 +76,11 @@ func _address_relief_profile(ball_xz: Vector2, cup_xz: Vector2) -> Dictionary:
         "signal": relief_signal
     }
 
+func _address_short_putt_cup_signal(distance_m: float) -> float:
+    # As the putt gets short, shift the stationary gaze toward the cup so the player can read the
+    # final break and target together. Smooth, bounded presentation only; no aim/read value changes.
+    return 1.0 - smoothstep(ADDRESS_CUP_FRAME_FULL_M, ADDRESS_CUP_FRAME_START_M, distance_m)
+
 func _address_adaptive_side_offset(look_xz: Vector2, right: Vector2) -> float:
     var terrain := _v166_sample(look_xz.x, -look_xz.y)
     # Android slope components map to Godot X/-Z. Move the eye slightly toward the uphill side of
@@ -117,6 +126,12 @@ func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) ->
     var relief_fraction := float(relief_profile["fraction"])
     var relief_signal := float(relief_profile["signal"])
     var look_fraction := clampf(lerpf(baseline_fraction, relief_fraction, 0.72), 0.34, 0.68)
+    var cup_frame_signal := _address_short_putt_cup_signal(flat_length)
+    look_fraction = clampf(
+        lerpf(look_fraction, ADDRESS_CUP_LOOK_FRACTION, cup_frame_signal * ADDRESS_CUP_FOCUS_BLEND),
+        0.34,
+        ADDRESS_CUP_LOOK_FRACTION
+    )
     var look_xz := ball_xz.lerp(cup_xz, look_fraction)
     var side_offset := _address_adaptive_side_offset(look_xz, right)
     var camera_xz := ball_xz - forward * ADDRESS_CAMERA_TRAIL + right * side_offset
@@ -143,7 +158,8 @@ func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) ->
         "side_offset": side_offset,
         "clearance_raise": clearance_raise,
         "relief_signal": relief_signal,
-        "graze_drop": graze_drop
+        "graze_drop": graze_drop,
+        "cup_frame_signal": cup_frame_signal
     }
 
 func _session_line_average_text(value_cm: float) -> String:
