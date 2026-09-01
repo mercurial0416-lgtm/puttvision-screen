@@ -95,8 +95,10 @@ class TerrainReliefPresentationRegressionTest {
 
         assertTrue(script.contains("RELIEF_TRAIL_CLEARANCE_M := 0.0075"))
         assertTrue(script.contains("func _v166_ribbon_mesh(points: Array, width: float) -> ArrayMesh:"))
-        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(a.x, a.y).x) + RELIEF_TRAIL_CLEARANCE_M"))
-        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(b.x, b.y).x) + RELIEF_TRAIL_CLEARANCE_M"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(a_left_x, a_left_y).x) + RELIEF_TRAIL_CLEARANCE_M"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(a_right_x, a_right_y).x) + RELIEF_TRAIL_CLEARANCE_M"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(b_left_x, b_left_y).x) + RELIEF_TRAIL_CLEARANCE_M"))
+        assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(b_right_x, b_right_y).x) + RELIEF_TRAIL_CLEARANCE_M"))
 
         assertTrue(source.contains("var ah: float = _v166_sample(a.x, a.y).x + 0.0075"))
         assertFalse(script.contains("a.x +="))
