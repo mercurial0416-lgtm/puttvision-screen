@@ -3,6 +3,7 @@ extends Node
 # One-shot presentation layout guard for the longer replay status. Production text is owned by
 # replay_timeline_camera_truth.gd; the preview fixture gets an equivalent sample suffix so CI can
 # visually prove the commercial layout without fabricating any runtime shot/physics state.
+# The preview number is layout-only; runtime distance always comes from the recorded actual trail.
 
 const STATUS_WIDTH := 248.0
 const SIDE_INSET := 28.0
