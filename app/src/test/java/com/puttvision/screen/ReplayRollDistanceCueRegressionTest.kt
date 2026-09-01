@@ -20,12 +20,15 @@ class ReplayRollDistanceCueRegressionTest {
     }
 
     @Test
-    fun cueUsesRecordedActualTrailAndExactReplayClock() {
+    fun cueAugmentsTheVisibleTimelineUsingRecordedTrailAndExactClock() {
         val cue = asset("replay_roll_distance_cue.gd")
+        assertTrue(cue.contains("_root.get(\"_focus_replay_stage_label\")"))
         assertTrue(cue.contains("_root.get(\"_v171_replay_actual\")"))
         assertTrue(cue.contains("_root.call(\"_v175_replay_progress\")"))
+        assertTrue(cue.contains("_root.call(\"_focus_replay_status\", progress, remaining)"))
         assertTrue(cue.contains("_trail_length_m * (1.0 - clamped)"))
-        assertTrue(cue.contains("TO REST"))
+        assertTrue(cue.contains("REST"))
+        assertFalse(cue.contains("_v175_replay_detail"))
     }
 
     @Test
