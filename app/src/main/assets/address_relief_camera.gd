@@ -15,6 +15,10 @@ const ADDRESS_FOV_FAR := 38.0
 const ADDRESS_FOV_RESPONSE := 5.0
 const ADDRESS_RELIEF_SAMPLES := 5
 const ADDRESS_RELIEF_FOCUS_BLEND := 0.58
+const ADDRESS_RELIEF_SIGNAL_START_M := 0.018
+const ADDRESS_RELIEF_SIGNAL_FULL_M := 0.090
+const ADDRESS_RELIEF_GRAZE_DROP_M := 0.085
+const ADDRESS_RELIEF_FOV_BOOST_DEG := 3.0
 
 # Mirror the presentation-only relief shell so the low address camera is grounded against what the
 # player actually sees, not the un-exaggerated physics surface. These values are regression-locked
@@ -41,11 +45,11 @@ func _address_visual_height(terrain_height_m: float) -> float:
     )
     return terrain_height_m + relief_delta
 
-func _address_relief_focus_fraction(ball_xz: Vector2, cup_xz: Vector2) -> float:
+func _address_relief_profile(ball_xz: Vector2, cup_xz: Vector2) -> Dictionary:
     var span := cup_xz - ball_xz
     var span_len := span.length()
     if span_len < 0.25:
-        return ADDRESS_LOOK_FRACTION
+        return {"fraction": ADDRESS_LOOK_FRACTION, "signal": 0.0}
 
     var ball_h := _v166_sample(ball_xz.x, -ball_xz.y).x
     var cup_h := _v166_sample(cup_xz.x, -cup_xz.y).x
@@ -61,8 +65,12 @@ func _address_relief_focus_fraction(ball_xz: Vector2, cup_xz: Vector2) -> float:
             best_relief = relief
             best_fraction = fraction
 
-    var adaptive_weight := smoothstep(0.018, 0.090, best_relief) * ADDRESS_RELIEF_FOCUS_BLEND
-    return lerpf(ADDRESS_LOOK_FRACTION, clampf(best_fraction, 0.30, 0.72), adaptive_weight)
+    var relief_signal := smoothstep(ADDRESS_RELIEF_SIGNAL_START_M, ADDRESS_RELIEF_SIGNAL_FULL_M, best_relief)
+    var adaptive_weight := relief_signal * ADDRESS_RELIEF_FOCUS_BLEND
+    return {
+        "fraction": lerpf(ADDRESS_LOOK_FRACTION, clampf(best_fraction, 0.30, 0.72), adaptive_weight),
+        "signal": relief_signal
+    }
 
 func _address_adaptive_side_offset(look_xz: Vector2, right: Vector2) -> float:
     var terrain := _v166_sample(look_xz.x, -look_xz.y)
@@ -105,7 +113,9 @@ func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) ->
     var right := Vector2(-forward.y, forward.x)
 
     var baseline_fraction := clampf(ADDRESS_LOOK_FRACTION + flat_length * 0.006, 0.46, 0.56)
-    var relief_fraction := _address_relief_focus_fraction(ball_xz, cup_xz)
+    var relief_profile := _address_relief_profile(ball_xz, cup_xz)
+    var relief_fraction := float(relief_profile["fraction"])
+    var relief_signal := float(relief_profile["signal"])
     var look_fraction := clampf(lerpf(baseline_fraction, relief_fraction, 0.72), 0.34, 0.68)
     var look_xz := ball_xz.lerp(cup_xz, look_fraction)
     var side_offset := _address_adaptive_side_offset(look_xz, right)
@@ -113,20 +123,27 @@ func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) ->
 
     var camera_terrain := _v166_sample(camera_xz.x, -camera_xz.y).x
     var look_terrain := _v166_sample(look_xz.x, -look_xz.y).x
-    var camera_visible_y := _address_visual_height(camera_terrain) + ADDRESS_CAMERA_HEIGHT
+    # Meaningful crown/bowl relief earns a bounded lower grazing eye and a slightly wider lens. The
+    # existing sightline guard can still raise the eye when a crest would occlude the visible shell,
+    # so stronger depth never trades away cup readability. Flat greens remain byte-for-byte at the
+    # previous camera height/FOV because relief_signal is zero.
+    var graze_drop := ADDRESS_RELIEF_GRAZE_DROP_M * relief_signal
+    var camera_visible_y := _address_visual_height(camera_terrain) + ADDRESS_CAMERA_HEIGHT - graze_drop
     var look_visible_y := _address_visual_height(look_terrain) + ADDRESS_LOOK_LIFT
     var clearance_raise := _address_sightline_raise(camera_xz, look_xz, camera_visible_y, look_visible_y)
     var desired_pos := Vector3(camera_xz.x, camera_visible_y + clearance_raise, camera_xz.y)
     var desired_look := Vector3(look_xz.x, look_visible_y, look_xz.y)
     var distance_mix := clampf((flat_length - 2.0) / 8.0, 0.0, 1.0)
-    var desired_fov := lerpf(ADDRESS_FOV_NEAR, ADDRESS_FOV_FAR, distance_mix)
+    var desired_fov := lerpf(ADDRESS_FOV_NEAR, ADDRESS_FOV_FAR, distance_mix) + ADDRESS_RELIEF_FOV_BOOST_DEG * relief_signal
     return {
         "position": desired_pos,
         "look": desired_look,
         "fov": desired_fov,
         "look_fraction": look_fraction,
         "side_offset": side_offset,
-        "clearance_raise": clearance_raise
+        "clearance_raise": clearance_raise,
+        "relief_signal": relief_signal,
+        "graze_drop": graze_drop
     }
 
 func _session_line_average_text(value_cm: float) -> String:

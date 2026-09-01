@@ -69,6 +69,24 @@ class AddressReliefCameraRegressionTest {
     }
 
     @Test
+    fun meaningfulReliefGetsBoundedGrazingPerspectiveWhileFlatsStayNeutral() {
+        val camera = asset("address_relief_camera.gd")
+        assertTrue(camera.contains("ADDRESS_RELIEF_SIGNAL_START_M := 0.018"))
+        assertTrue(camera.contains("ADDRESS_RELIEF_SIGNAL_FULL_M := 0.090"))
+        assertTrue(camera.contains("ADDRESS_RELIEF_GRAZE_DROP_M := 0.085"))
+        assertTrue(camera.contains("ADDRESS_RELIEF_FOV_BOOST_DEG := 3.0"))
+        assertTrue(camera.contains("smoothstep(ADDRESS_RELIEF_SIGNAL_START_M, ADDRESS_RELIEF_SIGNAL_FULL_M, best_relief)"))
+        assertTrue(camera.contains("graze_drop := ADDRESS_RELIEF_GRAZE_DROP_M * relief_signal"))
+        assertTrue(camera.contains("ADDRESS_CAMERA_HEIGHT - graze_drop"))
+        assertTrue(camera.contains("ADDRESS_RELIEF_FOV_BOOST_DEG * relief_signal"))
+        assertTrue(camera.contains("\"relief_signal\": relief_signal"))
+        assertTrue(camera.contains("\"graze_drop\": graze_drop"))
+        assertTrue(camera.contains("return {\"fraction\": ADDRESS_LOOK_FRACTION, \"signal\": 0.0}"))
+        assertFalse(camera.contains("GreenTerrain" + ".set"))
+        assertFalse(camera.contains("GreenReadAdvisor" + ".set"))
+    }
+
+    @Test
     fun tvSceneKeepsReliefAwareCameraInProductionInheritanceChain() {
         val scene = asset("v143_tv.tscn")
         val liveLayer = asset("replay_timeline_camera_truth.gd")
