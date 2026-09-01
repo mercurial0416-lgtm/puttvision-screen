@@ -29,9 +29,23 @@ class CupEntryReadGateRegressionTest {
         assertTrue(script.contains("var normal := Vector2(-tangent.y, tangent.x)"))
         assertTrue(script.contains("center + normal * ENTRY_HALF_WIDTH_PX"))
         assertTrue(script.contains("center - normal * ENTRY_HALF_WIDTH_PX"))
-        assertTrue(script.contains("badge_x_unclamped := center.x + 10.0 if center.x <= panel_size.x * 0.5 else center.x - 86.0"))
-        assertTrue(script.contains("clampf(badge_x_unclamped"))
+        assertTrue(script.contains("var badge_width := 106.0"))
+        assertTrue(script.contains("center.x - badge_width - 10.0"))
+        assertTrue(script.contains("panel_size.x - badge_width - 4.0"))
         assertTrue(script.contains("clampf(center.y - 8.0"))
+    }
+
+    @Test
+    fun cupEntryBadgeQuantifiesFinalApproachAngleAgainstBallToCupBaseline() {
+        val script = asset("cup_entry_read_gate.gd")
+        assertTrue(script.contains("func _entry_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> float:"))
+        assertTrue(script.contains("var baseline := (curve[curve.size() - 1] - curve[0]).normalized()"))
+        assertTrue(script.contains("var dot_value := clampf(tangent.dot(baseline), -1.0, 1.0)"))
+        assertTrue(script.contains("return rad_to_deg(acos(dot_value))"))
+        assertTrue(script.contains("return \"CUP ENTRY  STRAIGHT\""))
+        assertTrue(script.contains("return \"CUP ENTRY  %.0f°\" % angle_deg"))
+        assertTrue(script.contains("_badge.text = _entry_badge_text(curve, geometry)"))
+        assertFalse(script.contains("curve[curve.size() - 1] - center"))
     }
 
     @Test
