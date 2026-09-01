@@ -7,6 +7,7 @@ extends "res://green_read_direction_truth.gd"
 
 const LIVE_FINISH_DISTANCE_EPS_M := 0.0005
 const LIVE_LAUNCH_LOCK_MIN_SPEED_MPS := 0.03
+const LIVE_RETURN_MIN_CM := 1.0
 const SESSION_HISTORY_DOT_COLOR := Color("#76d7b6")
 const SESSION_LATEST_DOT_COLOR := Color("#f4dda0")
 
@@ -60,6 +61,14 @@ func _live_finish_readout(cross_track_cm: float) -> String:
     if absf(cross_track_cm) < 0.05:
         return "REST CENTER"
     return "REST %s %.1f cm" % ["RIGHT" if cross_track_cm > 0.0 else "LEFT", absf(cross_track_cm)]
+
+func _live_peak_finish_readout(peak_signed_cm: float, rest_signed_cm: float) -> String:
+    var peak_text := _live_peak_readout(peak_signed_cm)
+    var same_side := absf(rest_signed_cm) < 0.05 or peak_signed_cm * rest_signed_cm > 0.0
+    var return_cm := absf(peak_signed_cm) - absf(rest_signed_cm)
+    if same_side and return_cm >= LIVE_RETURN_MIN_CM:
+        return "%s · BACK %.1f cm" % [peak_text, return_cm]
+    return peak_text
 
 func _live_last_observed_readout(cross_track_cm: float) -> String:
     # A stop packet can omit its terminal coordinates even after the bridge supplied real in-roll
@@ -224,7 +233,7 @@ func _finalize_live_roll_truth(s: Dictionary) -> void:
     if _live_curve_value != null:
         _live_curve_value.text = _live_finish_readout(cross_track_cm)
     if _live_curve_peak_label != null:
-        _live_curve_peak_label.text = _live_peak_readout(_live_curve_peak_signed_cm)
+        _live_curve_peak_label.text = _live_peak_finish_readout(_live_curve_peak_signed_cm, cross_track_cm)
     if _live_curve_pace_label != null:
         _live_curve_pace_label.text = _live_summary_pace_readout()
 
