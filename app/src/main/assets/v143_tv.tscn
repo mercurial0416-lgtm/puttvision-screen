@@ -1,6 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
-[ext_resource path="res://shot_map_correction_target.gd" type="Script" id="1_v143"]
+[ext_resource path="res://replay_timeline_camera_truth.gd" type="Script" id="1_v143"]
+[ext_resource path="res://shot_map_correction_target.gd" type="Script" id="2_target"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
+
+[node name="ShotMapCorrectionTargetHelper" type="Node" parent="."]
+script = ExtResource("2_target")
