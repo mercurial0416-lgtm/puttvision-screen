@@ -29,8 +29,9 @@ class CupEntryReadGateRegressionTest {
         assertTrue(script.contains("var normal := Vector2(-tangent.y, tangent.x)"))
         assertTrue(script.contains("center + normal * ENTRY_HALF_WIDTH_PX"))
         assertTrue(script.contains("center - normal * ENTRY_HALF_WIDTH_PX"))
-        assertTrue(script.contains("clampf(center.x - 38.0"))
-        assertTrue(script.contains("clampf(center.y - 21.0"))
+        assertTrue(script.contains("badge_x_unclamped := center.x + 10.0 if center.x <= panel_size.x * 0.5 else center.x - 86.0"))
+        assertTrue(script.contains("clampf(badge_x_unclamped"))
+        assertTrue(script.contains("clampf(center.y - 8.0"))
     }
 
     @Test
