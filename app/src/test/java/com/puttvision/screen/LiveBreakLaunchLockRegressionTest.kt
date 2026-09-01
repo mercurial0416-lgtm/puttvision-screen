@@ -64,8 +64,11 @@ class LiveBreakLaunchLockRegressionTest {
     @Test
     fun terminalFrameWithoutCoordinatesCannotPresentRunningSampleAsFinalRest() {
         val script = asset("replay_timeline_camera_truth.gd")
-        assertTrue(script.contains("if not s.has(\"ballX\") or not s.has(\"ballY\"):\n        # A terminal bridge frame"))
-        assertTrue(script.contains("_finalize_unlocked_live_break()\n        return"))
-        assertTrue(script.contains("misrepresent an in-flight sample as the final rest"))
+        assertTrue(script.contains("elif missing_ball_position:\n            _finalize_last_observed_live_roll_truth()"))
+        assertTrue(script.contains("_live_curve_value.text = _live_last_observed_readout(cross_track_cm)"))
+        assertTrue(script.contains("return \"LAST OBS CENTER\""))
+        assertTrue(script.contains("return \"LAST OBS %s %.1f cm\""))
+        assertTrue(script.contains("without pretending the last sample is exact rest"))
+        assertFalse(script.contains("_live_curve_value.text = _live_finish_readout(cross_track_cm)\n    if _live_curve_peak_label != null:\n        _live_curve_peak_label.text = _live_peak_readout(_live_curve_peak_signed_cm)\n    if _live_curve_pace_label != null:\n        _live_curve_pace_label.text = _live_summary_pace_readout()\n\nfunc _finalize_last_observed_live_roll_truth"))
     }
 }
