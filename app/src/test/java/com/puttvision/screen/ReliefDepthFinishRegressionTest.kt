@@ -21,11 +21,14 @@ class ReliefDepthFinishRegressionTest {
     }
 
     @Test
-    fun hillshadeAndContoursGainTvContrastWithoutExtraLightsOrGeometry() {
+    fun hillshadeContoursAndContinuousFormGainTvContrastWithoutExtraGeometry() {
         val layer = asset("relief_depth_finish.gd")
         assertTrue(layer.contains("mix(0.88, 1.12"))
         assertTrue(layer.contains("elevation_ribbon * active * 0.44"))
         assertTrue(layer.contains("min(0.40, base_alpha + ribbon_alpha)"))
+        assertTrue(layer.contains("float form_light = clamp(primary_hillshade * 0.78 + cross_hillshade * 0.22"))
+        assertTrue(layer.contains("float form_lobe = mix(1.0, mix(0.82, 1.18"))
+        assertTrue(layer.contains("relief_color *= form_lobe;"))
         assertTrue(layer.contains("super._terrain_relief_material()"))
         assertFalse(layer.contains("DirectionalLight3D.new()"))
         assertFalse(layer.contains("MeshInstance3D.new()"))
