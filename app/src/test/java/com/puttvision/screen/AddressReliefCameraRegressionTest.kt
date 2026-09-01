@@ -36,6 +36,20 @@ class AddressReliefCameraRegressionTest {
     }
 
     @Test
+    fun shortPuttsProgressivelyFrameCupWithoutChangingReadTruth() {
+        val script = asset("address_relief_camera.gd")
+        assertTrue(script.contains("ADDRESS_CUP_FRAME_START_M := 2.40"))
+        assertTrue(script.contains("ADDRESS_CUP_FRAME_FULL_M := 0.90"))
+        assertTrue(script.contains("ADDRESS_CUP_LOOK_FRACTION := 0.82"))
+        assertTrue(script.contains("func _address_short_putt_cup_signal(distance_m: float) -> float:"))
+        assertTrue(script.contains("1.0 - smoothstep(ADDRESS_CUP_FRAME_FULL_M, ADDRESS_CUP_FRAME_START_M, distance_m)"))
+        assertTrue(script.contains("cup_frame_signal * ADDRESS_CUP_FOCUS_BLEND"))
+        assertTrue(script.contains("\"cup_frame_signal\": cup_frame_signal"))
+        assertFalse(script.contains("GreenTerrain" + ".set"))
+        assertFalse(script.contains("GreenReadAdvisor" + ".set"))
+    }
+
+    @Test
     fun addressCameraUsesBoundedCrossSlopeParallaxWithoutOrbitingPhysics() {
         val script = asset("address_relief_camera.gd")
         assertTrue(script.contains("ADDRESS_CAMERA_SIDE_ADAPT := 0.18"))
