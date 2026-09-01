@@ -135,9 +135,9 @@ func _v194_bias_geometry(center: Vector2) -> Dictionary:
 
 func _v194_bias_readout(mean: Vector2) -> String:
     # The vector is quick to scan, but on a TV the player should not have to mentally decode its
-    # direction or estimate magnitude. Reuse the same mean line/pace deltas and state them in cm.
-    var line_text := "CTR" if absf(mean.x) < V194_BIAS_CENTER_DEADZONE_CM else "%s %.0f" % ["R" if mean.x > 0.0 else "L", absf(mean.x)]
-    var pace_text := "PACE OK" if absf(mean.y) < V194_BIAS_CENTER_DEADZONE_CM else "%s %.0f" % ["LONG" if mean.y > 0.0 else "SHORT", absf(mean.y)]
+    # direction or infer a unit. Reuse the same mean line/pace deltas and state both axes explicitly.
+    var line_text := "LINE OK" if absf(mean.x) < V194_BIAS_CENTER_DEADZONE_CM else "%s %.0f CM" % ["RIGHT" if mean.x > 0.0 else "LEFT", absf(mean.x)]
+    var pace_text := "PACE OK" if absf(mean.y) < V194_BIAS_CENTER_DEADZONE_CM else "%s %.0f CM" % ["LONG" if mean.y > 0.0 else "SHORT", absf(mean.y)]
     return "BIAS %s  ·  %s" % [line_text, pace_text]
 
 # Preserve the true session centroid while shrinking only the presentation envelope to the visible
