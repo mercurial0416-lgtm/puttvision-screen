@@ -18,7 +18,7 @@ class TerrainReliefPresentationRegressionTest {
         val script = asset("terrain_relief_visibility.gd")
         assertTrue(script.contains("RELIEF_VISUAL_SCALE := 4.6"))
         assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.72"))
-        assertTrue(script.contains("terrain_height * (4.6 - 1.0)"))
+        assertTrue(script.contains("terrain_height * (RELIEF_VISUAL_SCALE - 1.0)"))
         assertTrue(script.contains("VERTEX.y = terrain_height + relief_delta + 0.0030"))
         assertFalse(script.contains("RELIEF_VISUAL_SCALE := 3.2"))
         assertFalse(script.contains("GreenTerrain("))
@@ -28,21 +28,43 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
+    fun opaqueGreenMeshUsesTheSamePresentationReliefAsReadCues() {
+        val script = asset("terrain_relief_visibility.gd")
+        assertTrue(script.contains("func _terrain_relief_surface_mesh("))
+        assertTrue(script.contains("var visible_height := _terrain_relief_geometry_height(terrain.x)"))
+        assertTrue(script.contains("vertices.append(Vector3(x, visible_height, local_z))"))
+        assertTrue(script.contains("green.mesh = _terrain_relief_surface_mesh("))
+        assertTrue(script.contains("_v164_grid.mesh = _terrain_relief_surface_mesh("))
+        assertTrue(script.contains("terrain.y * 0.01 * RELIEF_VISUAL_SCALE"))
+        assertTrue(script.contains("-terrain.z * 0.01 * RELIEF_VISUAL_SCALE"))
+        assertFalse(script.contains("green.visible = false"))
+    }
+
+    @Test
     fun translucentReliefPreservesExistingTurfGridAndReadCues() {
         val script = asset("terrain_relief_visibility.gd")
         assertTrue(script.contains("render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;"))
         assertTrue(script.contains("float base_alpha = 0.018"))
         assertTrue(script.contains("float ribbon_alpha = elevation_ribbon * active * 0.22"))
         assertTrue(script.contains("ALPHA = min(0.32, base_alpha + ribbon_alpha)"))
-        assertFalse(script.contains("surface now depth-writes"))
+        assertFalse(script.contains("depth_test_disabled"))
     }
 
     @Test
     fun subtleGradeReliefBudgetIsMateriallyStrongerButStillCapped() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("previous 3.2x pass still read too flat"))
-        assertTrue(script.contains("-0.72,\n        0.72"))
+        assertTrue(script.contains("RELIEF_VISUAL_SCALE := 4.6"))
+        assertTrue(script.contains("-RELIEF_EXTRA_CAP_M,\n        RELIEF_EXTRA_CAP_M"))
         assertFalse(script.contains("RELIEF_EXTRA_CAP_M := 1."))
+    }
+
+    @Test
+    fun greenBladesFollowOpaquePresentationSurface() {
+        val script = asset("terrain_relief_visibility.gd")
+        assertTrue(script.contains("func _terrain_relief_ground_green_blades()"))
+        assertTrue(script.contains("_v163_green_blades as MultiMeshInstance3D"))
+        assertTrue(script.contains("transform.origin.y = _terrain_relief_geometry_height"))
+        assertTrue(script.contains("_terrain_relief_ground_green_blades()"))
     }
 
     @Test
@@ -76,8 +98,6 @@ class TerrainReliefPresentationRegressionTest {
         assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(a.x, a.y).x) + RELIEF_TRAIL_CLEARANCE_M"))
         assertTrue(script.contains("_terrain_relief_visual_height(_v166_sample(b.x, b.y).x) + RELIEF_TRAIL_CLEARANCE_M"))
 
-        // Preserve Android solver truth: only presentation Y changes. The inherited physics ribbon
-        // remains documented as physical-height grounding, while this subclass overrides it.
         assertTrue(source.contains("var ah: float = _v166_sample(a.x, a.y).x + 0.0075"))
         assertFalse(script.contains("a.x +="))
         assertFalse(script.contains("a.y +="))
