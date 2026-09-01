@@ -1,9 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource path="res://session_dispersion_readability_preview.gd" type="Script" id="1_preview"]
 [ext_resource path="res://replay_roll_distance_layout.gd" type="Script" id="2_replay_layout"]
 [ext_resource path="res://cup_entry_read_gate.gd" type="Script" id="3_cup_entry"]
-[ext_resource path="res://green_read_apex_marker.gd" type="Script" id="4_apex"]
 
 [node name="V143Preview" type="Node3D"]
 script = ExtResource("1_preview")
@@ -13,6 +12,3 @@ script = ExtResource("2_replay_layout")
 
 [node name="CupEntryReadGate" type="Node" parent="."]
 script = ExtResource("3_cup_entry")
-
-[node name="GreenReadApexMarker" type="Node" parent="."]
-script = ExtResource("4_apex")
