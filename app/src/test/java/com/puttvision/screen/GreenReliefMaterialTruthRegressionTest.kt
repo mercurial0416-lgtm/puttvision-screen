@@ -15,37 +15,39 @@ class GreenReliefMaterialTruthRegressionTest {
 
     @Test
     fun sampledGreenDoesNotReceiveLegacyPlanarSlopeTwice() {
-        val guard = asset("green_relief_material_truth.gd")
+        val truth = asset("green_read_direction_truth.gd")
         val base = asset("v143_tv.gd")
         val relief = asset("terrain_relief_visibility.gd")
 
         assertTrue(base.contains("VERTEX.y += VERTEX.x * side_slope + (-VERTEX.z) * long_slope"))
         assertTrue(relief.contains("green.mesh = _terrain_relief_surface_mesh("))
         assertTrue(relief.contains("var visible_height := _terrain_relief_geometry_height(terrain.x)"))
-        assertTrue(guard.contains("mat_green.set_shader_parameter(\"side_slope\", 0.0)"))
-        assertTrue(guard.contains("mat_green.set_shader_parameter(\"long_slope\", 0.0)"))
+        assertTrue(truth.contains("mat_green.set_shader_parameter(\"side_slope\", 0.0)"))
+        assertTrue(truth.contains("mat_green.set_shader_parameter(\"long_slope\", 0.0)"))
     }
 
     @Test
-    fun guardRunsAfterInheritedSnapshotAndLeavesSurroundingSurfacesAlone() {
-        val guard = asset("green_relief_material_truth.gd")
-        val superIndex = guard.indexOf("super._apply_snapshot(s, immediate, delta)")
-        val lockIndex = guard.indexOf("_green_relief_lock_sampled_mesh_material()", superIndex)
+    fun materialTruthRunsAfterInheritedSnapshotAndLeavesSurroundingSurfacesAlone() {
+        val truth = asset("green_read_direction_truth.gd")
+        val superIndex = truth.indexOf("super._apply_snapshot(s, immediate, delta)")
+        val lockIndex = truth.indexOf("_lock_sampled_green_material_to_relief_mesh()", superIndex)
 
         assertTrue(superIndex >= 0)
         assertTrue(lockIndex > superIndex)
-        assertFalse(guard.contains("mat_fringe.set_shader_parameter"))
-        assertFalse(guard.contains("mat_rough.set_shader_parameter"))
-        assertFalse(guard.contains("GreenTerrain("))
-        assertFalse(guard.contains("GreenReadAdvisor("))
+        assertFalse(truth.contains("mat_fringe.set_shader_parameter"))
+        assertFalse(truth.contains("mat_rough.set_shader_parameter"))
+        assertFalse(truth.contains("GreenTerrain("))
+        assertFalse(truth.contains("GreenReadAdvisor("))
     }
 
     @Test
-    fun tvSceneUsesMaterialTruthAsFinalPresentationLayer() {
+    fun establishedTvPresentationEntryPointIsPreserved() {
         val scene = asset("v143_tv.tscn")
-        val guard = asset("green_relief_material_truth.gd")
+        val replay = asset("replay_timeline_camera_truth.gd")
+        val truth = asset("green_read_direction_truth.gd")
 
-        assertTrue(scene.contains("res://green_relief_material_truth.gd"))
-        assertTrue(guard.contains("extends \"res://replay_timeline_camera_truth.gd\""))
+        assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
+        assertTrue(replay.contains("extends \"res://green_read_direction_truth.gd\""))
+        assertTrue(truth.contains("extends \"res://relief_depth_finish.gd\""))
     }
 }
