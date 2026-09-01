@@ -19,7 +19,8 @@ class PracticeDispersionOrientationRegressionTest {
         assertTrue(script.contains("func _v194_principal_axes(covariance: Vector3) -> Dictionary:"))
         assertTrue(script.contains("0.5 * atan2(2.0 * xy, xx - yy)"))
         assertTrue(script.contains("func _v194_oriented_ellipse(major: float, minor: float, angle: float)"))
-        assertTrue(script.contains("func _v194_fit_envelope_to_ring(center: Vector2, points: PackedVector2Array)"))
+        assertTrue(script.contains("func _v194_fit_envelope_to_plot(center: Vector2, points: PackedVector2Array)"))
+        assertTrue(script.contains("var plot_min := V188_CENTER - Vector2(V188_RADIUS, V188_RADIUS)"))
     }
 
     @Test
