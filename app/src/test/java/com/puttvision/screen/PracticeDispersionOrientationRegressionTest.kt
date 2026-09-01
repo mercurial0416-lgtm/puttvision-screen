@@ -24,6 +24,18 @@ class PracticeDispersionOrientationRegressionTest {
     }
 
     @Test
+    fun groupingBiasVectorConnectsTargetToSessionCentroidWithDeadzone() {
+        val script = asset("v194_dispersion_envelope.gd")
+        assertTrue(script.contains("const V194_BIAS_DEADZONE_PX := 6.0"))
+        assertTrue(script.contains("func _v194_bias_geometry(center: Vector2) -> Dictionary:"))
+        assertTrue(script.contains("var delta := center - V188_CENTER"))
+        assertTrue(script.contains("if delta.length() < V194_BIAS_DEADZONE_PX:"))
+        assertTrue(script.contains("\"line\": PackedVector2Array([V188_CENTER, center])"))
+        assertTrue(script.contains("_v194_bias_line.name = \"SessionBiasVector\""))
+        assertTrue(script.contains("_v194_bias_arrow.name = \"SessionBiasArrow\""))
+    }
+
+    @Test
     fun groupingOrientationRemainsPresentationOnly() {
         val script = asset("v194_dispersion_envelope.gd")
         assertTrue(script.contains("Presentation-only session grouping envelope"))
