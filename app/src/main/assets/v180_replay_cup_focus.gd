@@ -21,7 +21,7 @@ const V180_COMPARE_SAMPLES := 20
 const V180_FINISH_DEADBAND_CM := 2.0
 const V180_CAMERA_SIDE_DEADBAND_M := 0.04
 const V180_FOV_RESPONSE := 5.5
-const V180_SIGHTLINE_SAMPLES := 3
+const V180_SIGHTLINE_SAMPLES := 7
 const V180_SIGHTLINE_CLEARANCE_M := 0.10
 const V180_SIGHTLINE_MAX_LIFT_M := 0.72
 
@@ -91,7 +91,9 @@ func _v180_cup_camera_side_sign(final_point: Vector2, cup_point: Vector2, final_
     return -1.0 if lateral_m > 0.0 else 1.0
 
 func _v180_sightline_lift(camera2: Vector2, camera_y: float, look2: Vector2, look_y: float) -> float:
-    # Three fixed probes are enough for this short cup-focus shot and keep Forward Mobile cost bounded.
+    # Seven evenly spaced probes catch narrow crests that can sit between the old quarter probes.
+    # This only runs during the short replay cup-focus beat, so the four extra height samples keep
+    # Forward Mobile cost bounded while protecting the cup/ball sightline on sculpted greens.
     # Convert each obstruction into the camera-end lift required to clear it; the look endpoint stays
     # locked to the real cup so the framing never lies about the green or authoritative roll.
     var needed := 0.0

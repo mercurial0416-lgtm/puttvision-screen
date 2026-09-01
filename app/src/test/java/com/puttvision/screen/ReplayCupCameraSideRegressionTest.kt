@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import java.io.File
+import kotlin.math.abs
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,7 +38,7 @@ class ReplayCupCameraSideRegressionTest {
         val focus = asset("v180_replay_cup_focus.gd")
         val sightline = focus.substringAfter("func _v180_sightline_lift")
             .substringBefore("\nfunc _v180_finish_verdict")
-        assertTrue(focus.contains("const V180_SIGHTLINE_SAMPLES := 3"))
+        assertTrue(focus.contains("const V180_SIGHTLINE_SAMPLES := 7"))
         assertTrue(focus.contains("const V180_SIGHTLINE_CLEARANCE_M := 0.10"))
         assertTrue(focus.contains("const V180_SIGHTLINE_MAX_LIFT_M := 0.72"))
         assertTrue(sightline.contains("for i in range(V180_SIGHTLINE_SAMPLES):"))
@@ -47,6 +48,16 @@ class ReplayCupCameraSideRegressionTest {
         assertTrue(sightline.contains("return clampf(needed, 0.0, V180_SIGHTLINE_MAX_LIFT_M)"))
         assertTrue(focus.contains("var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, cup2, cup_look.y)"))
         assertTrue(focus.contains("base_cam_y + sightline_lift"))
+    }
+
+    @Test
+    fun sightlineSamplingCatchesNarrowRidgeBetweenLegacyQuarterProbes() {
+        val legacy = listOf(0.25, 0.50, 0.75)
+        val upgraded = (0 until 7).map { (it + 1).toDouble() / 8.0 }
+        val narrowRidgeCenter = 0.125
+
+        assertFalse(legacy.any { abs(it - narrowRidgeCenter) < 0.001 })
+        assertTrue(upgraded.any { abs(it - narrowRidgeCenter) < 0.001 })
     }
 
     @Test
