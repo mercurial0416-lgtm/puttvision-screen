@@ -30,6 +30,17 @@ class ReplayRollDistanceCueRegressionTest {
     }
 
     @Test
+    fun replayClockProgressIsSpatiallyNormalizedBeforeDistanceUsesIt() {
+        val pacing = asset("replay_spatial_pacing.gd")
+        assertTrue(pacing.contains("Normalize replay"))
+        assertTrue(pacing.contains("interpolation by traveled arc length"))
+        assertTrue(pacing.contains("var target_length := total_length * p"))
+        assertTrue(pacing.contains("if traversed + segment >= target_length:"))
+        assertTrue(pacing.contains("var local_t := clampf((target_length - traversed) / segment, 0.0, 1.0)"))
+        assertFalse(pacing.contains("float(valid_points.size() - 1) * p"))
+    }
+
+    @Test
     fun trailLengthIsCachedOnceWhenReplayActivates() {
         val timeline = asset("replay_timeline_camera_truth.gd")
         assertTrue(timeline.contains("if replay_active and not _focus_replay_roll_was_active:"))
