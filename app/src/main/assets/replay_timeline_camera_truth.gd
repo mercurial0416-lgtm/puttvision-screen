@@ -43,6 +43,13 @@ func _live_finish_readout(cross_track_cm: float) -> String:
         return "REST CENTER"
     return "REST %s %.1f cm" % ["R" if cross_track_cm > 0.0 else "L", absf(cross_track_cm)]
 
+func _live_last_observed_readout(cross_track_cm: float) -> String:
+    # A stop packet can omit its terminal coordinates even after the bridge supplied real in-roll
+    # samples. Preserve that measured information without pretending the last sample is exact rest.
+    if absf(cross_track_cm) < 0.05:
+        return "LAST OBS CENTER"
+    return "LAST OBS %s %.1f cm" % ["R" if cross_track_cm > 0.0 else "L", absf(cross_track_cm)]
+
 func _live_launch_velocity(s: Dictionary) -> Vector2:
     return Vector2(float(s.get("vx", 0.0)), float(s.get("vy", 0.0)))
 
@@ -155,12 +162,32 @@ func _relock_live_break_launch(s: Dictionary, velocity: Vector2) -> void:
     if _live_curve_pace_label != null:
         _live_curve_pace_label.text = _live_pace_readout(velocity.length(), _live_curve_launch_speed)
 
+func _finalize_last_observed_live_roll_truth() -> void:
+    # The bridge declared the roll stopped but omitted terminal coordinates. Keep the last *measured*
+    # sample visible as LAST OBS instead of erasing a whole valid trace or mislabeling it as REST.
+    if not _live_curve_has_ball_pos:
+        _finalize_unlocked_live_break()
+        return
+
+    var ball_pos := _live_curve_last_ball_pos
+    var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
+    var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
+    if absf(cross_track_cm) > _live_curve_peak_cm:
+        _live_curve_peak_cm = absf(cross_track_cm)
+        _live_curve_peak_signed_cm = cross_track_cm
+    if _live_curve_history.is_empty():
+        _live_trace_push(cross_track_cm, _live_curve_travel_m)
+
+    if _live_curve_value != null:
+        _live_curve_value.text = _live_last_observed_readout(cross_track_cm)
+    if _live_curve_peak_label != null:
+        _live_curve_peak_label.text = _live_peak_readout(_live_curve_peak_signed_cm)
+    if _live_curve_pace_label != null:
+        _live_curve_pace_label.text = _live_summary_pace_readout()
+
 func _finalize_live_roll_truth(s: Dictionary) -> void:
     if not s.has("ballX") or not s.has("ballY"):
-        # A terminal bridge frame can legitimately omit coordinates after the running frame. Leaving
-        # the last live value on screen would misrepresent an in-flight sample as the final rest.
-        # Finish neutral instead of fabricating a terminal result from stale presentation state.
-        _finalize_unlocked_live_break()
+        _finalize_last_observed_live_roll_truth()
         return
 
     var ball_pos := Vector2(float(s.get("ballX", 0.0)), float(s.get("ballY", 0.0)))
@@ -201,13 +228,15 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     var running := bool(s.get("running", false))
     var launch_velocity := _live_launch_velocity(s)
     var launch_lock_was_pending := _live_launch_lock_pending
-    var missing_ball_position := running and (not s.has("ballX") or not s.has("ballY"))
+    var missing_ball_position := not s.has("ballX") or not s.has("ballY")
+    var missing_running_ball_position := running and missing_ball_position
     var had_real_ball_position := _live_curve_has_ball_pos
     var presentation_snapshot := s
 
     # Once a real ball sample exists, bridge gaps should hold that coordinate rather than manufacture
-    # a jump to world origin. Duplicate only for this presentation chain; authoritative consumers keep
-    # the original bridge payload unchanged.
+    # a jump to world origin. This includes the terminal stop packet: inherited presentation should
+    # stay pinned to the last measured point even though the final readout explicitly says LAST OBS.
+    # Duplicate only for this presentation chain; authoritative consumers keep the original payload.
     if missing_ball_position and had_real_ball_position:
         presentation_snapshot = s.duplicate()
         presentation_snapshot["ballX"] = _live_curve_last_ball_pos.x
@@ -217,7 +246,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
 
     # Before the first genuine ball sample there is nothing truthful to hold. Remove synthetic origin
     # telemetry created by inherited default values and wait in TRACKING state for real coordinates.
-    if missing_ball_position and not had_real_ball_position:
+    if missing_running_ball_position and not had_real_ball_position:
         _neutralize_missing_live_break_position()
 
     if running and not was_running:
@@ -236,5 +265,7 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     if was_running and not running:
         if launch_lock_was_pending:
             _finalize_unlocked_live_break()
+        elif missing_ball_position:
+            _finalize_last_observed_live_roll_truth()
         else:
             _finalize_live_roll_truth(s)
