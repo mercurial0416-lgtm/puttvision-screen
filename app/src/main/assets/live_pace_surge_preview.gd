@@ -1,4 +1,4 @@
-extends "res://terrain_relief_preview.gd"
+extends "res://relief_depth_finish_preview.gd"
 
 const LivePaceSurgeScene = preload("res://live_pace_surge.gd")
 var _live_pace_surge_checked := false
