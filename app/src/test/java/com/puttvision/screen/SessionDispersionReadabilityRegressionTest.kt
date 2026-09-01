@@ -42,11 +42,13 @@ class SessionDispersionReadabilityRegressionTest {
         val greenRead = asset("green_read_direction_truth.gd")
         val depthFinish = asset("relief_depth_finish.gd")
         val previewScene = asset("v143_preview.tscn")
+        val premiumPreview = asset("premium_direction_language_preview.gd")
         assertTrue(tvScene.contains("res://replay_timeline_camera_truth.gd"))
         assertTrue(liveLayer.contains("extends \"res://green_read_direction_truth.gd\""))
         assertTrue(greenRead.contains("extends \"res://relief_depth_finish.gd\""))
         assertTrue(depthFinish.contains("extends \"res://address_relief_camera.gd\""))
-        assertTrue(previewScene.contains("res://session_dispersion_readability_preview.gd"))
+        assertTrue(previewScene.contains("res://premium_direction_language_preview.gd"))
+        assertTrue(premiumPreview.contains("extends \"res://session_dispersion_readability_preview.gd\""))
         val preview = asset("session_dispersion_readability_preview.gd")
         assertTrue(preview.contains("SESSION_DISPERSION_READABILITY_OK=1"))
         assertTrue(preview.contains("_v179_points[2].color != SESSION_DISPERSION_RECENT_COLOR"))
@@ -54,7 +56,7 @@ class SessionDispersionReadabilityRegressionTest {
 
     @Test
     fun presentationPolishCannotMutateAuthoritativePuttingInputs() {
-        for (path in listOf("address_relief_camera.gd", "relief_depth_finish.gd", "green_read_direction_truth.gd", "replay_timeline_camera_truth.gd", "session_dispersion_readability_preview.gd")) {
+        for (path in listOf("address_relief_camera.gd", "relief_depth_finish.gd", "green_read_direction_truth.gd", "replay_timeline_camera_truth.gd", "session_dispersion_readability_preview.gd", "premium_direction_language_preview.gd")) {
             val source = asset(path)
             assertFalse(source.contains("GreenTerrain.set"))
             assertFalse(source.contains("GreenReadAdvisor.set"))
