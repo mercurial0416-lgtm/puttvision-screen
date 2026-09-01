@@ -7,11 +7,11 @@ import org.junit.Test
 class LiveBreakMissingCoordinateHoldRegressionTest {
     private fun asset(): String {
         val candidates = listOf(
-            File("src/main/assets/live_break_coordinate_hold.gd"),
-            File("app/src/main/assets/live_break_coordinate_hold.gd")
+            File("src/main/assets/replay_timeline_camera_truth.gd"),
+            File("app/src/main/assets/replay_timeline_camera_truth.gd")
         )
         return candidates.firstOrNull { it.isFile }?.readText()
-            ?: error("Unable to locate LIVE BREAK coordinate hold asset")
+            ?: error("Unable to locate replay timeline truth asset")
     }
 
     @Test
@@ -28,7 +28,7 @@ class LiveBreakMissingCoordinateHoldRegressionTest {
     fun missingLaunchCoordinateCannotSeedSyntheticTelemetry() {
         val script = asset()
         val superCall = "super._apply_snapshot(presentation_snapshot, immediate, delta)"
-        val neutralizeCall = "if missing_ball_position and not had_real_ball_position:\n        _live_break_neutralize_missing_position()"
+        val neutralizeCall = "if missing_ball_position and not had_real_ball_position:\n        _neutralize_missing_live_break_position()"
         assertTrue(script.contains(neutralizeCall))
         assertTrue(script.indexOf(superCall) < script.indexOf(neutralizeCall))
         assertTrue(script.contains("_live_curve_travel_m = 0.0"))
