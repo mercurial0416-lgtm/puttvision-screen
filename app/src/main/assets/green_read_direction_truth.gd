@@ -17,6 +17,13 @@ func _overview_aim_text(offset_m: float) -> String:
     var direction := "RIGHT" if offset_m > 0.0 else "LEFT"
     return "AIM %s %d cm" % [direction, int(round(absf(offset_m) * 100.0))]
 
+func _v183_break_text(side_pct: float) -> String:
+    # Keep the overview's established movement-sign semantics while spelling the direction out for
+    # TV-distance readability. This is presentation text only; no terrain/read value is modified.
+    if abs(side_pct) < 0.05:
+        return "BREAK  STRAIGHT"
+    return "BREAK  %s %.2f%%" % [("RIGHT" if side_pct > 0.0 else "LEFT"), abs(side_pct)]
+
 func _overview_aim_target_position(offset_m: float) -> Vector2:
     # Mirror the overview's existing horizontal recommendation scale, but expose the advisor's
     # target as an explicit address cue instead of forcing the player to infer it from curve shape.
