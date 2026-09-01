@@ -6,6 +6,7 @@ extends "res://practice_ring_boundary_finish.gd"
 # samples are unevenly spaced without touching Android V135-V137, GreenTerrain, GreenReadAdvisor,
 # aim or scoring.
 const READ_SPATIAL_EPSILON := 0.0001
+const READ_APEX_MIN_DEVIATION_PX := 0.5
 
 func _read_path_sample(curve: PackedVector2Array, fraction: float) -> Dictionary:
     if curve.is_empty():
@@ -41,11 +42,43 @@ func _read_path_sample(curve: PackedVector2Array, fraction: float) -> Dictionary
 
     return {"point": curve[curve.size() - 1], "tangent": fallback_tangent}
 
+func _read_baseline_deviation(point: Vector2, start: Vector2, finish: Vector2) -> float:
+    var baseline := finish - start
+    var baseline_length := baseline.length()
+    if baseline_length <= READ_SPATIAL_EPSILON:
+        return 0.0
+    return absf(baseline.cross(point - start)) / baseline_length
+
 func _read_apex_point(offset_m: float) -> Vector2:
     var curve := _v183_path(offset_m)
     if curve.is_empty():
         return V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
-    return _read_path_sample(curve, 0.5)["point"] as Vector2
+    if curve.size() < 3:
+        return _read_path_sample(curve, 0.5)["point"] as Vector2
+
+    # APEX must mean the strongest visible break, not simply 50% of sample travel. On asymmetric
+    # reads (late fall-off, crowns, bowls) the midpoint can sit well before or after the real maximum
+    # departure from the ball-to-cup baseline. For a polyline the maximum perpendicular departure
+    # occurs at a vertex, so scanning the existing rendered recommendation is exact, allocation-free,
+    # and independent of uneven solver sample spacing. This is presentation-only; no read value moves.
+    var start := curve[0]
+    var finish := curve[curve.size() - 1]
+    if start.distance_to(finish) <= READ_SPATIAL_EPSILON:
+        return _read_path_sample(curve, 0.5)["point"] as Vector2
+
+    var best_point := _read_path_sample(curve, 0.5)["point"] as Vector2
+    var best_deviation := 0.0
+    for index in range(1, curve.size() - 1):
+        var deviation := _read_baseline_deviation(curve[index], start, finish)
+        if is_finite(deviation) and deviation > best_deviation:
+            best_deviation = deviation
+            best_point = curve[index]
+
+    # Near-straight reads do not have a meaningful geometric apex. Preserve the stable spatial
+    # midpoint in that case so tiny floating-point wiggles cannot make the landmark jump around.
+    if best_deviation < READ_APEX_MIN_DEVIATION_PX:
+        return _read_path_sample(curve, 0.5)["point"] as Vector2
+    return best_point
 
 func _read_launch_geometry(offset_m: float) -> Dictionary:
     var curve := _v183_path(offset_m)
