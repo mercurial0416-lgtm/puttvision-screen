@@ -18,7 +18,7 @@ class TerrainReliefPresentationRegressionTest {
         val script = asset("terrain_relief_visibility.gd")
         assertTrue(script.contains("RELIEF_VISUAL_SCALE := 4.6"))
         assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.72"))
-        assertTrue(script.contains("terrain_height * (RELIEF_VISUAL_SCALE - 1.0)"))
+        assertTrue(script.contains("terrain_height_m * (RELIEF_VISUAL_SCALE - 1.0)"))
         assertTrue(script.contains("VERTEX.y = terrain_height + relief_delta + 0.0030"))
         assertFalse(script.contains("RELIEF_VISUAL_SCALE := 3.2"))
         assertFalse(script.contains("GreenTerrain("))
