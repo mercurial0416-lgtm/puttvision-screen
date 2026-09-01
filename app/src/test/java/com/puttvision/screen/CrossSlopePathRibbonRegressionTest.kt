@@ -41,7 +41,12 @@ class CrossSlopePathRibbonRegressionTest {
 
         assertFalse(ribbon.contains("GreenTerrain("))
         assertFalse(ribbon.contains("GreenReadAdvisor("))
-        assertFalse(ribbon.contains("points["))
+        assertFalse(ribbon.contains("points[i] ="))
+        assertFalse(ribbon.contains("points[i + 1] ="))
+        assertFalse(ribbon.contains("points.append"))
+        assertFalse(ribbon.contains("points.clear"))
+        assertTrue(ribbon.contains("var a := points[i] as Vector2"))
+        assertTrue(ribbon.contains("var b := points[i + 1] as Vector2"))
         assertTrue(ribbon.contains("RELIEF_TRAIL_CLEARANCE_M"))
     }
 }
