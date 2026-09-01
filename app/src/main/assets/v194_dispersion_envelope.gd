@@ -6,6 +6,8 @@ extends "res://v193_best_rep_ghost.gd"
 
 var _v194_envelope: Line2D
 var _v194_centroid: Line2D
+var _v194_bias_line: Line2D
+var _v194_bias_arrow: Line2D
 var _v194_spread_label: Label
 
 const V194_MIN_SAMPLES := 3
@@ -15,6 +17,9 @@ const V194_SIGMA_SCALE := 1.35
 const V194_MIN_AXIS_PX := 5.0
 const V194_MAX_AXIS_PX := 34.0
 const V194_COVARIANCE_EPSILON := 0.0001
+const V194_BIAS_DEADZONE_PX := 6.0
+const V194_BIAS_ARROW_LENGTH_PX := 5.0
+const V194_BIAS_ARROW_HALF_WIDTH_PX := 3.0
 
 func _v194_mean_sample() -> Vector2:
     if _v179_samples.is_empty():
@@ -107,6 +112,25 @@ func _v194_cross(radius: float) -> PackedVector2Array:
         Vector2(0.0, -radius), Vector2(0.0, radius)
     ])
 
+func _v194_bias_geometry(center: Vector2) -> Dictionary:
+    # Turn statistical bias into an immediately readable coaching cue without inventing any new shot
+    # metric. Both endpoints live in the same already-clamped shot-map space used by the dots.
+    var delta := center - V188_CENTER
+    if delta.length() < V194_BIAS_DEADZONE_PX:
+        return {"visible": false, "line": PackedVector2Array(), "arrow": PackedVector2Array()}
+    var direction := delta.normalized()
+    var perpendicular := Vector2(-direction.y, direction.x)
+    var arrow_base := center - direction * V194_BIAS_ARROW_LENGTH_PX
+    return {
+        "visible": true,
+        "line": PackedVector2Array([V188_CENTER, center]),
+        "arrow": PackedVector2Array([
+            arrow_base + perpendicular * V194_BIAS_ARROW_HALF_WIDTH_PX,
+            center,
+            arrow_base - perpendicular * V194_BIAS_ARROW_HALF_WIDTH_PX
+        ])
+    }
+
 # Preserve the true session centroid while shrinking only the presentation envelope to the visible
 # shot-map plot. Covariance rotates the ellipse to match the actual miss pattern; edge fitting then
 # scales it uniformly without flattening that directional signal.
@@ -141,6 +165,22 @@ func _build_hud() -> void:
     _v188_panel.add_child(_v194_envelope)
     _v188_panel.move_child(_v194_envelope, 5)
 
+    _v194_bias_line = Line2D.new()
+    _v194_bias_line.name = "SessionBiasVector"
+    _v194_bias_line.width = 1.15
+    _v194_bias_line.default_color = Color(0.91, 0.72, 0.30, 0.72)
+    _v194_bias_line.visible = false
+    _v188_panel.add_child(_v194_bias_line)
+    _v188_panel.move_child(_v194_bias_line, 6)
+
+    _v194_bias_arrow = Line2D.new()
+    _v194_bias_arrow.name = "SessionBiasArrow"
+    _v194_bias_arrow.width = 1.35
+    _v194_bias_arrow.default_color = Color(0.98, 0.82, 0.42, 0.90)
+    _v194_bias_arrow.visible = false
+    _v188_panel.add_child(_v194_bias_arrow)
+    _v188_panel.move_child(_v194_bias_arrow, 7)
+
     _v194_centroid = Line2D.new()
     _v194_centroid.name = "SessionGroupingCentroid"
     _v194_centroid.width = 1.4
@@ -162,11 +202,13 @@ func _build_hud() -> void:
     _v194_refresh_envelope()
 
 func _v194_refresh_envelope() -> void:
-    if _v194_envelope == null or _v194_centroid == null or _v194_spread_label == null:
+    if _v194_envelope == null or _v194_centroid == null or _v194_bias_line == null or _v194_bias_arrow == null or _v194_spread_label == null:
         return
     var show := _v188_panel != null and _v188_panel.visible and _v179_samples.size() >= V194_MIN_SAMPLES
     _v194_envelope.visible = show
     _v194_centroid.visible = show
+    _v194_bias_line.visible = false
+    _v194_bias_arrow.visible = false
     _v194_spread_label.visible = show
     if not show:
         return
@@ -182,6 +224,18 @@ func _v194_refresh_envelope() -> void:
     else:
         _v194_envelope.points = PackedVector2Array()
     _v194_centroid.position = center
+
+    var bias := _v194_bias_geometry(center)
+    var bias_visible := bool(bias["visible"])
+    _v194_bias_line.visible = bias_visible
+    _v194_bias_arrow.visible = bias_visible
+    if bias_visible:
+        _v194_bias_line.points = bias["line"]
+        _v194_bias_arrow.points = bias["arrow"]
+    else:
+        _v194_bias_line.points = PackedVector2Array()
+        _v194_bias_arrow.points = PackedVector2Array()
+
     _v194_spread_label.text = "GROUP ±%.0f / ±%.0f CM" % [spread.x, spread.y]
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
