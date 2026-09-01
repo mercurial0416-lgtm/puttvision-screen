@@ -249,13 +249,28 @@ func _v166_ribbon_mesh(points: Array, width: float) -> ArrayMesh:
             continue
         render_dir = render_dir.normalized()
         var perp := Vector2(-render_dir.y, render_dir.x) * half_width
-        var ah: float = _terrain_relief_visual_height(_v166_sample(a.x, a.y).x) + RELIEF_TRAIL_CLEARANCE_M
-        var bh: float = _terrain_relief_visual_height(_v166_sample(b.x, b.y).x) + RELIEF_TRAIL_CLEARANCE_M
+
+        # Each ribbon shoulder sits at a different physical X/Y on a cross-slope. Sampling only the
+        # centerline height made one edge clip into the visible green while the other floated above it,
+        # which visually weakened both the recommended read and replay trail. Keep X/Z path truth
+        # untouched and ground only each presentation vertex to its matching relief sample.
+        var a_left_x := a.x + perp.x
+        var a_left_y := a.y - perp.y
+        var a_right_x := a.x - perp.x
+        var a_right_y := a.y + perp.y
+        var b_left_x := b.x + perp.x
+        var b_left_y := b.y - perp.y
+        var b_right_x := b.x - perp.x
+        var b_right_y := b.y + perp.y
+        var a_left_h := _terrain_relief_visual_height(_v166_sample(a_left_x, a_left_y).x) + RELIEF_TRAIL_CLEARANCE_M
+        var a_right_h := _terrain_relief_visual_height(_v166_sample(a_right_x, a_right_y).x) + RELIEF_TRAIL_CLEARANCE_M
+        var b_left_h := _terrain_relief_visual_height(_v166_sample(b_left_x, b_left_y).x) + RELIEF_TRAIL_CLEARANCE_M
+        var b_right_h := _terrain_relief_visual_height(_v166_sample(b_right_x, b_right_y).x) + RELIEF_TRAIL_CLEARANCE_M
         var base: int = vertices.size()
-        vertices.append(Vector3(a.x + perp.x, ah, -a.y + perp.y))
-        vertices.append(Vector3(a.x - perp.x, ah, -a.y - perp.y))
-        vertices.append(Vector3(b.x + perp.x, bh, -b.y + perp.y))
-        vertices.append(Vector3(b.x - perp.x, bh, -b.y - perp.y))
+        vertices.append(Vector3(a_left_x, a_left_h, -a_left_y))
+        vertices.append(Vector3(a_right_x, a_right_h, -a_right_y))
+        vertices.append(Vector3(b_left_x, b_left_h, -b_left_y))
+        vertices.append(Vector3(b_right_x, b_right_h, -b_right_y))
         indices.append_array(PackedInt32Array([base, base + 2, base + 1, base + 1, base + 2, base + 3]))
     var arrays: Array = []
     arrays.resize(Mesh.ARRAY_MAX)
