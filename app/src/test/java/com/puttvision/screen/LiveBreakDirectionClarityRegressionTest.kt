@@ -37,13 +37,23 @@ class LiveBreakDirectionClarityRegressionTest {
     }
 
     @Test
-    fun liveBreakClarityIsLowFrequencyAndWiredToTvAndPreview() {
+    fun liveBreakClarityRunsAfterRootHudAtBoundedFrequency() {
         val script = asset("live_break_direction_clarity.gd")
+        assertTrue(script.contains("const REFRESH_INTERVAL_S := 0.05"))
+        assertTrue(script.contains("var _elapsed_s := REFRESH_INTERVAL_S"))
+        assertTrue(script.contains("func _process(delta: float) -> void:"))
+        assertTrue(script.contains("if _elapsed_s < REFRESH_INTERVAL_S:"))
+        assertTrue(script.contains("_refresh()"))
+        assertFalse(script.contains("Timer.new()"))
+    }
+
+    @Test
+    fun liveBreakClarityIsWiredToTvAndRenderedPreview() {
         val tv = asset("v143_tv.tscn")
         val preview = asset("v143_preview.tscn")
-        assertTrue(script.contains("const REFRESH_INTERVAL_S := 0.10"))
-        assertTrue(script.contains("_timer.wait_time = REFRESH_INTERVAL_S"))
         assertTrue(tv.contains("res://live_break_direction_clarity.gd"))
+        assertTrue(tv.contains("[node name=\"LiveBreakDirectionClarity\""))
         assertTrue(preview.contains("res://live_break_direction_clarity.gd"))
+        assertTrue(preview.contains("[node name=\"LiveBreakDirectionClarity\""))
     }
 }
