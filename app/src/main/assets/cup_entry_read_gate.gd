@@ -42,6 +42,23 @@ func _entry_geometry(curve: PackedVector2Array) -> Dictionary:
         "tangent": tangent
     }
 
+func _entry_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> float:
+    if curve.size() < 2 or geometry.is_empty():
+        return 0.0
+    var center: Vector2 = geometry.get("center", Vector2.ZERO)
+    var tangent: Vector2 = geometry.get("tangent", Vector2.UP)
+    var cup_vector := (curve[curve.size() - 1] - center).normalized()
+    if cup_vector.length_squared() < 0.5 or tangent.length_squared() < 0.5:
+        return 0.0
+    var dot_value := clampf(tangent.dot(cup_vector), -1.0, 1.0)
+    return rad_to_deg(acos(dot_value))
+
+func _entry_badge_text(curve: PackedVector2Array, geometry: Dictionary) -> String:
+    var angle_deg := _entry_angle_degrees(curve, geometry)
+    if not is_finite(angle_deg) or angle_deg < 0.5:
+        return "CUP ENTRY  STRAIGHT"
+    return "CUP ENTRY  %.0f°" % angle_deg
+
 func _ready() -> void:
     _timer = Timer.new()
     _timer.name = "CupEntryReadGateRefresh"
@@ -77,8 +94,8 @@ func _bind() -> void:
 
     _badge = Label.new()
     _badge.name = "CommercialReadCupEntryBadge"
-    _badge.text = "CUP ENTRY"
-    _badge.size = Vector2(76.0, 16.0)
+    _badge.text = "CUP ENTRY  STRAIGHT"
+    _badge.size = Vector2(106.0, 16.0)
     _badge.add_theme_font_size_override("font_size", 8)
     _badge.add_theme_color_override("font_color", BADGE_COLOR)
     _badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -109,11 +126,13 @@ func _refresh() -> void:
     var center: Vector2 = geometry["center"]
     _gate.points = PackedVector2Array([geometry["left"], geometry["right"]])
     _center_ring.position = center
+    _badge.text = _entry_badge_text(curve, geometry)
 
-    # Keep the label beside the entry gate, not above the cup where overview annotations are densest.
-    # Flip sides around the panel midpoint and clamp the result so curved reads stay legible at edges.
+    # Keep the quantified label beside the entry gate, not above the cup where overview annotations
+    # are densest. Flip sides around the panel midpoint and clamp the wider badge to the plot bounds.
     var panel_size := _panel.size
-    var badge_x_unclamped := center.x + 10.0 if center.x <= panel_size.x * 0.5 else center.x - 86.0
-    var badge_x := clampf(badge_x_unclamped, 4.0, maxf(4.0, panel_size.x - 80.0))
+    var badge_width := 106.0
+    var badge_x_unclamped := center.x + 10.0 if center.x <= panel_size.x * 0.5 else center.x - badge_width - 10.0
+    var badge_x := clampf(badge_x_unclamped, 4.0, maxf(4.0, panel_size.x - badge_width - 4.0))
     var badge_y := clampf(center.y - 8.0, 4.0, maxf(4.0, panel_size.y - 20.0))
     _badge.position = Vector2(badge_x, badge_y)
