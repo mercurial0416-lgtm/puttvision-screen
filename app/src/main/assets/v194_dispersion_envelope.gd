@@ -8,6 +8,7 @@ var _v194_envelope: Line2D
 var _v194_centroid: Line2D
 var _v194_bias_line: Line2D
 var _v194_bias_arrow: Line2D
+var _v194_bias_label: Label
 var _v194_spread_label: Label
 
 const V194_MIN_SAMPLES := 3
@@ -20,6 +21,7 @@ const V194_COVARIANCE_EPSILON := 0.0001
 const V194_BIAS_DEADZONE_PX := 6.0
 const V194_BIAS_ARROW_LENGTH_PX := 5.0
 const V194_BIAS_ARROW_HALF_WIDTH_PX := 3.0
+const V194_BIAS_CENTER_DEADZONE_CM := 1.5
 
 func _v194_mean_sample() -> Vector2:
     if _v179_samples.is_empty():
@@ -131,6 +133,13 @@ func _v194_bias_geometry(center: Vector2) -> Dictionary:
         ])
     }
 
+func _v194_bias_readout(mean: Vector2) -> String:
+    # The vector is quick to scan, but on a TV the player should not have to mentally decode its
+    # direction or estimate magnitude. Reuse the same mean line/pace deltas and state them in cm.
+    var line_text := "CTR" if absf(mean.x) < V194_BIAS_CENTER_DEADZONE_CM else "%s %.0f" % ["R" if mean.x > 0.0 else "L", absf(mean.x)]
+    var pace_text := "PACE OK" if absf(mean.y) < V194_BIAS_CENTER_DEADZONE_CM else "%s %.0f" % ["LONG" if mean.y > 0.0 else "SHORT", absf(mean.y)]
+    return "BIAS %s  ·  %s" % [line_text, pace_text]
+
 # Preserve the true session centroid while shrinking only the presentation envelope to the visible
 # shot-map plot. Covariance rotates the ellipse to match the actual miss pattern; edge fitting then
 # scales it uniformly without flattening that directional signal.
@@ -189,6 +198,17 @@ func _build_hud() -> void:
     _v194_centroid.visible = false
     _v188_panel.add_child(_v194_centroid)
 
+    _v194_bias_label = _v174_text(
+        _v188_panel,
+        Vector2(8, 116),
+        Vector2(134, 10),
+        "BIAS —",
+        7,
+        Color(0.96, 0.81, 0.45, 0.94),
+        HORIZONTAL_ALIGNMENT_CENTER
+    )
+    _v194_bias_label.visible = false
+
     _v194_spread_label = _v174_text(
         _v188_panel,
         Vector2(14, 127),
@@ -202,13 +222,14 @@ func _build_hud() -> void:
     _v194_refresh_envelope()
 
 func _v194_refresh_envelope() -> void:
-    if _v194_envelope == null or _v194_centroid == null or _v194_bias_line == null or _v194_bias_arrow == null or _v194_spread_label == null:
+    if _v194_envelope == null or _v194_centroid == null or _v194_bias_line == null or _v194_bias_arrow == null or _v194_bias_label == null or _v194_spread_label == null:
         return
     var show := _v188_panel != null and _v188_panel.visible and _v179_samples.size() >= V194_MIN_SAMPLES
     _v194_envelope.visible = show
     _v194_centroid.visible = show
     _v194_bias_line.visible = false
     _v194_bias_arrow.visible = false
+    _v194_bias_label.visible = show
     _v194_spread_label.visible = show
     if not show:
         return
@@ -236,6 +257,7 @@ func _v194_refresh_envelope() -> void:
         _v194_bias_line.points = PackedVector2Array()
         _v194_bias_arrow.points = PackedVector2Array()
 
+    _v194_bias_label.text = _v194_bias_readout(mean)
     _v194_spread_label.text = "GROUP ±%.0f / ±%.0f CM" % [spread.x, spread.y]
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
