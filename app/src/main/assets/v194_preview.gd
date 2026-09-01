@@ -67,9 +67,9 @@ func _process(delta: float) -> void:
         get_tree().quit(25)
         return
 
-    # A biased group used to let the statistical ellipse cross the visible shot-map boundary. Keep
-    # the true centroid and orientation but require every rendered vertex to remain inside the
-    # actual circular target, not merely its surrounding rectangle.
+    # A biased group may place its true centroid on the circular target rim. Keep that centroid and
+    # covariance direction visible while constraining the envelope to the compact plot rectangle so
+    # it cannot collide with adjacent HUD content.
     _v179_samples = [
         Vector2(20.0, 44.0),
         Vector2(24.0, 54.0),
@@ -88,11 +88,12 @@ func _process(delta: float) -> void:
         push_error("Session grouping edge envelope unexpectedly hidden")
         get_tree().quit(25)
         return
-    var safe_radius := V188_RADIUS - V194_EDGE_INSET
+    var plot_min := V188_CENTER - Vector2(V188_RADIUS, V188_RADIUS) + Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
+    var plot_max := V188_CENTER + Vector2(V188_RADIUS, V188_RADIUS) - Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
     for local_point in _v194_envelope.points:
         var point := _v194_envelope.position + local_point
-        if point.distance_to(V188_CENTER) > safe_radius + 0.02:
-            push_error("Session grouping envelope escaped circular shot-map bounds")
+        if point.x < plot_min.x - 0.02 or point.y < plot_min.y - 0.02 or point.x > plot_max.x + 0.02 or point.y > plot_max.y + 0.02:
+            push_error("Session grouping envelope escaped shot-map bounds")
             get_tree().quit(25)
             return
 
