@@ -73,9 +73,11 @@ class AddressReliefCameraRegressionTest {
         val scene = asset("v143_tv.tscn")
         val liveLayer = asset("replay_timeline_camera_truth.gd")
         val greenRead = asset("green_read_direction_truth.gd")
+        val depthFinish = asset("relief_depth_finish.gd")
         assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
         assertTrue(liveLayer.contains("extends \"res://green_read_direction_truth.gd\""))
-        assertTrue(greenRead.contains("extends \"res://address_relief_camera.gd\""))
+        assertTrue(greenRead.contains("extends \"res://relief_depth_finish.gd\""))
+        assertTrue(depthFinish.contains("extends \"res://address_relief_camera.gd\""))
     }
 
     @Test
