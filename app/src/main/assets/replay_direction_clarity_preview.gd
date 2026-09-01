@@ -1,7 +1,8 @@
 extends "res://session_dispersion_readability_preview.gd"
 
-# Preview-only mirror of replay_direction_clarity.gd so rendered CI validates the exact user-facing
-# direction wording while retaining the established seeded commercial HUD fixture.
+# Preview-only fixture for the clarity pass. The seeded commercial preview does not expose the
+# live telemetry formatter methods used by production, so keep its established inheritance intact
+# and provide only the pure semantic helper here. Production wiring is covered separately.
 
 func _expand_live_direction(text: String) -> String:
     if text.begins_with("REST R "):
@@ -21,15 +22,3 @@ func _expand_live_direction(text: String) -> String:
     if text.begins_with("L "):
         return "LEFT " + text.substr(2)
     return text
-
-func _live_curve_readout(cross_track_cm: float) -> String:
-    return _expand_live_direction(super._live_curve_readout(cross_track_cm))
-
-func _live_peak_readout(peak_signed_cm: float) -> String:
-    return _expand_live_direction(super._live_peak_readout(peak_signed_cm))
-
-func _live_finish_readout(cross_track_cm: float) -> String:
-    return _expand_live_direction(super._live_finish_readout(cross_track_cm))
-
-func _live_last_observed_readout(cross_track_cm: float) -> String:
-    return _expand_live_direction(super._live_last_observed_readout(cross_track_cm))
