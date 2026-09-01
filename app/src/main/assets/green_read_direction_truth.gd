@@ -1,4 +1,4 @@
-extends "res://address_relief_camera.gd"
+extends "res://relief_depth_finish.gd"
 
 # Presentation-only semantic correction for the commercial GREEN READ card.
 # Android V135-V137, GreenTerrain and GreenReadAdvisor remain authoritative; this layer only makes
