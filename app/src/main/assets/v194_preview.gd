@@ -8,8 +8,8 @@ func _process(delta: float) -> void:
         return
     _v194_checks_done = true
 
-    if _v194_envelope == null or _v194_centroid == null or _v194_spread_label == null:
-        push_error("Session grouping envelope package missing")
+    if _v194_envelope == null or _v194_centroid == null or _v194_bias_line == null or _v194_bias_arrow == null or _v194_spread_label == null:
+        push_error("Session grouping presentation package missing")
         get_tree().quit(25)
         return
 
@@ -43,9 +43,42 @@ func _process(delta: float) -> void:
         get_tree().quit(25)
         return
 
+    # A repeatable miss must read as target-to-group bias, not merely as an offset ellipse. The cue
+    # uses the already-clamped shot-map centroid and stays presentation-only.
+    _v179_samples = [
+        Vector2(12.0, 30.0),
+        Vector2(14.0, 34.0),
+        Vector2(16.0, 38.0),
+        Vector2(18.0, 42.0)
+    ]
+    _v188_refresh(18.0, 42.0, true)
+    _v179_refresh()
+    var bias_mean := _v194_mean_sample()
+    var bias_center := _v188_point(bias_mean.x, bias_mean.y)
+    if not _v194_bias_line.visible or not _v194_bias_arrow.visible:
+        push_error("Session bias vector visibility regression")
+        get_tree().quit(25)
+        return
+    if _v194_bias_line.points.size() != 2 or _v194_bias_arrow.points.size() != 3:
+        push_error("Session bias vector geometry regression")
+        get_tree().quit(25)
+        return
+    if _v194_bias_line.points[0].distance_to(V188_CENTER) > 0.1 or _v194_bias_line.points[1].distance_to(bias_center) > 0.2:
+        push_error("Session bias vector endpoint regression")
+        get_tree().quit(25)
+        return
+
+    # Near-neutral groups should not get a noisy coaching arrow.
+    _v179_samples = [Vector2(-1.0, -2.0), Vector2(0.0, 1.0), Vector2(1.0, 2.0)]
+    _v188_refresh(1.0, 2.0, true)
+    _v179_refresh()
+    if _v194_bias_line.visible or _v194_bias_arrow.visible:
+        push_error("Session bias vector deadzone regression")
+        get_tree().quit(25)
+        return
+
     # Correlated misses must rotate the grouping envelope instead of flattening their directional
-    # pattern into an axis-aligned oval. This is the visual signal a player needs to distinguish a
-    # repeatable push-long family from independent line and pace scatter.
+    # pattern into an axis-aligned oval.
     _v179_samples = [
         Vector2(-12.0, -28.0),
         Vector2(-6.0, -14.0),
@@ -67,9 +100,6 @@ func _process(delta: float) -> void:
         get_tree().quit(25)
         return
 
-    # A biased group may place its true centroid on the circular target rim. Keep that centroid and
-    # covariance direction visible while constraining the envelope to the compact plot rectangle so
-    # it cannot collide with adjacent HUD content.
     _v179_samples = [
         Vector2(20.0, 44.0),
         Vector2(24.0, 54.0),
@@ -100,7 +130,7 @@ func _process(delta: float) -> void:
     _v179_samples = [Vector2(3.0, 4.0), Vector2(4.0, 6.0)]
     _v188_refresh(4.0, 6.0, true)
     _v179_refresh()
-    if _v194_envelope.visible or _v194_centroid.visible or _v194_spread_label.visible:
+    if _v194_envelope.visible or _v194_centroid.visible or _v194_bias_line.visible or _v194_bias_arrow.visible or _v194_spread_label.visible:
         push_error("Session grouping minimum sample regression")
         get_tree().quit(25)
         return
@@ -117,3 +147,4 @@ func _process(delta: float) -> void:
     print("PRACTICE_DISPERSION_ENVELOPE_OK=1")
     print("PRACTICE_DISPERSION_ORIENTATION_OK=1")
     print("PRACTICE_DISPERSION_ENVELOPE_EDGE_SAFE_OK=1")
+    print("PRACTICE_BIAS_VECTOR_OK=1")
