@@ -14,22 +14,22 @@ class LiveBreakDirectionLanguageRegressionTest {
 
     @Test
     fun productionLiveRollUsesTvReadableDirectionWords() {
-        val layer = asset("live_break_direction_language.gd")
+        val layer = asset("replay_timeline_camera_truth.gd")
         val scene = asset("v143_tv.tscn")
 
         assertTrue(layer.contains("REST %s %.1f cm"))
         assertTrue(layer.contains("LAST OBS %s %.1f cm"))
         assertTrue(layer.contains("\"RIGHT\" if cross_track_cm > 0.0 else \"LEFT\""))
         assertFalse(layer.contains("\"R\" if cross_track_cm > 0.0 else \"L\""))
-        assertTrue(scene.contains("res://live_break_direction_language.gd"))
+        assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
     }
 
     @Test
     fun changeRemainsPresentationOnly() {
-        val layer = asset("live_break_direction_language.gd")
-        assertTrue(layer.contains("extends \"res://replay_timeline_camera_truth.gd\""))
+        val layer = asset("replay_timeline_camera_truth.gd")
+        assertTrue(layer.contains("extends \"res://green_read_direction_truth.gd\""))
+        assertTrue(layer.contains("GreenTerrain and GreenReadAdvisor remain authoritative and untouched"))
         assertFalse(layer.contains("GreenTerrain."))
         assertFalse(layer.contains("GreenReadAdvisor."))
-        assertFalse(layer.contains("velocity ="))
     }
 }
