@@ -36,15 +36,16 @@ class CupEntryReadGateRegressionTest {
     }
 
     @Test
-    fun cupEntryBadgeQuantifiesFinalApproachAngleFromRenderedPath() {
+    fun cupEntryBadgeQuantifiesFinalApproachAngleAgainstBallToCupBaseline() {
         val script = asset("cup_entry_read_gate.gd")
         assertTrue(script.contains("func _entry_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> float:"))
-        assertTrue(script.contains("var cup_vector := (curve[curve.size() - 1] - center).normalized()"))
-        assertTrue(script.contains("var dot_value := clampf(tangent.dot(cup_vector), -1.0, 1.0)"))
+        assertTrue(script.contains("var baseline := (curve[curve.size() - 1] - curve[0]).normalized()"))
+        assertTrue(script.contains("var dot_value := clampf(tangent.dot(baseline), -1.0, 1.0)"))
         assertTrue(script.contains("return rad_to_deg(acos(dot_value))"))
         assertTrue(script.contains("return \"CUP ENTRY  STRAIGHT\""))
         assertTrue(script.contains("return \"CUP ENTRY  %.0f°\" % angle_deg"))
         assertTrue(script.contains("_badge.text = _entry_badge_text(curve, geometry)"))
+        assertFalse(script.contains("curve[curve.size() - 1] - center"))
     }
 
     @Test
