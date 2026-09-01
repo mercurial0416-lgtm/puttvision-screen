@@ -41,14 +41,18 @@ class LiveBreakDirectionClarityRegressionTest {
     }
 
     @Test
-    fun tvUsesClarityLayerAndPreviewMirrorsIt() {
+    fun tvUsesClarityLayerAndPreviewFixtureStaysParseSafe() {
         val tv = asset("v143_tv.tscn")
         val preview = asset("v143_preview.tscn")
         val previewScript = asset("replay_direction_clarity_preview.gd")
         assertTrue(tv.contains("res://replay_direction_clarity.gd"))
         assertTrue(preview.contains("res://replay_direction_clarity_preview.gd"))
         assertTrue(previewScript.contains("extends \"res://session_dispersion_readability_preview.gd\""))
-        assertTrue(previewScript.contains("super._live_curve_readout(cross_track_cm)"))
-        assertTrue(previewScript.contains("super._live_peak_readout(peak_signed_cm)"))
+        assertTrue(previewScript.contains("REST RIGHT"))
+        assertTrue(previewScript.contains("PEAK LEFT"))
+        assertFalse(previewScript.contains("super._live_curve_readout"))
+        assertFalse(previewScript.contains("super._live_peak_readout"))
+        assertFalse(previewScript.contains("super._live_finish_readout"))
+        assertFalse(previewScript.contains("super._live_last_observed_readout"))
     }
 }
