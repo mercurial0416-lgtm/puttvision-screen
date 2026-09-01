@@ -68,6 +68,28 @@ func _suppress_unlocked_live_break() -> void:
     if _live_curve_pace_label != null:
         _live_curve_pace_label.text = "PACE --"
 
+func _neutralize_missing_live_break_position() -> void:
+    # running bridge frames can legitimately carry launch velocity before their first ball sample.
+    # The inherited presentation layer defaults absent ballX/ballY to world origin, so erase only
+    # synthetic telemetry while retaining the legitimate launch axis/origin it already established.
+    _live_curve_peak_cm = 0.0
+    _live_curve_peak_signed_cm = 0.0
+    _live_curve_history.clear()
+    _live_curve_distance_history.clear()
+    _live_curve_travel_m = 0.0
+    _live_curve_last_ball_pos = Vector2.ZERO
+    _live_curve_has_ball_pos = false
+    _live_curve_last_trace_pos = Vector2.ZERO
+    _live_curve_has_trace_pos = false
+    if _live_curve_trace != null:
+        _live_curve_trace.clear_points()
+    if _live_curve_value != null:
+        _live_curve_value.text = "TRACKING"
+    if _live_curve_peak_label != null:
+        _live_curve_peak_label.text = "PEAK --"
+    if _live_curve_pace_label != null:
+        _live_curve_pace_label.text = "PACE --"
+
 func _finalize_unlocked_live_break() -> void:
     # If a whole roll ends before any trustworthy launch vector arrives, inherited presentation
     # state may still contain the previous shot's axis/origin. Never turn that stale state into a
@@ -179,7 +201,24 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     var running := bool(s.get("running", false))
     var launch_velocity := _live_launch_velocity(s)
     var launch_lock_was_pending := _live_launch_lock_pending
-    super._apply_snapshot(s, immediate, delta)
+    var missing_ball_position := running and (not s.has("ballX") or not s.has("ballY"))
+    var had_real_ball_position := _live_curve_has_ball_pos
+    var presentation_snapshot := s
+
+    # Once a real ball sample exists, bridge gaps should hold that coordinate rather than manufacture
+    # a jump to world origin. Duplicate only for this presentation chain; authoritative consumers keep
+    # the original bridge payload unchanged.
+    if missing_ball_position and had_real_ball_position:
+        presentation_snapshot = s.duplicate()
+        presentation_snapshot["ballX"] = _live_curve_last_ball_pos.x
+        presentation_snapshot["ballY"] = _live_curve_last_ball_pos.y
+
+    super._apply_snapshot(presentation_snapshot, immediate, delta)
+
+    # Before the first genuine ball sample there is nothing truthful to hold. Remove synthetic origin
+    # telemetry created by inherited default values and wait in TRACKING state for real coordinates.
+    if missing_ball_position and not had_real_ball_position:
+        _neutralize_missing_live_break_position()
 
     if running and not was_running:
         _live_launch_lock_pending = not _live_launch_velocity_is_trustworthy(launch_velocity)
