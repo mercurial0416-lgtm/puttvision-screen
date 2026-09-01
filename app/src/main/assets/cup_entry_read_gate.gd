@@ -45,12 +45,11 @@ func _entry_geometry(curve: PackedVector2Array) -> Dictionary:
 func _entry_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> float:
     if curve.size() < 2 or geometry.is_empty():
         return 0.0
-    var center: Vector2 = geometry.get("center", Vector2.ZERO)
     var tangent: Vector2 = geometry.get("tangent", Vector2.UP)
-    var cup_vector := (curve[curve.size() - 1] - center).normalized()
-    if cup_vector.length_squared() < 0.5 or tangent.length_squared() < 0.5:
+    var baseline := (curve[curve.size() - 1] - curve[0]).normalized()
+    if baseline.length_squared() < 0.5 or tangent.length_squared() < 0.5:
         return 0.0
-    var dot_value := clampf(tangent.dot(cup_vector), -1.0, 1.0)
+    var dot_value := clampf(tangent.dot(baseline), -1.0, 1.0)
     return rad_to_deg(acos(dot_value))
 
 func _entry_badge_text(curve: PackedVector2Array, geometry: Dictionary) -> String:
