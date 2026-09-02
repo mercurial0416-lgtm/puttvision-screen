@@ -10,7 +10,7 @@ func _process(delta: float) -> void:
     # active. Apply a representative over-range surge after that chain so the uploaded reference
     # image proves the HUD tells the truth when measured pace exceeds the compact numeric ceiling.
     if _capture_started and _preview_live_roll_pace != null:
-        _preview_live_roll_pace.text = "PACE 199%+ · SURGING"
+        _preview_live_roll_pace.text = "PACE 199%+ · 5.00 m/s · SURGING"
 
     if _live_pace_surge_checked:
         return
@@ -22,23 +22,28 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(61)
         return
-    if probe._live_pace_readout(0.46, 1.0) != "PACE 46% · SETTLING":
+    if probe._live_pace_readout(0.46, 1.0) != "PACE 46% · 0.46 m/s · SETTLING":
         push_error("Live pace settling regression")
         probe.free()
         get_tree().quit(61)
         return
-    if probe._live_pace_readout(0.86, 1.0) != "PACE 86% · ROLLING":
+    if probe._live_pace_readout(0.86, 1.0) != "PACE 86% · 0.86 m/s · ROLLING":
         push_error("Live pace rolling regression")
         probe.free()
         get_tree().quit(61)
         return
-    if probe._live_pace_readout(1.28, 1.0) != "PACE 128% · SURGING":
+    if probe._live_pace_readout(1.28, 1.0) != "PACE 128% · 1.28 m/s · SURGING":
         push_error("Downhill acceleration is no longer visible in live pace HUD")
         probe.free()
         get_tree().quit(61)
         return
-    if probe._live_pace_readout(5.0, 1.0) != "PACE 199%+ · SURGING":
+    if probe._live_pace_readout(5.0, 1.0) != "PACE 199%+ · 5.00 m/s · SURGING":
         push_error("Live pace over-range truth regression")
+        probe.free()
+        get_tree().quit(61)
+        return
+    if probe._live_pace_speed_text(99.0) != "9.99+ m/s":
+        push_error("Live pace speed display cap regression")
         probe.free()
         get_tree().quit(61)
         return
