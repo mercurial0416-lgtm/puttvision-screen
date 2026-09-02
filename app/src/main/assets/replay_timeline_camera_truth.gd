@@ -10,6 +10,8 @@ const LIVE_LAUNCH_LOCK_MIN_SPEED_MPS := 0.03
 const LIVE_RETURN_MIN_CM := 1.0
 const SESSION_HISTORY_DOT_COLOR := Color("#76d7b6")
 const SESSION_LATEST_DOT_COLOR := Color("#f4dda0")
+const SESSION_NORMAL_DOT_SIZE := Vector2(10.0, 10.0)
+const SESSION_CLIPPED_DOT_SIZE := Vector2(14.0, 14.0)
 
 var _live_launch_lock_pending := false
 var _focus_replay_roll_total_m := 0.0
@@ -237,6 +239,16 @@ func _finalize_live_roll_truth(s: Dictionary) -> void:
     if _live_curve_pace_label != null:
         _live_curve_pace_label.text = _live_summary_pace_readout()
 
+func _session_dispersion_is_outside_view(sample: Vector2) -> bool:
+    return absf(sample.x) > V179_LINE_SCALE_CM or absf(sample.y) > V179_PACE_SCALE_CM
+
+func _session_dispersion_outside_view_count() -> int:
+    var count := 0
+    for sample in _v179_samples:
+        if _session_dispersion_is_outside_view(sample):
+            count += 1
+    return count
+
 func _v179_refresh() -> void:
     super._v179_refresh()
     # The base map preallocates all five history dots and used to color only slot five gold.
@@ -244,11 +256,27 @@ func _v179_refresh() -> void:
     # established production inheritance chain and recolor only the visible tail after refresh.
     var visible_count := mini(_v179_samples.size(), _v179_points.size())
     var latest_index := visible_count - 1
+    var outside_count := _session_dispersion_outside_view_count()
+    if _v179_window_detail != null:
+        _v179_window_detail.text = "LINE ±5 · PACE ±15\nOUTSIDE VIEW %d" % outside_count if outside_count > 0 else "LINE ±5 · PACE ±15\nALL POINTS IN VIEW"
     for index in range(_v179_points.size()):
         var dot := _v179_points[index]
         if dot == null:
             continue
         dot.color = SESSION_LATEST_DOT_COLOR if index == latest_index and latest_index >= 0 else SESSION_HISTORY_DOT_COLOR
+        var clipped := index < _v179_samples.size() and _session_dispersion_is_outside_view(_v179_samples[index])
+        dot.size = SESSION_CLIPPED_DOT_SIZE if clipped else SESSION_NORMAL_DOT_SIZE
+        if index < _v179_samples.size():
+            dot.position = _v179_plot_position(_v179_samples[index]) - dot.size * 0.5
+
+func _v179_preview_seed() -> void:
+    # Keep one intentionally out-of-view miss in the render fixture so visual CI exercises the
+    # truthful clipping treatment rather than only the happy path.
+    _v179_samples = [Vector2(-8, -18), Vector2(-3, 10), Vector2(5, 22), Vector2(38, 14), Vector2(3, 14)]
+    _v179_preview_force_visible = true
+    _v179_refresh()
+    if _v179_panel != null:
+        _v179_panel.visible = true
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     var was_running := _live_curve_was_running
