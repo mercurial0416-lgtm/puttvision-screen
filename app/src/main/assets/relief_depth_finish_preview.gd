@@ -23,7 +23,7 @@ func _process(delta: float) -> void:
         get_tree().quit(48)
         return
     var code := material.shader.code
-    if code.find("mix(0.88, 1.12") < 0 or code.find("elevation_ribbon * active * 0.44") < 0:
+    if code.find("mix(0.86, 1.14") < 0 or code.find("elevation_ribbon * active * 0.48") < 0:
         push_error("Relief depth finish did not reach visual preview")
         probe.free()
         get_tree().quit(48)
@@ -33,7 +33,7 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(48)
         return
-    if code.find("min(0.40, base_alpha + ribbon_alpha)") < 0:
+    if code.find("0.026 + active * (0.108 + 0.020 * abs(height_bias))") < 0 or code.find("min(0.40, base_alpha + ribbon_alpha)") < 0:
         push_error("Relief depth finish alpha budget regressed")
         probe.free()
         get_tree().quit(48)

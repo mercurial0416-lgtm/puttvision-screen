@@ -27,8 +27,8 @@ const ADDRESS_CUP_FOCUS_BLEND := 0.75
 # Mirror the presentation-only relief shell so the low address camera is grounded against what the
 # player actually sees, not the un-exaggerated physics surface. These values are regression-locked
 # against terrain_relief_visibility.gd; no result is ever fed back into physics/read/scoring.
-const ADDRESS_RELIEF_VISUAL_SCALE := 4.6
-const ADDRESS_RELIEF_EXTRA_CAP_M := 0.72
+const ADDRESS_RELIEF_VISUAL_SCALE := 7.2
+const ADDRESS_RELIEF_EXTRA_CAP_M := 0.96
 const ADDRESS_CLEARANCE_SAMPLES := 9
 const ADDRESS_SIGHTLINE_CLEARANCE_M := 0.055
 const ADDRESS_MAX_CLEARANCE_RAISE_M := 0.26
