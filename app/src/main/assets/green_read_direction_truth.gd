@@ -18,6 +18,15 @@ func _overview_aim_text(offset_m: float) -> String:
     var direction := "RIGHT" if offset_m > 0.0 else "LEFT"
     return "AIM %s %d cm" % [direction, int(round(absf(offset_m) * 100.0))]
 
+func _overview_aim_is_off_map(offset_m: float) -> bool:
+    return absf(offset_m) > OVERVIEW_AIM_VISUAL_SPAN_M
+
+func _overview_aim_panel_text(offset_m: float) -> String:
+    var text := _overview_aim_text(offset_m)
+    if _overview_aim_is_off_map(offset_m):
+        text += " · OFF MAP"
+    return text
+
 func _v183_break_text(side_pct: float) -> String:
     # GREEN READ and GREEN OVERVIEW must agree on when a tiny sampled cross-slope is effectively
     # straight. One shared presentation deadband prevents contradictory read cards around zero.
@@ -77,10 +86,15 @@ func _overview_refresh_aim_cue() -> void:
     if _v183_panel == null or _overview_aim_label == null or _overview_aim_marker == null:
         return
     var active := _v183_panel.visible
+    var offset := _v165_recommended_offset
+    var off_map := _overview_aim_is_off_map(offset)
     _overview_aim_label.visible = active
-    _overview_aim_label.text = _overview_aim_text(_v165_recommended_offset)
-    _overview_aim_marker.visible = active and absf(_v165_recommended_offset) >= OVERVIEW_AIM_DEADBAND_M
-    _overview_aim_marker.position = _overview_aim_target_position(_v165_recommended_offset)
+    _overview_aim_label.text = _overview_aim_panel_text(offset)
+    _overview_aim_marker.visible = active and absf(offset) >= OVERVIEW_AIM_DEADBAND_M
+    _overview_aim_marker.position = _overview_aim_target_position(offset)
+    # The map marker clamps at the visual edge. Rotate the established chevron outward when the
+    # authoritative aim is beyond that edge so the clamped glyph cannot masquerade as an exact target.
+    _overview_aim_marker.rotation = (PI * 0.5 if offset > 0.0 else -PI * 0.5) if off_map else 0.0
 
 func _v183_update(s: Dictionary, force_visible: bool = false) -> void:
     super._v183_update(s, force_visible)
