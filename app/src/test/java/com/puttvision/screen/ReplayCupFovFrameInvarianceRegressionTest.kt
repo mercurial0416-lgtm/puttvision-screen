@@ -17,18 +17,21 @@ class ReplayCupFovFrameInvarianceRegressionTest {
     private fun dampingAlpha(rate: Double, delta: Double): Double = 1.0 - exp(-delta * rate)
 
     @Test
-    fun replayCupLensUsesExponentialDampingInsteadOfFrameScaledLerp() {
+    fun replayCupLensUsesSharedBoundedExponentialDamping() {
         val script = asset("v180_replay_cup_focus.gd")
+        val parent = asset("v175_cinematic_replay.gd")
         assertTrue(script.contains("const V180_FOV_RESPONSE := 5.5"))
-        assertTrue(script.contains("func _v180_damping_alpha(response_rate: float, delta: float) -> float:"))
-        assertTrue(script.contains("return 1.0 - exp(-delta * response_rate)"))
-        assertTrue(script.contains("_v180_damping_alpha(V180_FOV_RESPONSE, delta)"))
+        assertTrue(parent.contains("func _v175_camera_damping_alpha(delta: float, response: float) -> float:"))
+        assertTrue(parent.contains("var safe_delta := minf(delta, V175_MAX_CAMERA_DELTA_S)"))
+        assertTrue(parent.contains("return 1.0 - exp(-safe_delta * response)"))
+        assertTrue(script.contains("_v175_camera_damping_alpha(delta, V180_FOV_RESPONSE)"))
         assertTrue(script.contains("camera.fov = lerp(camera.fov, finish_fov, fov_alpha * blend)"))
         assertFalse(script.contains("min(1.0, delta * 5.5)"))
+        assertFalse(script.contains("func _v180_damping_alpha("))
     }
 
     @Test
-    fun replayLensResponseIsInvariantToFrameSlicing() {
+    fun replayLensResponseIsInvariantToFrameSlicingAtNormalFrameTimes() {
         val rate = 5.5
         val oneSixtieth = dampingAlpha(rate, 1.0 / 60.0)
         val oneOneTwentieth = dampingAlpha(rate, 1.0 / 120.0)
@@ -38,10 +41,11 @@ class ReplayCupFovFrameInvarianceRegressionTest {
     }
 
     @Test
-    fun replayLensDampingRejectsInvalidOrBackwardTime() {
+    fun replayLensDampingRejectsInvalidOrBackwardTimeThroughSharedGuard() {
         val script = asset("v180_replay_cup_focus.gd")
-        assertTrue(script.contains("not is_finite(response_rate) or response_rate <= 0.0"))
-        assertTrue(script.contains("not is_finite(delta) or delta <= 0.0"))
-        assertTrue(script.contains("return 0.0"))
+        val parent = asset("v175_cinematic_replay.gd")
+        assertTrue(parent.contains("if not is_finite(delta) or delta <= 0.0 or not is_finite(response) or response <= 0.0:"))
+        assertTrue(parent.contains("return 0.0"))
+        assertTrue(script.contains("_v175_camera_damping_alpha(delta, V180_FOV_RESPONSE)"))
     }
 }
