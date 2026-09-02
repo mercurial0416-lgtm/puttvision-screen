@@ -27,7 +27,30 @@ func _read_apex_point(offset_m: float) -> Vector2:
     var curve := _v183_path(offset_m)
     if curve.is_empty():
         return V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
-    return curve[int(curve.size() / 2)]
+    if curve.size() < 3:
+        return curve[int(curve.size() / 2)]
+
+    # The old midpoint marker was only correct for perfectly symmetric reads. Real recommended
+    # trajectories can load most of their break before or after halfway, so the badge could point at
+    # a visually arbitrary point instead of the actual curve apex. Pick the sample with the largest
+    # perpendicular distance from the start-to-cup chord. This is presentation-only and consumes the
+    # already-authoritative read path without feeding anything back into aiming or physics.
+    var chord_start: Vector2 = curve[0]
+    var chord_end: Vector2 = curve[curve.size() - 1]
+    var chord := chord_end - chord_start
+    var chord_length := chord.length()
+    if chord_length < 0.001:
+        return curve[int(curve.size() / 2)]
+
+    var best_index := int(curve.size() / 2)
+    var best_distance := -1.0
+    for i in range(1, curve.size() - 1):
+        var relative: Vector2 = curve[i] - chord_start
+        var distance := absf(chord.cross(relative)) / chord_length
+        if distance > best_distance:
+            best_distance = distance
+            best_index = i
+    return curve[best_index]
 
 func _read_corridor_edges(curve: PackedVector2Array, half_width: float = READ_CORRIDOR_HALF_WIDTH) -> Array[PackedVector2Array]:
     var left := PackedVector2Array()
