@@ -15,8 +15,9 @@ class GreenReadDirectionTruthRegressionTest {
     @Test
     fun aimDirectionFollowsRecommendedOffsetSignAndUsesTvReadableWords() {
         val script = asset("green_read_direction_truth.gd")
-        assertTrue(script.contains("var aim_dir := \"RIGHT\" if _v165_recommended_offset > 0.0 else \"LEFT\""))
+        assertTrue(script.contains("var aim_text := _overview_aim_text(_v165_recommended_offset)"))
         assertTrue(script.contains("var direction := \"RIGHT\" if offset_m > 0.0 else \"LEFT\""))
+        assertTrue(script.contains("return \"AIM %s %d cm\""))
         assertFalse(script.contains("var aim_dir := \"R\" if _v165_recommended_offset > 0.0 else \"L\""))
         assertFalse(script.contains("var aim_dir := \"R\" if side_pct > 0.0 else \"L\""))
     }
