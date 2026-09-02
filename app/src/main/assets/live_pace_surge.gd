@@ -28,8 +28,12 @@ func _live_pace_phase(ratio: float) -> String:
 func _live_pace_readout(current_speed: float, launch_speed: float) -> String:
     if not is_finite(current_speed) or not is_finite(launch_speed) or launch_speed <= 0.001:
         return "PACE --"
-    var ratio := clampf(current_speed / launch_speed, 0.0, LIVE_PACE_MAX_DISPLAY_RATIO)
-    return "PACE %d%% · %s" % [int(round(ratio * 100.0)), _live_pace_phase(ratio)]
+    var raw_ratio := maxf(0.0, current_speed / launch_speed)
+    var display_ratio := minf(raw_ratio, LIVE_PACE_MAX_DISPLAY_RATIO)
+    var pct_text := "%d%%" % int(round(display_ratio * 100.0))
+    if raw_ratio > LIVE_PACE_MAX_DISPLAY_RATIO:
+        pct_text += "+"
+    return "PACE %s · %s" % [pct_text, _live_pace_phase(raw_ratio)]
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)

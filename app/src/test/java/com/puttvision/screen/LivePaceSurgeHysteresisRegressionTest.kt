@@ -26,9 +26,12 @@ class LivePaceSurgeHysteresisRegressionTest {
     @Test
     fun numericPaceRemainsSampleAccurateWhilePhaseIsStabilized() {
         val script = asset("live_pace_surge.gd")
-        assertTrue(script.contains("clampf(current_speed / launch_speed, 0.0, LIVE_PACE_MAX_DISPLAY_RATIO)"))
-        assertTrue(script.contains("_live_pace_phase(ratio)"))
-        assertTrue(script.contains("int(round(ratio * 100.0))"))
+        assertTrue(script.contains("var raw_ratio := maxf(0.0, current_speed / launch_speed)"))
+        assertTrue(script.contains("var display_ratio := minf(raw_ratio, LIVE_PACE_MAX_DISPLAY_RATIO)"))
+        assertTrue(script.contains("int(round(display_ratio * 100.0))"))
+        assertTrue(script.contains("_live_pace_phase(raw_ratio)"))
+        assertTrue(script.contains("if raw_ratio > LIVE_PACE_MAX_DISPLAY_RATIO:"))
+        assertTrue(script.contains("pct_text += \"+\""))
     }
 
     @Test
