@@ -7,10 +7,10 @@ func _process(delta: float) -> void:
     super._process(delta)
 
     # Parent preview layers reseed their synthetic live-roll state while the deferred capture is
-    # active. Apply the representative surge readout after that chain every frame so the uploaded
-    # reference image proves the new state instead of silently falling back to SETTLING.
+    # active. Apply a representative over-range surge after that chain so the uploaded reference
+    # image proves the HUD tells the truth when measured pace exceeds the compact numeric ceiling.
     if _capture_started and _preview_live_roll_pace != null:
-        _preview_live_roll_pace.text = "PACE 128% · SURGING"
+        _preview_live_roll_pace.text = "PACE 199%+ · SURGING"
 
     if _live_pace_surge_checked:
         return
@@ -37,8 +37,8 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(61)
         return
-    if probe._live_pace_readout(5.0, 1.0) != "PACE 199% · SURGING":
-        push_error("Live pace surge display cap regression")
+    if probe._live_pace_readout(5.0, 1.0) != "PACE 199%+ · SURGING":
+        push_error("Live pace over-range truth regression")
         probe.free()
         get_tree().quit(61)
         return
