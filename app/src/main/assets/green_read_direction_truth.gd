@@ -10,6 +10,7 @@ var _overview_aim_label: Label
 const OVERVIEW_AIM_DEADBAND_M := 0.015
 const OVERVIEW_AIM_VISUAL_SPAN_M := 1.8
 const OVERVIEW_AIM_VISUAL_SPAN_PX := 62.0
+const GREEN_READ_BREAK_DEADBAND_PCT := 0.05
 
 func _overview_aim_text(offset_m: float) -> String:
     if absf(offset_m) < OVERVIEW_AIM_DEADBAND_M:
@@ -18,9 +19,9 @@ func _overview_aim_text(offset_m: float) -> String:
     return "AIM %s %d cm" % [direction, int(round(absf(offset_m) * 100.0))]
 
 func _v183_break_text(side_pct: float) -> String:
-    # Keep the overview's established movement-sign semantics while spelling the direction out for
-    # TV-distance readability. This is presentation text only; no terrain/read value is modified.
-    if abs(side_pct) < 0.05:
+    # GREEN READ and GREEN OVERVIEW must agree on when a tiny sampled cross-slope is effectively
+    # straight. One shared presentation deadband prevents contradictory read cards around zero.
+    if abs(side_pct) < GREEN_READ_BREAK_DEADBAND_PCT:
         return "BREAK  STRAIGHT"
     return "BREAK  %s %.2f%%" % [("RIGHT" if side_pct > 0.0 else "LEFT"), abs(side_pct)]
 
@@ -90,15 +91,12 @@ func _v165_update_hud(side_pct: float, long_pct: float) -> void:
         return
 
     var side_abs: float = abs(side_pct)
-    var aim_text := "AIM CENTER"
-    if abs(_v165_recommended_offset) >= 0.015:
-        # The recommendation can be supplied directly by the authoritative advisor. Its sign is the
-        # source of truth for aim direction; do not infer aim side from the local side slope.
-        var aim_dir := "RIGHT" if _v165_recommended_offset > 0.0 else "LEFT"
-        aim_text = "AIM %s %.2f m" % [aim_dir, abs(_v165_recommended_offset)]
+    # Reuse the overview formatter so both commercial read surfaces use the same advisor sign,
+    # deadband and centimeter unit. This is presentation-only; the advisor value itself is untouched.
+    var aim_text := _overview_aim_text(_v165_recommended_offset)
 
     var break_dir := "STRAIGHT"
-    if side_abs >= 0.03:
+    if side_abs >= GREEN_READ_BREAK_DEADBAND_PCT:
         # GreenSettings semantics: positive side slope means the right side is lower, so gravity
         # moves the ball right. This matches GREEN OVERVIEW and avoids contradictory read cards.
         break_dir = "BREAK RIGHT" if side_pct > 0.0 else "BREAK LEFT"
