@@ -38,9 +38,10 @@ class SessionDispersionEdgeTruthRegressionTest {
     fun unchangedPracticeHistoryDoesNotAllocateAStringEveryFrame() {
         val script = asset("session_dispersion_edge_truth.gd")
         assertTrue(script.contains("var _last_samples: Array = []"))
+        assertTrue(script.contains("if samples == _last_samples:"))
+        assertTrue(script.contains("_last_samples = samples.duplicate()"))
         assertFalse(script.contains("str(samples)"))
         assertFalse(script.contains("var signature :="))
-        assertTrue(script.contains("duplicate only when a shot actually changes it"))
     }
 
     @Test
