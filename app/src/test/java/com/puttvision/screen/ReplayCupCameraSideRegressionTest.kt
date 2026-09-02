@@ -34,6 +34,37 @@ class ReplayCupCameraSideRegressionTest {
     }
 
     @Test
+    fun finishCompositionKeepsRollingBallAndCupInTheSameFrame() {
+        val focus = asset("v180_replay_cup_focus.gd")
+        val composer = focus.substringAfter("func _v180_composed_look_point")
+            .substringBefore("\nfunc _v180_cup_camera_side_sign")
+        assertTrue(focus.contains("const V180_BALL_FRAMING_WEIGHT_START := 0.62"))
+        assertTrue(focus.contains("const V180_BALL_FRAMING_WEIGHT_END := 0.38"))
+        assertTrue(composer.contains("clampf(focus, 0.0, 1.0)"))
+        assertTrue(composer.contains("return cup_point.lerp(ball_point, weight)"))
+        assertTrue(focus.contains("var replay_ball2 := _v175_trail_point(_v171_replay_actual, progress)"))
+        assertTrue(focus.contains("var look2 := _v180_composed_look_point(replay_ball2, cup2, focus)"))
+        assertTrue(focus.contains("var desired_look := camera_look.lerp(focus_look, blend)"))
+        assertFalse(focus.contains("var desired_look := camera_look.lerp(cup_look, blend)"))
+    }
+
+    @Test
+    fun framingWeightsStayBetweenBallAndCupWithoutOvershoot() {
+        val startWeight = 0.62
+        val endWeight = 0.38
+        assertTrue(startWeight in 0.0..1.0)
+        assertTrue(endWeight in 0.0..1.0)
+        assertTrue(startWeight > endWeight)
+        val cup = 0.0
+        val ball = 1.0
+        val startLook = cup + (ball - cup) * startWeight
+        val endLook = cup + (ball - cup) * endWeight
+        assertTrue(startLook in cup..ball)
+        assertTrue(endLook in cup..ball)
+        assertTrue(endLook < startLook)
+    }
+
+    @Test
     fun cupFocusClearsIntermediateTerrainWithoutPerFrameScanExplosion() {
         val focus = asset("v180_replay_cup_focus.gd")
         val sightline = focus.substringAfter("func _v180_sightline_lift")
@@ -46,7 +77,7 @@ class ReplayCupCameraSideRegressionTest {
         assertTrue(sightline.contains("var line_y := lerpf(camera_y, look_y, t)"))
         assertTrue(sightline.contains("/ maxf(0.12, 1.0 - t)"))
         assertTrue(sightline.contains("return clampf(needed, 0.0, V180_SIGHTLINE_MAX_LIFT_M)"))
-        assertTrue(focus.contains("var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, cup2, cup_look.y)"))
+        assertTrue(focus.contains("var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, look2, focus_look.y)"))
         assertTrue(focus.contains("base_cam_y + sightline_lift"))
     }
 
