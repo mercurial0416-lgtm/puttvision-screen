@@ -16,8 +16,10 @@ class SessionDispersionReadabilityRegressionTest {
     fun averagesUseSemanticDirectionsInsteadOfSignedNumbers() {
         val source = asset("address_relief_camera.gd")
         assertTrue(source.contains("CENTER 0 cm"))
-        assertTrue(source.contains("R %.0f cm"))
-        assertTrue(source.contains("L %.0f cm"))
+        assertTrue(source.contains("RIGHT %.0f cm"))
+        assertTrue(source.contains("LEFT %.0f cm"))
+        assertFalse(source.contains("return \"R %.0f cm\""))
+        assertFalse(source.contains("else \"L %.0f cm\""))
         assertTrue(source.contains("CUP 0 cm"))
         assertTrue(source.contains("LONG %.0f cm"))
         assertTrue(source.contains("SHORT %.0f cm"))
