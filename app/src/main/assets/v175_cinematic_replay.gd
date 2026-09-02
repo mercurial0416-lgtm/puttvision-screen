@@ -8,6 +8,9 @@ const V175_REPLAY_TRACK_WIDTH := 634.0
 const V175_HEADING_SAMPLE_M := 0.18
 const V175_HEADING_WIDE_SAMPLE_M := 0.42
 const V175_FOV_RESPONSE := 4.8
+const V175_POSITION_RESPONSE := 5.4
+const V175_LOOK_RESPONSE := 6.4
+const V175_MAX_CAMERA_DELTA_S := 0.10
 
 var _v175_replay_panel: Panel
 var _v175_replay_title: Label
@@ -151,10 +154,17 @@ func _process(delta: float) -> void:
     _v175_replay_marker.position.x = 22.0 + maxf(0.0, width - 1.5)
     _v175_replay_detail.text = "%3d%%  •  ACTUAL BALL LINE" % int(round(progress * 100.0))
 
-func _v175_fov_damping_alpha(delta: float) -> float:
-    if not is_finite(delta) or delta <= 0.0:
+func _v175_camera_damping_alpha(delta: float, response: float) -> float:
+    # Replay is presentation-only, so a corrupt or stalled render-frame delta must never poison the
+    # camera transform with NaN/Inf or make one hitch teleport the rig. Freeze on invalid deltas and
+    # cap valid stalls to 100 ms; normal 30/60/120 Hz behavior is unchanged and frame-rate independent.
+    if not is_finite(delta) or delta <= 0.0 or not is_finite(response) or response <= 0.0:
         return 0.0
-    return 1.0 - exp(-delta * V175_FOV_RESPONSE)
+    var safe_delta := minf(delta, V175_MAX_CAMERA_DELTA_S)
+    return 1.0 - exp(-safe_delta * response)
+
+func _v175_fov_damping_alpha(delta: float) -> float:
+    return _v175_camera_damping_alpha(delta, V175_FOV_RESPONSE)
 
 func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_to_cup: float, immediate: bool, delta: float) -> void:
     if _v171_replay_remaining <= 0.0 or _v171_replay_actual.size() < 2:
@@ -179,8 +189,8 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     var desired_pos := Vector3(cam2.x, cam_y, -cam2.y)
 
     # Blend harder than live chase, but never teleport between sparse Android trail samples.
-    var pos_alpha: float = 1.0 if immediate else 1.0 - exp(-delta * 5.4)
-    var look_alpha: float = 1.0 if immediate else 1.0 - exp(-delta * 6.4)
+    var pos_alpha: float = 1.0 if immediate else _v175_camera_damping_alpha(delta, V175_POSITION_RESPONSE)
+    var look_alpha: float = 1.0 if immediate else _v175_camera_damping_alpha(delta, V175_LOOK_RESPONSE)
     camera_pos = camera_pos.lerp(desired_pos, pos_alpha)
     camera_look = camera_look.lerp(desired_look, look_alpha)
     camera.position = camera_pos
