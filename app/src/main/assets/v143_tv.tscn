@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource path="res://replay_timeline_camera_truth.gd" type="Script" id="1_v143"]
 [ext_resource path="res://shot_map_correction_target.gd" type="Script" id="2_target"]
 [ext_resource path="res://replay_roll_distance_layout.gd" type="Script" id="3_replay_layout"]
 [ext_resource path="res://cup_entry_read_gate.gd" type="Script" id="4_cup_entry"]
 [ext_resource path="res://live_break_summary_layout.gd" type="Script" id="5_live_break_layout"]
+[ext_resource path="res://session_dispersion_edge_truth.gd" type="Script" id="6_dispersion_edge"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
@@ -20,3 +21,6 @@ script = ExtResource("4_cup_entry")
 
 [node name="LiveBreakSummaryLayout" type="Node" parent="."]
 script = ExtResource("5_live_break_layout")
+
+[node name="SessionDispersionEdgeTruth" type="Node" parent="."]
+script = ExtResource("6_dispersion_edge")
