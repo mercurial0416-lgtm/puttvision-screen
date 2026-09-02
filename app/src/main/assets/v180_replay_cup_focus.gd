@@ -20,6 +20,8 @@ const V180_FOCUS_FULL := 0.90
 const V180_COMPARE_SAMPLES := 20
 const V180_FINISH_DEADBAND_CM := 2.0
 const V180_CAMERA_SIDE_DEADBAND_M := 0.04
+const V180_POSITION_RESPONSE := 7.2
+const V180_LOOK_RESPONSE := 7.2
 const V180_FOV_RESPONSE := 5.5
 const V180_FINISH_FOV_MIN := 30.5
 const V180_FINISH_FOV_MAX := 38.0
@@ -57,13 +59,6 @@ func _build_hud() -> void:
 
 func _v180_focus_amount(progress: float) -> float:
     return smoothstep(V180_FOCUS_START, V180_FOCUS_FULL, clampf(progress, 0.0, 1.0))
-
-func _v180_damping_alpha(response_rate: float, delta: float) -> float:
-    if not is_finite(response_rate) or response_rate <= 0.0 or not is_finite(delta) or delta <= 0.0:
-        return 0.0
-    # Exponential response composes exactly across frame slices, keeping replay lens settling
-    # consistent through 30/60/120 Hz playback and transient Forward Mobile frame drops.
-    return 1.0 - exp(-delta * response_rate)
 
 func _v180_final_point() -> Vector2:
     if _v171_replay_actual.is_empty():
@@ -225,14 +220,17 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, look2, focus_look.y)
     var cup_pos := Vector3(cup_cam2.x, base_cam_y + sightline_lift, -cup_cam2.y)
 
-    # Smoothly hand off to the finish camera; no teleport and no effect on shot physics.
+    # Reuse the bounded replay delta guard from the cinematic camera layer. Cup focus is an override,
+    # so bypassing it here would reintroduce hitch teleports/NaN transforms during the most visible
+    # replay beat. Position, look and FOV now share the same 100 ms cap and invalid-delta freeze.
     var blend := focus * focus * (3.0 - 2.0 * focus)
     var desired_pos := camera_pos.lerp(cup_pos, blend)
     var desired_look := camera_look.lerp(focus_look, blend)
-    var alpha := 1.0 if immediate else 1.0 - exp(-delta * 7.2)
-    camera_pos = camera_pos.lerp(desired_pos, alpha)
-    camera_look = camera_look.lerp(desired_look, alpha)
+    var pos_alpha := 1.0 if immediate else _v175_camera_damping_alpha(delta, V180_POSITION_RESPONSE)
+    var look_alpha := 1.0 if immediate else _v175_camera_damping_alpha(delta, V180_LOOK_RESPONSE)
+    camera_pos = camera_pos.lerp(desired_pos, pos_alpha)
+    camera_look = camera_look.lerp(desired_look, look_alpha)
     camera.position = camera_pos
-    var fov_alpha := 1.0 if immediate else _v180_damping_alpha(V180_FOV_RESPONSE, delta)
+    var fov_alpha := 1.0 if immediate else _v175_camera_damping_alpha(delta, V180_FOV_RESPONSE)
     camera.fov = lerp(camera.fov, finish_fov, fov_alpha * blend)
     camera.look_at(camera_look, Vector3.UP)
