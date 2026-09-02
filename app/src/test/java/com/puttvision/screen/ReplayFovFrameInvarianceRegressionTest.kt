@@ -17,17 +17,19 @@ class ReplayFovFrameInvarianceRegressionTest {
     private fun dampingAlpha(rate: Double, delta: Double): Double = 1.0 - exp(-delta * rate)
 
     @Test
-    fun replayLensUsesExponentialDampingInsteadOfFrameScaledLerp() {
+    fun replayLensUsesSharedBoundedExponentialDampingInsteadOfFrameScaledLerp() {
         val script = asset("v175_cinematic_replay.gd")
         assertTrue(script.contains("const V175_FOV_RESPONSE := 4.8"))
-        assertTrue(script.contains("func _v175_fov_damping_alpha(delta: float) -> float:"))
-        assertTrue(script.contains("return 1.0 - exp(-delta * V175_FOV_RESPONSE)"))
+        assertTrue(script.contains("func _v175_camera_damping_alpha(delta: float, response: float) -> float:"))
+        assertTrue(script.contains("var safe_delta := minf(delta, V175_MAX_CAMERA_DELTA_S)"))
+        assertTrue(script.contains("return 1.0 - exp(-safe_delta * response)"))
+        assertTrue(script.contains("return _v175_camera_damping_alpha(delta, V175_FOV_RESPONSE)"))
         assertTrue(script.contains("_v175_fov_damping_alpha(delta)"))
         assertFalse(script.contains("min(1.0, delta * 4.8)"))
     }
 
     @Test
-    fun replayLensResponseIsInvariantToFrameSlicing() {
+    fun replayLensResponseIsInvariantToNormalFrameSlicing() {
         val rate = 4.8
         val oneThirtieth = dampingAlpha(rate, 1.0 / 30.0)
         val oneSixtieth = dampingAlpha(rate, 1.0 / 60.0)
@@ -40,9 +42,10 @@ class ReplayFovFrameInvarianceRegressionTest {
     }
 
     @Test
-    fun replayLensRejectsInvalidOrBackwardFrameTime() {
+    fun replayLensRejectsInvalidOrBackwardFrameTimeAndCapsLongStalls() {
         val script = asset("v175_cinematic_replay.gd")
         assertTrue(script.contains("not is_finite(delta) or delta <= 0.0"))
         assertTrue(script.contains("return 0.0"))
+        assertTrue(script.contains("const V175_MAX_CAMERA_DELTA_S := 0.10"))
     }
 }
