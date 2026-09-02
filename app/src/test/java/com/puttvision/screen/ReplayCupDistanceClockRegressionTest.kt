@@ -16,7 +16,7 @@ class ReplayCupDistanceClockRegressionTest {
     fun cupDistanceSamplesTheSameExactReplayClockAsTheTraceCamera() {
         val focus = asset("v180_replay_cup_focus.gd")
         val function = focus.substringAfter("func _v180_distance_to_cup_cm(progress: float) -> float:")
-            .substringBefore("\nfunc _v180_finish_verdict")
+            .substringBefore("\nfunc _v180_composed_look_point")
 
         assertTrue(function.contains("_v175_trail_point(_v171_replay_actual, clampf(progress, 0.0, 1.0))"))
         assertFalse(function.contains("smoothstep"))
