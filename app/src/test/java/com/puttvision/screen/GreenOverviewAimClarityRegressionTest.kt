@@ -27,8 +27,9 @@ class GreenOverviewAimClarityRegressionTest {
         val source = asset("green_read_direction_truth.gd")
         assertTrue(source.contains("offset_m / OVERVIEW_AIM_VISUAL_SPAN_M"))
         assertTrue(source.contains("center_x + normalized * OVERVIEW_AIM_VISUAL_SPAN_PX"))
-        assertTrue(source.contains("_overview_aim_marker.position = _overview_aim_target_position(_v165_recommended_offset)"))
-        assertTrue(source.contains("absf(_v165_recommended_offset) >= OVERVIEW_AIM_DEADBAND_M"))
+        assertTrue(source.contains("var offset := _v165_recommended_offset"))
+        assertTrue(source.contains("_overview_aim_marker.position = _overview_aim_target_position(offset)"))
+        assertTrue(source.contains("absf(offset) >= OVERVIEW_AIM_DEADBAND_M"))
     }
 
     @Test
