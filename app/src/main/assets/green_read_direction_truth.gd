@@ -34,6 +34,19 @@ func _v183_break_text(side_pct: float) -> String:
         return "BREAK  STRAIGHT"
     return "BREAK  %s %.2f%%" % [("RIGHT" if side_pct > 0.0 else "LEFT"), abs(side_pct)]
 
+func _live_curve_readout(cross_track_cm: float) -> String:
+    # Keep live-roll direction language identical to the rest/overview surfaces. The inherited
+    # meter used R/L while the same shot switched to RIGHT/LEFT at rest, which made one HUD card
+    # change vocabulary mid-roll on a TV. This is presentation-only telemetry.
+    if absf(cross_track_cm) < 0.05:
+        return "CENTER"
+    return "%s %.1f cm" % [("RIGHT" if cross_track_cm > 0.0 else "LEFT"), absf(cross_track_cm)]
+
+func _live_peak_readout(peak_signed_cm: float) -> String:
+    if absf(peak_signed_cm) < 0.05:
+        return "PEAK CENTER"
+    return "PEAK %s %.1f cm" % [("RIGHT" if peak_signed_cm > 0.0 else "LEFT"), absf(peak_signed_cm)]
+
 func _overview_aim_target_position(offset_m: float) -> Vector2:
     # Mirror the overview's existing horizontal recommendation scale, but expose the advisor's
     # target as an explicit address cue instead of forcing the player to infer it from curve shape.
