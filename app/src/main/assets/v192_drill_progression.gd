@@ -7,10 +7,12 @@ extends "res://v191_practice_streak.gd"
 const V192_RESET_FAILURES := 3
 
 func _v192_trailing_failures(axis: String) -> int:
-    if axis == "BUILDING" or _v179_samples.is_empty():
+    if axis == "BUILDING" or not _v191_has_focus_samples():
         return 0
     var failures := 0
-    for index in range(_v179_samples.size() - 1, -1, -1):
+    # Match the pressure-ladder focus window. A LINE -> PACE switch must not reinterpret misses that
+    # happened before PACE became the active next-rep objective and falsely suggest an easier drill.
+    for index in range(_v179_samples.size() - 1, _v191_focus_start_index - 1, -1):
         if _v191_sample_in_window(_v179_samples[index], axis):
             break
         failures += 1

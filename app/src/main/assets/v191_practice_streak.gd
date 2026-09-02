@@ -8,6 +8,8 @@ var _v191_bar: Panel
 var _v191_streak_label: Label
 var _v191_segments: Array[ColorRect] = []
 var _v191_streak := 0
+var _v191_focus_axis := "BUILDING"
+var _v191_focus_start_index := 0
 
 const V191_ADVANCE_STREAK := 3
 const V191_COPY_COMPACT_WIDTH := 300.0
@@ -22,18 +24,38 @@ func _v191_sample_in_window(sample: Vector2, axis: String) -> bool:
         "BOTH": return line_ok and pace_ok
     return false
 
+# A focus target is prospective coaching: reps captured before LINE/PACE/BOTH became the active
+# objective must not be re-scored retroactively under the new objective. Otherwise a focus switch can
+# instantly manufacture an ADVANCE READY streak from shots that were played against a different cue.
+func _v191_sync_focus_window(axis: String) -> void:
+    var sample_count := _v179_samples.size()
+    if sample_count < _v191_focus_start_index:
+        # Session/history reset. Clamp first so a later same-axis refresh cannot retain a stale index.
+        _v191_focus_start_index = sample_count
+    if axis == "BUILDING":
+        _v191_focus_axis = "BUILDING"
+        _v191_focus_start_index = sample_count
+        return
+    if axis != _v191_focus_axis:
+        _v191_focus_axis = axis
+        # The newest sample helped select this target; it was not taken while this target was active.
+        _v191_focus_start_index = sample_count
+
+func _v191_has_focus_samples() -> bool:
+    return _v179_samples.size() > _v191_focus_start_index
+
 func _v191_trailing_streak(axis: String) -> int:
-    if axis == "BUILDING" or _v179_samples.is_empty():
+    if axis == "BUILDING" or not _v191_has_focus_samples():
         return 0
     var streak := 0
-    for index in range(_v179_samples.size() - 1, -1, -1):
+    for index in range(_v179_samples.size() - 1, _v191_focus_start_index - 1, -1):
         if not _v191_sample_in_window(_v179_samples[index], axis):
             break
         streak += 1
     return mini(streak, V191_ADVANCE_STREAK)
 
 func _v191_reset_coaching(axis: String) -> String:
-    if axis == "BUILDING" or _v179_samples.is_empty():
+    if axis == "BUILDING" or not _v191_has_focus_samples():
         return "START STREAK"
     var sample := _v179_samples[_v179_samples.size() - 1]
     if _v191_sample_in_window(sample, axis):
@@ -129,10 +151,11 @@ func _v191_refresh() -> void:
     var metric := _v189_focus_metric()
     var spec := _v190_target_spec(metric)
     var axis := str(spec.get("axis", "BUILDING"))
+    _v191_sync_focus_window(axis)
     _v191_streak = _v191_trailing_streak(axis)
     _v191_streak_label.text = _v191_copy(_v191_streak, axis)
 
-    var reset_focus := axis != "BUILDING" and _v191_streak == 0 and not _v179_samples.is_empty()
+    var reset_focus := axis != "BUILDING" and _v191_streak == 0 and _v191_has_focus_samples()
     _v191_layout_copy(reset_focus)
 
     var complete := _v191_streak >= V191_ADVANCE_STREAK
