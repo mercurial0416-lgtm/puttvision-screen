@@ -2,7 +2,7 @@ extends "res://v180_replay_cup_focus.gd"
 
 # Presentation-only practice pace cue. Android physics / GreenTerrain / GreenReadAdvisor remain authoritative.
 # The cue never feeds values back into shot motion; it converts the existing distance/grade/green-speed
-# snapshot into a stable address-phase reference and compares it with the native ball-speed telemetry.
+# snapshot into a stable address-phase reference and compares it with measured launch telemetry.
 
 var _v181_panel: Panel
 var _v181_title: Label
@@ -12,8 +12,13 @@ var _v181_grade: Label
 var _v181_fill: ColorRect
 var _v181_marker: ColorRect
 var _v181_preview_force_visible := false
+var _v181_launch_speed := 0.0
+var _v181_was_running := false
 
 const V181_BAR_W := 238.0
+const V181_LAUNCH_LOCK_MIN_MPS := 0.03
+const V181_ON_PACE_LOW_RATIO := 0.92
+const V181_ON_PACE_HIGH_RATIO := 1.08
 
 func _v181_target_speed(distance_m: float, grade_pct: float, green_speed: float) -> float:
     var d: float = clampf(distance_m, 0.3, 15.0)
@@ -33,6 +38,27 @@ func _v181_match_pct(actual: float, target: float) -> int:
         return 0
     return int(round(clampf(100.0 - abs(actual - target) / target * 100.0, 0.0, 100.0)))
 
+func _v181_pace_grade(actual: float, target: float) -> String:
+    if target <= 0.01 or actual <= 0.01:
+        return ""
+    var ratio := actual / target
+    if ratio < V181_ON_PACE_LOW_RATIO:
+        return "SOFT"
+    if ratio > V181_ON_PACE_HIGH_RATIO:
+        return "FIRM"
+    return "ON PACE"
+
+func _v181_capture_launch(running: bool, ball_speed: float) -> void:
+    # A stop packet normally reports the settled speed (zero), so the old HUD erased the measured
+    # launch exactly when the address-phase panel became visible. Lock the first trustworthy in-roll
+    # speed instead and retain it until the next shot begins. Presentation only: no bridge/physics state
+    # is mutated, and a delayed zero-speed running packet cannot poison the stored launch value.
+    if running and not _v181_was_running:
+        _v181_launch_speed = 0.0
+    if running and _v181_launch_speed <= V181_LAUNCH_LOCK_MIN_MPS and is_finite(ball_speed) and ball_speed > V181_LAUNCH_LOCK_MIN_MPS:
+        _v181_launch_speed = ball_speed
+    _v181_was_running = running
+
 func _build_hud() -> void:
     super._build_hud()
     var layer := get_node_or_null("V174BroadcastHUD") as CanvasLayer
@@ -48,7 +74,7 @@ func _build_hud() -> void:
     _v181_title = _v174_text(_v181_panel, Vector2(20, 10), Vector2(220, 22), "PACE TARGET", 13, Color("#f4dda0"))
     _v181_grade = _v174_text(_v181_panel, Vector2(248, 10), Vector2(196, 22), "LEVEL", 12, Color(0.70, 0.79, 0.75, 0.95), HORIZONTAL_ALIGNMENT_RIGHT)
     _v181_target = _v174_text(_v181_panel, Vector2(20, 38), Vector2(210, 30), "TARGET 1.8 m/s", 18, Color("#f1f4ef"))
-    _v181_actual = _v174_text(_v181_panel, Vector2(234, 40), Vector2(210, 26), "ADDRESS", 14, Color(0.72, 0.82, 0.78, 0.95), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v181_actual = _v174_text(_v181_panel, Vector2(222, 40), Vector2(222, 26), "ADDRESS", 13, Color(0.72, 0.82, 0.78, 0.95), HORIZONTAL_ALIGNMENT_RIGHT)
 
     var track := ColorRect.new()
     track.position = Vector2(20, 84)
@@ -80,6 +106,9 @@ func _v181_update(s: Dictionary, force_visible: bool = false) -> void:
         _v181_preview_force_visible = true
 
     var running: bool = bool(s.get("running", false))
+    var sampled_speed: float = float(s.get("ballSpeed", 0.0))
+    _v181_capture_launch(running, sampled_speed)
+
     var replaying: bool = _v171_replay_remaining > 0.0
     var show: bool = _v181_preview_force_visible or (not replaying and not running)
     _v181_panel.visible = show
@@ -89,16 +118,15 @@ func _v181_update(s: Dictionary, force_visible: bool = false) -> void:
     var distance_m: float = maxf(0.3, float(s.get("distanceToCup", 3.0)))
     var grade_pct: float = float(s.get("longSlopePct", s.get("slopeLongPct", 0.0)))
     var green_speed: float = float(s.get("greenSpeed", 3.0))
-    var ball_speed: float = maxf(0.0, float(s.get("ballSpeed", 0.0)))
     var target: float = _v181_target_speed(distance_m, grade_pct, green_speed)
 
     _v181_target.text = "TARGET %.1f m/s" % target
     _v181_grade.text = _v181_grade_text(grade_pct)
     var target_x: float = 20.0 + V181_BAR_W * clampf(target / 5.0, 0.0, 1.0)
     _v181_marker.position.x = target_x
-    _v181_fill.size.x = V181_BAR_W * clampf(ball_speed / 5.0, 0.0, 1.0)
-    if ball_speed > 0.03:
-        _v181_actual.text = "ACTUAL %.1f  •  %d%%" % [ball_speed, _v181_match_pct(ball_speed, target)]
+    _v181_fill.size.x = V181_BAR_W * clampf(_v181_launch_speed / 5.0, 0.0, 1.0)
+    if _v181_launch_speed > V181_LAUNCH_LOCK_MIN_MPS:
+        _v181_actual.text = "%.1f m/s · %d%% %s" % [_v181_launch_speed, _v181_match_pct(_v181_launch_speed, target), _v181_pace_grade(_v181_launch_speed, target)]
     else:
         _v181_actual.text = "ADDRESS"
 
