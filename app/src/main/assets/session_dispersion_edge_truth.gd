@@ -36,9 +36,9 @@ func _process(_delta: float) -> void:
     var samples: Array = samples_value
     var points: Array = points_value
 
-    # The old change detector called str(samples) every frame, allocating a new String at display
-    # refresh cadence even when the five-shot practice history had not changed. Deep Array equality
-    # is allocation-free for this tiny fixed history; duplicate only when a shot actually changes it.
+    # The old change detector stringified the sample array every frame, allocating a new String at
+    # display refresh cadence even when the five-shot practice history had not changed. Deep Array
+    # equality is allocation-free for this tiny fixed history; duplicate only when a shot changes it.
     if samples == _last_samples:
         return
     _last_samples = samples.duplicate()
