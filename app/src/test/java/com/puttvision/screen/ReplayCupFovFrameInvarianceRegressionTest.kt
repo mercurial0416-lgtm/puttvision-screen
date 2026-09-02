@@ -23,7 +23,7 @@ class ReplayCupFovFrameInvarianceRegressionTest {
         assertTrue(script.contains("func _v180_damping_alpha(response_rate: float, delta: float) -> float:"))
         assertTrue(script.contains("return 1.0 - exp(-delta * response_rate)"))
         assertTrue(script.contains("_v180_damping_alpha(V180_FOV_RESPONSE, delta)"))
-        assertTrue(script.contains("camera.fov = lerp(camera.fov, 30.5, fov_alpha * blend)"))
+        assertTrue(script.contains("camera.fov = lerp(camera.fov, finish_fov, fov_alpha * blend)"))
         assertFalse(script.contains("min(1.0, delta * 5.5)"))
     }
 

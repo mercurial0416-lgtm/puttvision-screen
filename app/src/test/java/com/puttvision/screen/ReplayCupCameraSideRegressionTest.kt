@@ -37,7 +37,7 @@ class ReplayCupCameraSideRegressionTest {
     fun finishCompositionKeepsRollingBallAndCupInTheSameFrame() {
         val focus = asset("v180_replay_cup_focus.gd")
         val composer = focus.substringAfter("func _v180_composed_look_point")
-            .substringBefore("\nfunc _v180_cup_camera_side_sign")
+            .substringBefore("\nfunc _v180_finish_fov")
         assertTrue(focus.contains("const V180_BALL_FRAMING_WEIGHT_START := 0.62"))
         assertTrue(focus.contains("const V180_BALL_FRAMING_WEIGHT_END := 0.38"))
         assertTrue(composer.contains("clampf(focus, 0.0, 1.0)"))
@@ -62,6 +62,36 @@ class ReplayCupCameraSideRegressionTest {
         assertTrue(startLook in cup..ball)
         assertTrue(endLook in cup..ball)
         assertTrue(endLook < startLook)
+    }
+
+    @Test
+    fun finishLensWidensOnlyWhenBallCupSeparationNeedsRoom() {
+        val focus = asset("v180_replay_cup_focus.gd")
+        val fov = focus.substringAfter("func _v180_finish_fov")
+            .substringBefore("\nfunc _v180_cup_camera_side_sign")
+        assertTrue(focus.contains("const V180_FINISH_FOV_MIN := 30.5"))
+        assertTrue(focus.contains("const V180_FINISH_FOV_MAX := 38.0"))
+        assertTrue(focus.contains("const V180_FINISH_FOV_WIDEN_START_M := 0.35"))
+        assertTrue(focus.contains("const V180_FINISH_FOV_WIDEN_FULL_M := 1.20"))
+        assertTrue(fov.contains("ball_point.distance_to(cup_point)"))
+        assertTrue(fov.contains("smoothstep(V180_FINISH_FOV_WIDEN_START_M, V180_FINISH_FOV_WIDEN_FULL_M, separation_m)"))
+        assertTrue(fov.contains("return lerpf(V180_FINISH_FOV_MIN, V180_FINISH_FOV_MAX, widen)"))
+        assertTrue(focus.contains("var finish_fov := _v180_finish_fov(replay_ball2, cup2)"))
+        assertTrue(focus.contains("camera.fov = lerp(camera.fov, finish_fov, fov_alpha * blend)"))
+        assertFalse(focus.contains("camera.fov = lerp(camera.fov, 30.5, fov_alpha * blend)"))
+    }
+
+    @Test
+    fun finishLensBoundsStayCinematicAndMobileSafe() {
+        val minFov = 30.5
+        val maxFov = 38.0
+        val widenStartMeters = 0.35
+        val widenFullMeters = 1.20
+        assertTrue(minFov >= 28.0)
+        assertTrue(maxFov <= 40.0)
+        assertTrue(maxFov > minFov)
+        assertTrue(widenStartMeters > 0.0)
+        assertTrue(widenFullMeters > widenStartMeters)
     }
 
     @Test
