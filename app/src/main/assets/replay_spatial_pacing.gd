@@ -20,6 +20,21 @@ func _replay_spatial_valid_points(points: Array) -> Array[Vector2]:
         valid.append(point)
     return valid
 
+func _v175_trail_total_length(points: Array) -> float:
+    # Keep every replay consumer on the same sanitized polyline. The camera already filtered invalid
+    # and duplicate samples before interpolation, but the inherited total-length helper still walked
+    # the raw array. A single non-finite bridge sample could therefore poison HUD distance telemetry
+    # even while the replay camera itself looked healthy. Presentation only; shot physics stay intact.
+    var valid_points := _replay_spatial_valid_points(points)
+    if valid_points.size() < 2:
+        return 0.0
+    var total_length := 0.0
+    for index in range(1, valid_points.size()):
+        var segment := valid_points[index - 1].distance_to(valid_points[index])
+        if is_finite(segment) and segment > REPLAY_SPATIAL_EPSILON:
+            total_length += segment
+    return total_length
+
 func _v175_trail_heading(points: Array, progress: float) -> Vector2:
     var valid_points := _replay_spatial_valid_points(points)
     var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
@@ -40,14 +55,7 @@ func _v175_trail_point(points: Array, progress: float) -> Vector2:
     if p >= 1.0:
         return last
 
-    var total_length := 0.0
-    for index in range(1, valid_points.size()):
-        var a := valid_points[index - 1]
-        var b := valid_points[index]
-        var segment := a.distance_to(b)
-        if is_finite(segment):
-            total_length += segment
-
+    var total_length := _v175_trail_total_length(valid_points)
     if total_length <= REPLAY_SPATIAL_EPSILON:
         return first
 

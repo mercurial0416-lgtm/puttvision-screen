@@ -13,11 +13,13 @@ class ReplayRollDistanceCueRegressionTest {
     }
 
     @Test
-    fun productionTimelineShowsPhysicalDistanceToRest() {
+    fun productionTimelineShowsPhysicalDistanceToStop() {
         val timeline = asset("replay_timeline_camera_truth.gd")
+        val layout = asset("replay_roll_distance_layout.gd")
         assertTrue(timeline.contains("_focus_replay_stage_label.text = \"%s  ·  %s\""))
         assertTrue(timeline.contains("_focus_replay_roll_distance(progress)"))
-        assertTrue(timeline.contains("REST"))
+        assertTrue(layout.contains("CLEAR_REMAINING_SUFFIX := \" TO STOP\""))
+        assertTrue(layout.contains("stage.text = stage.text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)"))
     }
 
     @Test
@@ -49,13 +51,13 @@ class ReplayRollDistanceCueRegressionTest {
     }
 
     @Test
-    fun statusLaneIsWidenedAndPreviewExercisesRestDistance() {
+    fun statusLaneIsWidenedAndPreviewExercisesStopDistance() {
         val layout = asset("replay_roll_distance_layout.gd")
         val tvScene = asset("v143_tv.tscn")
         val previewScene = asset("v143_preview.tscn")
         assertTrue(layout.contains("const STATUS_WIDTH := 248.0"))
-        assertTrue(layout.contains("PREVIEW_SAMPLE_REST := \"0.9m REST\""))
-        assertTrue(layout.contains("set_process(false)"))
+        assertTrue(layout.contains("PREVIEW_SAMPLE_DISTANCE := \"0.9m TO STOP\""))
+        assertFalse(layout.contains("set_process(false)"))
         assertTrue(tvScene.contains("res://replay_roll_distance_layout.gd"))
         assertTrue(previewScene.contains("res://replay_roll_distance_layout.gd"))
     }
