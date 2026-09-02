@@ -22,6 +22,7 @@ const V194_BIAS_DEADZONE_PX := 6.0
 const V194_BIAS_ARROW_LENGTH_PX := 5.0
 const V194_BIAS_ARROW_HALF_WIDTH_PX := 3.0
 const V194_BIAS_CENTER_DEADZONE_CM := 1.5
+const V194_FIT_CLIPPED_THRESHOLD := 0.9999
 
 func _v194_mean_sample() -> Vector2:
     if _v179_samples.is_empty():
@@ -83,11 +84,11 @@ func _v194_oriented_ellipse(major: float, minor: float, angle: float) -> PackedV
         points.append(major_axis * cos(phase) * major + minor_axis * sin(phase) * minor)
     return points
 
-func _v194_fit_envelope_to_plot(center: Vector2, points: PackedVector2Array) -> PackedVector2Array:
-    # Off-scale session centroids legitimately sit on the circular target rim. Requiring the entire
-    # envelope to stay inside that circle collapses it to zero there, so fit against the compact
-    # shot-map plot bounds instead. This preserves both the true centroid and covariance direction
-    # while preventing the rotated envelope from touching adjacent HUD content.
+func _v194_fit_envelope_to_plot(center: Vector2, points: PackedVector2Array) -> Dictionary:
+    # Off-scale session centroids legitimately sit on the compact plot rim. Fit only the drawn
+    # envelope to the available rectangle, but report that presentation compression explicitly.
+    # The caller keeps the true cm spread and centroid, so a large miss group can never masquerade
+    # as a tighter one merely because the HUD has finite space.
     var plot_min := V188_CENTER - Vector2(V188_RADIUS, V188_RADIUS) + Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
     var plot_max := V188_CENTER + Vector2(V188_RADIUS, V188_RADIUS) - Vector2(V194_EDGE_INSET, V194_EDGE_INSET)
     var scale := 1.0
@@ -100,12 +101,18 @@ func _v194_fit_envelope_to_plot(center: Vector2, points: PackedVector2Array) -> 
             scale = minf(scale, maxf(0.0, (plot_max.y - center.y) / local_point.y))
         elif local_point.y < -V194_COVARIANCE_EPSILON:
             scale = minf(scale, maxf(0.0, (plot_min.y - center.y) / local_point.y))
-    if scale >= 0.9999:
-        return points
-    var fitted := PackedVector2Array()
-    for local_point in points:
-        fitted.append(local_point * scale)
-    return fitted
+
+    var fitted := points
+    var view_clipped := scale < V194_FIT_CLIPPED_THRESHOLD
+    if view_clipped:
+        fitted = PackedVector2Array()
+        for local_point in points:
+            fitted.append(local_point * scale)
+    return {
+        "points": fitted,
+        "viewClipped": view_clipped,
+        "presentationScale": scale
+    }
 
 func _v194_cross(radius: float) -> PackedVector2Array:
     return PackedVector2Array([
@@ -140,6 +147,12 @@ func _v194_bias_readout(mean: Vector2) -> String:
     var pace_text := "PACE OK" if absf(mean.y) < V194_BIAS_CENTER_DEADZONE_CM else "%s %.0f CM" % ["LONG" if mean.y > 0.0 else "SHORT", absf(mean.y)]
     return "BIAS %s  ·  %s" % [line_text, pace_text]
 
+func _v194_spread_readout(spread: Vector2, view_clipped: bool) -> String:
+    # Never imply that a display-fitted ellipse is the full statistical footprint. The measured cm
+    # remain authoritative; VIEW CLIPPED describes only the finite HUD viewport.
+    var suffix := " · VIEW CLIPPED" if view_clipped else ""
+    return "GROUP ±%.0f / ±%.0f CM%s" % [spread.x, spread.y, suffix]
+
 # Preserve the true session centroid while shrinking only the presentation envelope to the visible
 # shot-map plot. Covariance rotates the ellipse to match the actual miss pattern; edge fitting then
 # scales it uniformly without flattening that directional signal.
@@ -147,7 +160,8 @@ func _v194_envelope_geometry(mean: Vector2, spread: Vector2) -> Dictionary:
     var center := _v188_point(mean.x, mean.y)
     var axes := _v194_principal_axes(_v194_covariance_pixels(mean))
     var raw_points := _v194_oriented_ellipse(float(axes["major"]), float(axes["minor"]), float(axes["angle"]))
-    var points := _v194_fit_envelope_to_plot(center, raw_points)
+    var fit := _v194_fit_envelope_to_plot(center, raw_points)
+    var points: PackedVector2Array = fit["points"]
     var max_radius := 0.0
     for point in points:
         max_radius = maxf(max_radius, point.length())
@@ -158,6 +172,8 @@ func _v194_envelope_geometry(mean: Vector2, spread: Vector2) -> Dictionary:
         "major": float(axes["major"]),
         "minor": float(axes["minor"]),
         "visible": points.size() == V194_ENVELOPE_SEGMENTS + 1 and max_radius > 0.5,
+        "viewClipped": bool(fit["viewClipped"]),
+        "presentationScale": float(fit["presentationScale"]),
         "spread": spread
     }
 
@@ -211,8 +227,8 @@ func _build_hud() -> void:
 
     _v194_spread_label = _v174_text(
         _v188_panel,
-        Vector2(14, 127),
-        Vector2(122, 10),
+        Vector2(8, 127),
+        Vector2(134, 10),
         "GROUP —",
         7,
         Color(0.55, 0.78, 0.88, 0.90),
@@ -258,7 +274,7 @@ func _v194_refresh_envelope() -> void:
         _v194_bias_arrow.points = PackedVector2Array()
 
     _v194_bias_label.text = _v194_bias_readout(mean)
-    _v194_spread_label.text = "GROUP ±%.0f / ±%.0f CM" % [spread.x, spread.y]
+    _v194_spread_label.text = _v194_spread_readout(spread, bool(geometry["viewClipped"]))
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
     super._v188_refresh(line_delta_cm, pace_delta_cm, visible)
