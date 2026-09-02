@@ -6,6 +6,10 @@ extends "res://address_relief_camera.gd"
 
 const RELIEF_DEPTH_CAMERA_LOWER_M := 0.035
 const RELIEF_DEPTH_CLEARANCE_GUARD_M := 0.08
+const RELIEF_PLANAR_GRADE_START_PCT := 0.55
+const RELIEF_PLANAR_GRADE_FULL_PCT := 2.25
+const RELIEF_PLANAR_CAMERA_LOWER_M := 0.050
+const RELIEF_PLANAR_FOV_BOOST_DEG := 1.4
 const RELIEF_AIM_WIDTH_M := 0.012
 const RELIEF_AIM_CLEARANCE_M := 0.010
 const RELIEF_AIM_SEGMENT_M := 0.24
@@ -87,14 +91,27 @@ func _terrain_relief_rebuild() -> void:
     if _v166_terrain_ready and aim_line != null:
         _update_aim_line(target_distance)
 
+func _address_planar_grade_signal(ball_world: Vector3, plan: Dictionary) -> float:
+    var look: Vector3 = plan.get("look", ball_world)
+    var midpoint := ball_world.lerp(look, 0.62)
+    var terrain := _v166_sample(midpoint.x, -midpoint.z)
+    var grade_pct := Vector2(terrain.y, terrain.z).length()
+    return smoothstep(RELIEF_PLANAR_GRADE_START_PCT, RELIEF_PLANAR_GRADE_FULL_PCT, grade_pct)
+
 func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) -> Dictionary:
     var plan := super._address_relief_camera_plan(ball_world, distance_to_cup)
     var clearance_raise := float(plan.get("clearance_raise", 0.0))
     if clearance_raise <= RELIEF_DEPTH_CLEARANCE_GUARD_M:
         var position: Vector3 = plan["position"]
-        # A small extra grazing-angle bias exposes crown/bowl silhouette and parallax. It is disabled
-        # whenever the inherited sightline guard is already working hard, so the cup cannot disappear
-        # behind an exaggerated ridge.
+        # Macro crown/bowl relief gets the existing grazing bias. A near-planar sloped green used to
+        # miss that signal because its surface follows a straight chord; sample authoritative grade
+        # separately so steady uphill/downhill/cross-slope putts still read as a tilted plane.
+        var planar_signal := _address_planar_grade_signal(ball_world, plan)
         position.y -= RELIEF_DEPTH_CAMERA_LOWER_M
+        position.y -= RELIEF_PLANAR_CAMERA_LOWER_M * planar_signal
         plan["position"] = position
+        plan["fov"] = float(plan.get("fov", camera.fov)) + RELIEF_PLANAR_FOV_BOOST_DEG * planar_signal
+        plan["planar_grade_signal"] = planar_signal
+    else:
+        plan["planar_grade_signal"] = 0.0
     return plan
