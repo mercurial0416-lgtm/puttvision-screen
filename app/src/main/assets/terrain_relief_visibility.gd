@@ -8,8 +8,8 @@ extends "res://practice_trend_vector.gd"
 const RELIEF_GREEN_SIZE := Vector2(11.8, 34.5)
 const RELIEF_SUB_X := 30
 const RELIEF_SUB_Z := 86
-const RELIEF_VISUAL_SCALE := 4.6
-const RELIEF_EXTRA_CAP_M := 0.72
+const RELIEF_VISUAL_SCALE := 7.2
+const RELIEF_EXTRA_CAP_M := 0.96
 const RELIEF_MINOR_CONTOUR_M := 0.05
 const RELIEF_MAJOR_CONTOUR_M := 0.10
 const RELIEF_TRAIL_CLEARANCE_M := 0.0075
@@ -31,13 +31,13 @@ func _terrain_relief_visual_height(terrain_height_m: float) -> float:
     return _terrain_relief_geometry_height(terrain_height_m) + 0.003
 
 func _terrain_relief_visibility_strength(slope_percent: float, terrain_height_m: float) -> float:
-    var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
-    var elevation_signal := smoothstep(0.035, 0.14, absf(terrain_height_m))
-    return maxf(slope_signal, elevation_signal * 0.48)
+    var slope_signal := smoothstep(0.10, 0.70, maxf(0.0, slope_percent))
+    var elevation_signal := smoothstep(0.020, 0.11, absf(terrain_height_m))
+    return maxf(slope_signal, elevation_signal * 0.58)
 
 func _terrain_relief_hillshade_contrast(slope_percent: float) -> float:
-    var slope_signal := smoothstep(0.18, 0.90, maxf(0.0, slope_percent))
-    return lerpf(0.0, 0.16, slope_signal)
+    var slope_signal := smoothstep(0.10, 0.70, maxf(0.0, slope_percent))
+    return lerpf(0.0, 0.24, slope_signal)
 
 # Build actual presentation geometry instead of relying only on a transparent vertex-displaced shell.
 # This keeps bowls/crowns visible through normal depth testing and gives the turf shader real silhouette
@@ -112,29 +112,29 @@ void vertex() {
     local_slope = (COLOR.gb - vec2(0.5)) * 24.0;
     slope_pct = length(local_slope);
     float relief_delta = clamp(
-        terrain_height * (4.6 - 1.0),
-        -0.72,
-        0.72
+        terrain_height * (7.2 - 1.0),
+        -0.96,
+        0.96
     );
     VERTEX.y = terrain_height + relief_delta + 0.0030;
 }
 
 void fragment() {
-    float slope_signal = smoothstep(0.18, 0.90, slope_pct);
-    float elevation_signal = smoothstep(0.035, 0.14, abs(terrain_height));
-    float active = max(slope_signal, elevation_signal * 0.48);
-    float height_bias = clamp(terrain_height / 0.34, -1.0, 1.0);
+    float slope_signal = smoothstep(0.10, 0.70, slope_pct);
+    float elevation_signal = smoothstep(0.020, 0.11, abs(terrain_height));
+    float active = max(slope_signal, elevation_signal * 0.58);
+    float height_bias = clamp(terrain_height / 0.26, -1.0, 1.0);
 
     vec2 downhill = slope_pct > 0.001 ? local_slope / slope_pct : vec2(0.0, 1.0);
     float facing = dot(downhill, normalize(vec2(0.72, -0.69)));
     float cross_facing = dot(downhill, normalize(vec2(0.69, 0.72)));
     float primary_hillshade = clamp(facing * slope_signal, -1.0, 1.0);
     float cross_hillshade = clamp(cross_facing * slope_signal, -1.0, 1.0);
-    float hillshade_exposure = mix(0.94, 1.06, primary_hillshade * 0.5 + 0.5);
-    vec3 cross_tint = vec3(1.0) + vec3(0.014, 0.005, -0.012) * cross_hillshade;
+    float hillshade_exposure = mix(0.89, 1.11, primary_hillshade * 0.5 + 0.5);
+    vec3 cross_tint = vec3(1.0) + vec3(0.022, 0.008, -0.018) * cross_hillshade;
 
-    vec3 low_green = vec3(0.120, 0.300, 0.100);
-    vec3 high_green = vec3(0.180, 0.380, 0.140);
+    vec3 low_green = vec3(0.108, 0.276, 0.090);
+    vec3 high_green = vec3(0.196, 0.405, 0.151);
     vec3 relief_color = mix(low_green, high_green, height_bias * 0.5 + 0.5);
     relief_color *= hillshade_exposure;
     relief_color *= cross_tint;
@@ -143,15 +143,15 @@ void fragment() {
     float major_phase = abs(fract(terrain_height / 0.10 + 0.5) - 0.5);
     float minor_ribbon = 1.0 - smoothstep(0.050, 0.115, minor_phase);
     float major_ribbon = 1.0 - smoothstep(0.065, 0.145, major_phase);
-    float elevation_ribbon = max(minor_ribbon * 0.46, major_ribbon);
-    float ribbon_strength = elevation_ribbon * active * 0.34;
-    vec3 ribbon_color = relief_color * 1.34 + vec3(0.024, 0.034, 0.010);
+    float elevation_ribbon = max(minor_ribbon * 0.50, major_ribbon);
+    float ribbon_strength = elevation_ribbon * active * 0.42;
+    vec3 ribbon_color = relief_color * 1.38 + vec3(0.028, 0.040, 0.012);
     relief_color = mix(relief_color, ribbon_color, ribbon_strength);
 
     ALBEDO = relief_color;
-    float base_alpha = 0.018 + active * (0.072 + 0.012 * abs(height_bias));
-    float ribbon_alpha = elevation_ribbon * active * 0.22;
-    ALPHA = min(0.32, base_alpha + ribbon_alpha);
+    float base_alpha = 0.022 + active * (0.096 + 0.018 * abs(height_bias));
+    float ribbon_alpha = elevation_ribbon * active * 0.28;
+    ALPHA = min(0.40, base_alpha + ribbon_alpha);
 }
 """
     var material := ShaderMaterial.new()
