@@ -21,6 +21,10 @@ const V180_COMPARE_SAMPLES := 20
 const V180_FINISH_DEADBAND_CM := 2.0
 const V180_CAMERA_SIDE_DEADBAND_M := 0.04
 const V180_FOV_RESPONSE := 5.5
+const V180_FINISH_FOV_MIN := 30.5
+const V180_FINISH_FOV_MAX := 38.0
+const V180_FINISH_FOV_WIDEN_START_M := 0.35
+const V180_FINISH_FOV_WIDEN_FULL_M := 1.20
 const V180_SIGHTLINE_SAMPLES := 7
 const V180_SIGHTLINE_CLEARANCE_M := 0.10
 const V180_SIGHTLINE_MAX_LIFT_M := 0.72
@@ -87,6 +91,14 @@ func _v180_composed_look_point(ball_point: Vector2, cup_point: Vector2, focus: f
     # two-vector lerp per replay frame and never feeds the authoritative trajectory or physics.
     var weight := lerpf(V180_BALL_FRAMING_WEIGHT_START, V180_BALL_FRAMING_WEIGHT_END, clampf(focus, 0.0, 1.0))
     return cup_point.lerp(ball_point, weight)
+
+func _v180_finish_fov(ball_point: Vector2, cup_point: Vector2) -> float:
+    # Preserve the premium tight lens for normal cup finishes, but widen gently when the replay ball
+    # remains meaningfully separated from the cup. This keeps both subjects legible on large misses
+    # without a costly bounds solver, per-frame allocations, or any influence on shot physics.
+    var separation_m := ball_point.distance_to(cup_point)
+    var widen := smoothstep(V180_FINISH_FOV_WIDEN_START_M, V180_FINISH_FOV_WIDEN_FULL_M, separation_m)
+    return lerpf(V180_FINISH_FOV_MIN, V180_FINISH_FOV_MAX, widen)
 
 func _v180_cup_camera_side_sign(final_point: Vector2, cup_point: Vector2, final_heading: Vector2) -> float:
     var heading := final_heading.normalized()
@@ -200,6 +212,7 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     var cup2 := _v180_cup_point()
     var replay_ball2 := _v175_trail_point(_v171_replay_actual, progress)
     var look2 := _v180_composed_look_point(replay_ball2, cup2, focus)
+    var finish_fov := _v180_finish_fov(replay_ball2, cup2)
     var final_heading := _v175_trail_heading(_v171_replay_actual, 0.965)
     var side := Vector2(-final_heading.y, final_heading.x)
     var side_sign := _v180_cup_camera_side_sign(_v180_final_point(), cup2, final_heading)
@@ -221,5 +234,5 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     camera_look = camera_look.lerp(desired_look, alpha)
     camera.position = camera_pos
     var fov_alpha := 1.0 if immediate else _v180_damping_alpha(V180_FOV_RESPONSE, delta)
-    camera.fov = lerp(camera.fov, 30.5, fov_alpha * blend)
+    camera.fov = lerp(camera.fov, finish_fov, fov_alpha * blend)
     camera.look_at(camera_look, Vector3.UP)
