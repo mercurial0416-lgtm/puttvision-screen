@@ -275,7 +275,9 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(47)
         return
-    if shader_code.find("mix(0.89, 1.11") < 0 or shader_code.find("ALPHA = min(0.40") < 0:
+    var has_base_hillshade := shader_code.find("mix(0.89, 1.11") >= 0
+    var has_depth_finish_hillshade := shader_code.find("mix(0.86, 1.14") >= 0
+    if (not has_base_hillshade and not has_depth_finish_hillshade) or shader_code.find("ALPHA = min(0.40") < 0:
         push_error("Terrain relief shader lost strengthened subtle-grade depth cues")
         probe.free()
         get_tree().quit(47)
