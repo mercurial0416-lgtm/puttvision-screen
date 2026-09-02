@@ -270,8 +270,13 @@ func _process(delta: float) -> void:
         probe.free()
         get_tree().quit(41)
         return
-    if shader_code.find("elevation_signal") < 0 or shader_code.find("max(slope_signal, elevation_signal * 0.48)") < 0:
+    if shader_code.find("elevation_signal") < 0 or shader_code.find("max(slope_signal, elevation_signal * 0.58)") < 0:
         push_error("Terrain relief shader lost crown/bowl continuity floor")
+        probe.free()
+        get_tree().quit(47)
+        return
+    if shader_code.find("mix(0.89, 1.11") < 0 or shader_code.find("ALPHA = min(0.40") < 0:
+        push_error("Terrain relief shader lost strengthened subtle-grade depth cues")
         probe.free()
         get_tree().quit(47)
         return
