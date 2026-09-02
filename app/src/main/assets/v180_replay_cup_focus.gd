@@ -24,6 +24,8 @@ const V180_FOV_RESPONSE := 5.5
 const V180_SIGHTLINE_SAMPLES := 7
 const V180_SIGHTLINE_CLEARANCE_M := 0.10
 const V180_SIGHTLINE_MAX_LIFT_M := 0.72
+const V180_BALL_FRAMING_WEIGHT_START := 0.62
+const V180_BALL_FRAMING_WEIGHT_END := 0.38
 
 func _build_hud() -> void:
     super._build_hud()
@@ -78,6 +80,14 @@ func _v180_distance_to_cup_cm(progress: float) -> float:
     var current := _v175_trail_point(_v171_replay_actual, clampf(progress, 0.0, 1.0))
     return current.distance_to(_v180_cup_point()) * 100.0
 
+func _v180_composed_look_point(ball_point: Vector2, cup_point: Vector2, focus: float) -> Vector2:
+    # A cup-only look target can push a meaningful near-miss to the edge of frame exactly when the
+    # replay should explain it. Keep both subjects in the finish composition: favor the moving ball
+    # during handoff, then settle closer to the cup without ever abandoning the ball. This is only a
+    # two-vector lerp per replay frame and never feeds the authoritative trajectory or physics.
+    var weight := lerpf(V180_BALL_FRAMING_WEIGHT_START, V180_BALL_FRAMING_WEIGHT_END, clampf(focus, 0.0, 1.0))
+    return cup_point.lerp(ball_point, weight)
+
 func _v180_cup_camera_side_sign(final_point: Vector2, cup_point: Vector2, final_heading: Vector2) -> float:
     var heading := final_heading.normalized()
     if heading.length_squared() < 0.000001:
@@ -95,7 +105,7 @@ func _v180_sightline_lift(camera2: Vector2, camera_y: float, look2: Vector2, loo
     # This only runs during the short replay cup-focus beat, so the four extra height samples keep
     # Forward Mobile cost bounded while protecting the cup/ball sightline on sculpted greens.
     # Convert each obstruction into the camera-end lift required to clear it; the look endpoint stays
-    # locked to the real cup so the framing never lies about the green or authoritative roll.
+    # locked to the real replay composition so the framing never lies about the green or actual roll.
     var needed := 0.0
     for i in range(V180_SIGHTLINE_SAMPLES):
         var t := float(i + 1) / float(V180_SIGHTLINE_SAMPLES + 1)
@@ -188,22 +198,24 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
         return
 
     var cup2 := _v180_cup_point()
+    var replay_ball2 := _v175_trail_point(_v171_replay_actual, progress)
+    var look2 := _v180_composed_look_point(replay_ball2, cup2, focus)
     var final_heading := _v175_trail_heading(_v171_replay_actual, 0.965)
     var side := Vector2(-final_heading.y, final_heading.x)
     var side_sign := _v180_cup_camera_side_sign(_v180_final_point(), cup2, final_heading)
     var approach_side := side * 0.82 * side_sign
     var cup_cam2 := cup2 + final_heading * 0.76 + approach_side
-    var cup_h := _v166_sample(cup2.x, cup2.y).x
+    var look_h := _v166_sample(look2.x, look2.y).x
     var cam_h := _v166_sample(cup_cam2.x, cup_cam2.y).x
-    var cup_look := Vector3(cup2.x, cup_h + 0.045, -cup2.y)
+    var focus_look := Vector3(look2.x, look_h + 0.045, -look2.y)
     var base_cam_y := cam_h + 0.48
-    var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, cup2, cup_look.y)
+    var sightline_lift := _v180_sightline_lift(cup_cam2, base_cam_y, look2, focus_look.y)
     var cup_pos := Vector3(cup_cam2.x, base_cam_y + sightline_lift, -cup_cam2.y)
 
-    # Smoothly hand off to the cup camera; no teleport and no effect on shot physics.
+    # Smoothly hand off to the finish camera; no teleport and no effect on shot physics.
     var blend := focus * focus * (3.0 - 2.0 * focus)
     var desired_pos := camera_pos.lerp(cup_pos, blend)
-    var desired_look := camera_look.lerp(cup_look, blend)
+    var desired_look := camera_look.lerp(focus_look, blend)
     var alpha := 1.0 if immediate else 1.0 - exp(-delta * 7.2)
     camera_pos = camera_pos.lerp(desired_pos, alpha)
     camera_look = camera_look.lerp(desired_look, alpha)
