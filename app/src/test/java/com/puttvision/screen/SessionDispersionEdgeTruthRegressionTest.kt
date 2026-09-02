@@ -26,11 +26,22 @@ class SessionDispersionEdgeTruthRegressionTest {
     @Test
     fun helperReusesExistingMarkersAndOnlyRunsWhenSamplesChange() {
         val script = asset("session_dispersion_edge_truth.gd")
-        assertTrue(script.contains("if signature == _last_signature:"))
+        assertTrue(script.contains("if samples == _last_samples:"))
+        assertTrue(script.contains("_last_samples = samples.duplicate()"))
         assertTrue(script.contains("dot.size = _session_dispersion_clipped_size(sample)"))
         assertTrue(script.contains("root.call(\"_v179_plot_position\", sample) - dot.size * 0.5"))
         assertFalse(script.contains("ColorRect.new()"))
         assertFalse(script.contains("_v179_samples.append"))
+    }
+
+    @Test
+    fun unchangedPracticeHistoryDoesNotAllocateAStringEveryFrame() {
+        val script = asset("session_dispersion_edge_truth.gd")
+        assertTrue(script.contains("var _last_samples: Array = []"))
+        assertTrue(script.contains("if samples == _last_samples:"))
+        assertTrue(script.contains("_last_samples = samples.duplicate()"))
+        assertFalse(script.contains("str(samples)"))
+        assertFalse(script.contains("var signature :="))
     }
 
     @Test
