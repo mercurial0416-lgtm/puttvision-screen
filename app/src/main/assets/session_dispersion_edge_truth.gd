@@ -9,7 +9,7 @@ const SESSION_CORNER_SIZE := Vector2(14.0, 14.0)
 const SESSION_LINE_SCALE_CM := 5.0
 const SESSION_PACE_SCALE_CM := 15.0
 
-var _last_signature := ""
+var _last_samples: Array = []
 
 func _session_dispersion_clip_axes(sample: Vector2) -> Vector2i:
     return Vector2i(
@@ -35,10 +35,14 @@ func _process(_delta: float) -> void:
         return
     var samples: Array = samples_value
     var points: Array = points_value
-    var signature := str(samples)
-    if signature == _last_signature:
+
+    # The old change detector called str(samples) every frame, allocating a new String at display
+    # refresh cadence even when the five-shot practice history had not changed. Deep Array equality
+    # is allocation-free for this tiny fixed history; duplicate only when a shot actually changes it.
+    if samples == _last_samples:
         return
-    _last_signature = signature
+    _last_samples = samples.duplicate()
+
     var visible_count := mini(samples.size(), points.size())
     for index in range(visible_count):
         var sample = samples[index]
