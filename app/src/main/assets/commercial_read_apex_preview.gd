@@ -28,12 +28,12 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(31)
         return false
-    if probe._read_apex_descriptor(0.42) != "APEX  R 42 cm":
+    if probe._read_apex_descriptor(0.42) != "APEX  RIGHT 42 cm":
         push_error("Read apex right-label regression")
         probe.free()
         get_tree().quit(31)
         return false
-    if probe._read_apex_descriptor(-0.42) != "APEX  L 42 cm":
+    if probe._read_apex_descriptor(-0.42) != "APEX  LEFT 42 cm":
         push_error("Read apex left-label regression")
         probe.free()
         get_tree().quit(31)

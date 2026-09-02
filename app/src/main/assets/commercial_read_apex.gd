@@ -21,7 +21,7 @@ const READ_START_GATE_HALF_WIDTH := 8.5
 func _read_apex_descriptor(offset_m: float) -> String:
     if absf(offset_m) < 0.03:
         return "APEX  CENTER"
-    return "APEX  %s %.0f cm" % [("R" if offset_m > 0.0 else "L"), absf(offset_m) * 100.0]
+    return "APEX  %s %.0f cm" % [("RIGHT" if offset_m > 0.0 else "LEFT"), absf(offset_m) * 100.0]
 
 func _read_apex_point(offset_m: float) -> Vector2:
     var curve := _v183_path(offset_m)
