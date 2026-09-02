@@ -178,11 +178,11 @@ func _show_live_curve_summary() -> void:
     if _live_curve_summary_timer != null:
         _live_curve_summary_timer.start(LIVE_SUMMARY_HOLD_SECONDS)
 
-func _live_trace_points_with_distance(history: PackedFloat32Array, distances: PackedFloat32Array) -> PackedVector2Array:
+func _live_trace_points_with_distance(history: PackedFloat32Array, distances: PackedFloat32Array, display_peak_cm: float = 0.0) -> PackedVector2Array:
     var points := PackedVector2Array()
     if history.is_empty():
         return points
-    var peak := 5.0
+    var peak := maxf(5.0, display_peak_cm)
     for value in history:
         peak = maxf(peak, absf(value))
     var count := history.size()
@@ -231,7 +231,9 @@ func _live_trace_push(cross_track_cm: float, traveled_m: float = -1.0) -> void:
         _live_curve_history.remove_at(0)
         _live_curve_distance_history.remove_at(0)
     if _live_curve_trace != null:
-        _live_curve_trace.points = _live_trace_points_with_distance(_live_curve_history, _live_curve_distance_history)
+        # Keep the mini-trace scale monotonic for the duration of a putt. Otherwise an old peak aging
+        # out of the rolling 28-point window makes the remaining curve suddenly stretch vertically.
+        _live_curve_trace.points = _live_trace_points_with_distance(_live_curve_history, _live_curve_distance_history, _live_curve_peak_cm)
 
 # Make the authoritative roll response obvious without touching physics. During a live roll the
 # dedicated meter reports current/peak cross-track curve, speed decay, and a bounded mini trace of
