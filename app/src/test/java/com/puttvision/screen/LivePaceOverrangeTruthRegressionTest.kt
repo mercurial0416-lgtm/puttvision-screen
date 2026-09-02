@@ -24,8 +24,9 @@ class LivePaceOverrangeTruthRegressionTest {
     @Test
     fun renderedPreviewExercisesOverrangeState() {
         val preview = asset("live_pace_surge_preview.gd")
-        assertTrue(preview.contains("PACE 199%+ · SURGING"))
-        assertTrue(preview.contains("_live_pace_readout(5.0, 1.0) != \"PACE 199%+ · SURGING\""))
+        assertTrue(preview.contains("PACE 199%+ · 5.00 m/s · SURGING"))
+        assertTrue(preview.contains("_live_pace_readout(5.0, 1.0) != \"PACE 199%+ · 5.00 m/s · SURGING\""))
+        assertTrue(preview.contains("_live_pace_speed_text(99.0) != \"9.99+ m/s\""))
         assertFalse(preview.contains("_live_pace_readout(5.0, 1.0) != \"PACE 199% · SURGING\""))
     }
 
