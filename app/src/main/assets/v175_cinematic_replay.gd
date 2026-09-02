@@ -7,6 +7,7 @@ extends "res://v174_broadcast_hud.gd"
 const V175_REPLAY_TRACK_WIDTH := 634.0
 const V175_HEADING_SAMPLE_M := 0.18
 const V175_HEADING_WIDE_SAMPLE_M := 0.42
+const V175_FOV_RESPONSE := 4.8
 
 var _v175_replay_panel: Panel
 var _v175_replay_title: Label
@@ -150,6 +151,11 @@ func _process(delta: float) -> void:
     _v175_replay_marker.position.x = 22.0 + maxf(0.0, width - 1.5)
     _v175_replay_detail.text = "%3d%%  •  ACTUAL BALL LINE" % int(round(progress * 100.0))
 
+func _v175_fov_damping_alpha(delta: float) -> float:
+    if not is_finite(delta) or delta <= 0.0:
+        return 0.0
+    return 1.0 - exp(-delta * V175_FOV_RESPONSE)
+
 func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_to_cup: float, immediate: bool, delta: float) -> void:
     if _v171_replay_remaining <= 0.0 or _v171_replay_actual.size() < 2:
         super._update_camera(ball_world, running, phase, distance_to_cup, immediate, delta)
@@ -179,5 +185,5 @@ func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_
     camera_look = camera_look.lerp(desired_look, look_alpha)
     camera.position = camera_pos
     var target_fov: float = lerp(41.0, 35.5, choreography)
-    camera.fov = lerp(camera.fov, target_fov, 1.0 if immediate else min(1.0, delta * 4.8))
+    camera.fov = lerp(camera.fov, target_fov, 1.0 if immediate else _v175_fov_damping_alpha(delta))
     camera.look_at(camera_look, Vector3.UP)
