@@ -16,11 +16,10 @@ class TerrainReliefPresentationRegressionTest {
     @Test
     fun terrainReliefUsesBoundedPresentationOnlyGeometryExaggeration() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("RELIEF_VISUAL_SCALE := 4.6"))
-        assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.72"))
+        assertTrue(script.contains("RELIEF_VISUAL_SCALE := 7.2"))
+        assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.96"))
         assertTrue(script.contains("terrain_height_m * (RELIEF_VISUAL_SCALE - 1.0)"))
         assertTrue(script.contains("VERTEX.y = terrain_height + relief_delta + 0.0030"))
-        assertFalse(script.contains("RELIEF_VISUAL_SCALE := 3.2"))
         assertFalse(script.contains("GreenTerrain("))
         assertFalse(script.contains("GreenReadAdvisor("))
         assertFalse(script.contains("_v166_samples["))
@@ -41,19 +40,23 @@ class TerrainReliefPresentationRegressionTest {
     }
 
     @Test
-    fun translucentReliefPreservesExistingTurfGridAndReadCues() {
+    fun translucentReliefMakesSubtleGradeShadingReadableWithoutHeavyEffects() {
         val script = asset("terrain_relief_visibility.gd")
         assertTrue(script.contains("render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;"))
-        assertTrue(script.contains("float base_alpha = 0.018"))
-        assertTrue(script.contains("float ribbon_alpha = elevation_ribbon * active * 0.22"))
-        assertTrue(script.contains("ALPHA = min(0.32, base_alpha + ribbon_alpha)"))
+        assertTrue(script.contains("smoothstep(0.10, 0.70, slope_pct)"))
+        assertTrue(script.contains("mix(0.89, 1.11"))
+        assertTrue(script.contains("float base_alpha = 0.022"))
+        assertTrue(script.contains("float ribbon_alpha = elevation_ribbon * active * 0.28"))
+        assertTrue(script.contains("ALPHA = min(0.40, base_alpha + ribbon_alpha)"))
         assertFalse(script.contains("depth_test_disabled"))
+        assertFalse(script.contains("DirectionalLight3D.new()"))
     }
 
     @Test
     fun subtleGradeReliefBudgetIsMateriallyStrongerButStillCapped() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("RELIEF_VISUAL_SCALE := 4.6"))
+        assertTrue(script.contains("RELIEF_VISUAL_SCALE := 7.2"))
+        assertTrue(script.contains("RELIEF_EXTRA_CAP_M := 0.96"))
         assertTrue(script.contains("-RELIEF_EXTRA_CAP_M,\n        RELIEF_EXTRA_CAP_M"))
         assertFalse(script.contains("RELIEF_EXTRA_CAP_M := 1."))
     }
@@ -114,20 +117,18 @@ class TerrainReliefPresentationRegressionTest {
         assertTrue(script.contains("RELIEF_MAJOR_CONTOUR_M := 0.10"))
         assertTrue(script.contains("terrain_height / 0.05"))
         assertTrue(script.contains("terrain_height / 0.10"))
-        assertTrue(script.contains("float elevation_ribbon = max(minor_ribbon * 0.46, major_ribbon)"))
-        assertTrue(script.contains("float ribbon_strength = elevation_ribbon * active * 0.34"))
+        assertTrue(script.contains("float elevation_ribbon = max(minor_ribbon * 0.50, major_ribbon)"))
+        assertTrue(script.contains("float ribbon_strength = elevation_ribbon * active * 0.42"))
         assertTrue(script.contains("relief_color = mix(relief_color, ribbon_color, ribbon_strength)"))
         assertFalse(script.contains("VERTEX.y += elevation_ribbon"))
     }
 
     @Test
-    fun terrainReliefAvoidsDarkPaintedIslandRegression() {
+    fun terrainReliefAvoidsPaintedIslandRegression() {
         val script = asset("terrain_relief_visibility.gd")
-        assertTrue(script.contains("mix(0.94, 1.06"))
-        assertTrue(script.contains("vec3(0.014, 0.005, -0.012)"))
-        assertTrue(script.contains("vec3 low_green = vec3(0.120, 0.300, 0.100)"))
-        assertTrue(script.contains("vec3 high_green = vec3(0.180, 0.380, 0.140)"))
-        assertFalse(script.contains("mix(0.84, 1.16"))
+        assertTrue(script.contains("vec3 low_green = vec3(0.108, 0.276, 0.090)"))
+        assertTrue(script.contains("vec3 high_green = vec3(0.196, 0.405, 0.151)"))
+        assertFalse(script.contains("mix(0.80, 1.20"))
         assertFalse(script.contains("DirectionalLight3D.new()"))
         assertFalse(script.contains("contour_wave"))
     }
