@@ -13,11 +13,13 @@ const LIVE_TRACE_RIGHT := 476.0
 const LIVE_TRACE_CENTER_Y := 81.0
 const LIVE_TRACE_AMPLITUDE := 6.0
 const LIVE_SUMMARY_HOLD_SECONDS := 2.4
+const LIVE_LAUNCH_MIN_SPEED_MPS := 0.01
 
 var _read_flow_cues: Array[Line2D] = []
 var _live_curve_was_running := false
 var _live_curve_origin := Vector2.ZERO
 var _live_curve_forward := Vector2.UP
+var _live_curve_has_launch_vector := false
 var _live_curve_panel: Panel
 var _live_curve_title: Label
 var _live_curve_value: Label
@@ -235,6 +237,17 @@ func _live_trace_push(cross_track_cm: float, traveled_m: float = -1.0) -> void:
         # out of the rolling 28-point window makes the remaining curve suddenly stretch vertically.
         _live_curve_trace.points = _live_trace_points_with_distance(_live_curve_history, _live_curve_distance_history, _live_curve_peak_cm)
 
+func _live_try_acquire_launch_vector(velocity: Vector2) -> bool:
+    if _live_curve_has_launch_vector:
+        return true
+    var speed := velocity.length()
+    if not is_finite(speed) or speed < LIVE_LAUNCH_MIN_SPEED_MPS:
+        return false
+    _live_curve_forward = velocity / speed
+    _live_curve_launch_speed = speed
+    _live_curve_has_launch_vector = true
+    return true
+
 # Make the authoritative roll response obvious without touching physics. During a live roll the
 # dedicated meter reports current/peak cross-track curve, speed decay, and a bounded mini trace of
 # the curve history from bridge snapshots. Trace points stay distance-gated for stable rendering,
@@ -254,10 +267,11 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         if _live_curve_title != null:
             _live_curve_title.text = "LIVE BREAK"
         _live_curve_origin = Vector2(float(s.get("startX", 0.0)), float(s.get("startY", 0.0)))
-        _live_curve_forward = velocity.normalized() if velocity.length_squared() > 0.0001 else Vector2.UP
+        _live_curve_forward = Vector2.UP
+        _live_curve_has_launch_vector = false
         _live_curve_peak_cm = 0.0
         _live_curve_peak_signed_cm = 0.0
-        _live_curve_launch_speed = velocity.length()
+        _live_curve_launch_speed = 0.0
         _live_curve_history.clear()
         _live_curve_distance_history.clear()
         _live_curve_travel_m = 0.0
@@ -271,12 +285,21 @@ func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
         if _live_curve_panel != null:
             _live_curve_panel.visible = true
         var ball_pos := Vector2(float(s.get("ballX", 0.0)), float(s.get("ballY", 0.0)))
+        var traveled_m := _live_trace_accumulate_travel(ball_pos)
+        if not _live_try_acquire_launch_vector(velocity):
+            if _live_curve_value != null:
+                _live_curve_value.text = "CENTER"
+            if _live_curve_peak_label != null:
+                _live_curve_peak_label.text = "PEAK CENTER"
+            if _live_curve_pace_label != null:
+                _live_curve_pace_label.text = "PACE --"
+            _live_curve_was_running = running
+            return
         var launch_right := Vector2(_live_curve_forward.y, -_live_curve_forward.x)
         var cross_track_cm := (ball_pos - _live_curve_origin).dot(launch_right) * 100.0
         if absf(cross_track_cm) > _live_curve_peak_cm:
             _live_curve_peak_cm = absf(cross_track_cm)
             _live_curve_peak_signed_cm = cross_track_cm
-        var traveled_m := _live_trace_accumulate_travel(ball_pos)
         if _live_trace_accept_sample(ball_pos):
             _live_trace_push(cross_track_cm, traveled_m)
         if _live_curve_value != null:
