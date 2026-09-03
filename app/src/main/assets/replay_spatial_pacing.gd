@@ -5,7 +5,6 @@ extends "res://practice_ring_edge_truth.gd"
 # cinematic camera crawl through dense clusters then jump across sparse ones. Normalize replay
 # interpolation by traveled arc length so the fixed replay clock produces smooth spatial motion.
 const REPLAY_SPATIAL_EPSILON := 0.0001
-const REPLAY_HEADING_SAMPLE_FRACTION := 0.006
 
 func _replay_spatial_valid_points(points: Array) -> Array[Vector2]:
     var valid: Array[Vector2] = []
@@ -21,12 +20,7 @@ func _replay_spatial_valid_points(points: Array) -> Array[Vector2]:
         valid.append(point)
     return valid
 
-func _v175_trail_total_length(points: Array) -> float:
-    # Keep every replay consumer on the same sanitized polyline. The camera already filtered invalid
-    # and duplicate samples before interpolation, but the inherited total-length helper still walked
-    # the raw array. A single non-finite bridge sample could therefore poison HUD distance telemetry
-    # even while the replay camera itself looked healthy. Presentation only; shot physics stay intact.
-    var valid_points := _replay_spatial_valid_points(points)
+func _replay_spatial_total_length_valid(valid_points: Array[Vector2]) -> float:
     if valid_points.size() < 2:
         return 0.0
     var total_length := 0.0
@@ -36,27 +30,7 @@ func _v175_trail_total_length(points: Array) -> float:
             total_length += segment
     return total_length
 
-func _v175_trail_heading(points: Array, progress: float) -> Vector2:
-    # Heading must be sampled in the same arc-length domain as replay position. Delegating to the
-    # inherited index-based helper made the camera look in the wrong direction whenever capture
-    # density changed sharply along the roll, producing small but obvious yaw snaps on premium TV.
-    var valid_points := _replay_spatial_valid_points(points)
-    if valid_points.size() < 2:
-        return Vector2.UP
-    var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
-    var before_p := maxf(0.0, p - REPLAY_HEADING_SAMPLE_FRACTION)
-    var after_p := minf(1.0, p + REPLAY_HEADING_SAMPLE_FRACTION)
-    if is_equal_approx(before_p, after_p):
-        return (valid_points[valid_points.size() - 1] - valid_points[0]).normalized()
-    var before := _v175_trail_point(valid_points, before_p)
-    var after := _v175_trail_point(valid_points, after_p)
-    var heading := after - before
-    if not heading.is_finite() or heading.length_squared() <= REPLAY_SPATIAL_EPSILON * REPLAY_SPATIAL_EPSILON:
-        return (valid_points[valid_points.size() - 1] - valid_points[0]).normalized()
-    return heading.normalized()
-
-func _v175_trail_point(points: Array, progress: float) -> Vector2:
-    var valid_points := _replay_spatial_valid_points(points)
+func _replay_spatial_point_valid(valid_points: Array[Vector2], progress: float, total_length: float) -> Vector2:
     if valid_points.is_empty():
         return Vector2.ZERO
     if valid_points.size() == 1:
@@ -65,14 +39,10 @@ func _v175_trail_point(points: Array, progress: float) -> Vector2:
     var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
     var first := valid_points[0]
     var last := valid_points[valid_points.size() - 1]
-    if p <= 0.0:
+    if p <= 0.0 or total_length <= REPLAY_SPATIAL_EPSILON:
         return first
     if p >= 1.0:
         return last
-
-    var total_length := _v175_trail_total_length(valid_points)
-    if total_length <= REPLAY_SPATIAL_EPSILON:
-        return first
 
     var target_length := total_length * p
     var traversed := 0.0
@@ -86,5 +56,39 @@ func _v175_trail_point(points: Array, progress: float) -> Vector2:
             var local_t := clampf((target_length - traversed) / segment, 0.0, 1.0)
             return a.lerp(b, local_t)
         traversed += segment
-
     return last
+
+func _v175_trail_total_length(points: Array) -> float:
+    # Keep every replay consumer on the same sanitized polyline. Use the allocation-free valid-point
+    # helper after the one sanitation pass so camera heading can reuse the same geometry each frame.
+    return _replay_spatial_total_length_valid(_replay_spatial_valid_points(points))
+
+func _v175_trail_heading(points: Array, progress: float) -> Vector2:
+    # Preserve the cinematic camera's proven 0.18 m / 0.42 m physical-distance tangent blend, but
+    # sanitize once and reuse that trail for both windows. Previously the inherited helper called the
+    # overridden point/length helpers repeatedly, rebuilding identical arrays several times per frame.
+    var valid_points := _replay_spatial_valid_points(points)
+    if valid_points.size() < 2:
+        return Vector2.UP
+    var total_length := _replay_spatial_total_length_valid(valid_points)
+    if total_length <= REPLAY_SPATIAL_EPSILON:
+        return Vector2.UP
+
+    var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
+    var near_progress := minf(0.22, V175_HEADING_SAMPLE_M / total_length)
+    var wide_progress := minf(0.22, V175_HEADING_WIDE_SAMPLE_M / total_length)
+    var near_heading := _replay_spatial_point_valid(valid_points, minf(1.0, p + near_progress), total_length) \
+        - _replay_spatial_point_valid(valid_points, maxf(0.0, p - near_progress), total_length)
+    var wide_heading := _replay_spatial_point_valid(valid_points, minf(1.0, p + wide_progress), total_length) \
+        - _replay_spatial_point_valid(valid_points, maxf(0.0, p - wide_progress), total_length)
+    var heading := near_heading * 0.68 + wide_heading * 0.32
+    if not heading.is_finite() or heading.length_squared() <= REPLAY_SPATIAL_EPSILON * REPLAY_SPATIAL_EPSILON:
+        heading = wide_heading
+    if not heading.is_finite() or heading.length_squared() <= REPLAY_SPATIAL_EPSILON * REPLAY_SPATIAL_EPSILON:
+        heading = valid_points[valid_points.size() - 1] - valid_points[0]
+    return heading.normalized() if heading.is_finite() and heading.length_squared() > REPLAY_SPATIAL_EPSILON * REPLAY_SPATIAL_EPSILON else Vector2.UP
+
+func _v175_trail_point(points: Array, progress: float) -> Vector2:
+    var valid_points := _replay_spatial_valid_points(points)
+    var total_length := _replay_spatial_total_length_valid(valid_points)
+    return _replay_spatial_point_valid(valid_points, progress, total_length)
