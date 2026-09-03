@@ -6,6 +6,7 @@ extends "res://v197_shot_map_make_window.gd"
 # instead of giving every panel equal visual weight at all times.
 
 const FOCUS_FADE_SPEED := 5.4
+const FOCUS_MAX_FADE_DELTA_S := 0.10
 const PHASE_READY := "READY"
 const PHASE_ROLL := "ROLL"
 const PHASE_REPLAY := "REPLAY"
@@ -234,11 +235,20 @@ func _focus_update_replay_timeline() -> void:
     if _focus_replay_stage_label != null:
         _focus_replay_stage_label.text = _focus_replay_status(progress, _v171_replay_remaining)
 
+func _focus_safe_fade_delta(delta: float) -> float:
+    # Focus fades are presentation state, so a suspended/resumed Forward Mobile frame or debugger
+    # hitch must not instantly slam every HUD package to its target opacity. Freeze invalid/backward
+    # time and cap a single visual step to 100 ms, matching the replay camera's existing hitch guard.
+    if not is_finite(delta) or delta <= 0.0:
+        return 0.0
+    return minf(delta, FOCUS_MAX_FADE_DELTA_S)
+
 func _focus_set_alpha(item: CanvasItem, target: float, immediate: bool, delta: float = 0.0) -> void:
     if item == null:
         return
     var c := item.modulate
-    c.a = target if immediate else move_toward(c.a, target, FOCUS_FADE_SPEED * delta)
+    var safe_delta := _focus_safe_fade_delta(delta)
+    c.a = target if immediate else move_toward(c.a, target, FOCUS_FADE_SPEED * safe_delta)
     item.modulate = c
 
 func _focus_apply_phase(phase: String, immediate: bool = false, delta: float = 0.0) -> void:
