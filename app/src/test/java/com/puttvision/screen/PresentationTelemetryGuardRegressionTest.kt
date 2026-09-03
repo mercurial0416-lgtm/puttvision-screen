@@ -22,9 +22,11 @@ class PresentationTelemetryGuardRegressionTest {
         val production = asset("presentation_telemetry_guard.gd")
         assertTrue(production.contains("is_finite(float(s.get(\"readLineDeltaCm\", 0.0)))"))
         assertTrue(production.contains("is_finite(float(s.get(\"paceDeltaCm\", 0.0)))"))
-        assertTrue(production.contains("var safe := s.duplicate(false)"))
+        assertTrue(production.contains("safe = s.duplicate(false)"))
         assertTrue(production.contains("safe.erase(\"readLineDeltaCm\")"))
         assertTrue(production.contains("safe.erase(\"paceDeltaCm\")"))
+        assertTrue(!production.contains("s.erase(\"readLineDeltaCm\")"))
+        assertTrue(!production.contains("s.erase(\"paceDeltaCm\")"))
         assertTrue(production.contains("super._apply_snapshot(_presentation_safe_snapshot(s), immediate, delta)"))
     }
 
