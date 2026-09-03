@@ -17,9 +17,10 @@ class ReplayRollTruthClarityRegressionTest {
         val pacing = asset("replay_spatial_pacing.gd")
 
         assertTrue(pacing.contains("func _v175_trail_total_length(points: Array) -> float:"))
-        assertTrue(pacing.contains("var valid_points := _replay_spatial_valid_points(points)"))
+        assertTrue(pacing.contains("_replay_spatial_valid_points(points)"))
+        assertTrue(pacing.contains("func _replay_spatial_total_length_valid(valid_points: Array[Vector2]) -> float:"))
         assertTrue(pacing.contains("if is_finite(segment) and segment > REPLAY_SPATIAL_EPSILON"))
-        assertTrue(pacing.contains("var total_length := _v175_trail_total_length(valid_points)"))
+        assertTrue(pacing.contains("var total_length := _replay_spatial_total_length_valid(valid_points)"))
     }
 
     @Test
