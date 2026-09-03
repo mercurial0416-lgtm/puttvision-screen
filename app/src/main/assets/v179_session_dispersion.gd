@@ -102,10 +102,15 @@ func _v179_plot_position(sample: Vector2) -> Vector2:
         V179_PLOT_SIZE.y * 0.5 - ny * V179_PLOT_SIZE.y * 0.42
     )
 
-func _v179_push_sample(line_cm: float, pace_cm: float) -> void:
+func _v179_push_sample(line_cm: float, pace_cm: float) -> bool:
+    # Bridge telemetry is presentation input, not physics truth. A malformed packet must never
+    # poison the rolling mean/median or create NaN UI coordinates that can corrupt the HUD tree.
+    if not is_finite(line_cm) or not is_finite(pace_cm):
+        return false
     _v179_samples.append(Vector2(line_cm, pace_cm))
     while _v179_samples.size() > V179_HISTORY:
         _v179_samples.pop_front()
+    return true
 
 func _build_hud() -> void:
     super._build_hud()
@@ -199,8 +204,12 @@ func _v179_capture(s: Dictionary) -> void:
     var complete := trail_variant is Array and (trail_variant as Array).size() >= 2 and s.has("readLineDeltaCm") and s.has("paceDeltaCm") and not bool(s.get("running", false)) and _v171_replay_remaining <= 0.0
     if not complete:
         return
+    var accepted := _v179_push_sample(float(s.get("readLineDeltaCm", 0.0)), float(s.get("paceDeltaCm", 0.0)))
+    if not accepted:
+        # Do not consume the completion identity. If the bridge repairs this same stopped snapshot
+        # on the next frame, the valid values still deserve to become the one session sample.
+        return
     _v179_last_completion_serial = _v178_completed_shot_serial
-    _v179_push_sample(float(s.get("readLineDeltaCm", 0.0)), float(s.get("paceDeltaCm", 0.0)))
     _v179_refresh()
 
 func _v179_preview_seed() -> void:
