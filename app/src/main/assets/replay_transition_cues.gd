@@ -20,6 +20,28 @@ func _replay_transition_status(progress: float, remaining: float, duration: floa
 func _replay_transition_is_active(remaining: float, actual_sample_count: int) -> bool:
     return is_finite(remaining) and remaining > 0.0 and actual_sample_count >= 2
 
+func _replay_focus_is_active(remaining: float, duration: float, actual_sample_count: int) -> bool:
+    # The cinematic phase must represent a replay that can actually be rendered. A corrupt/infinite
+    # clock, missing duration, or empty trail previously left the commercial letterbox/timeline at
+    # full opacity even though no replay camera could advance. Keep that telemetry failure local to
+    # presentation state instead of letting it masquerade as active playback.
+    return (
+        is_finite(remaining)
+        and remaining > 0.0
+        and is_finite(duration)
+        and duration > REPLAY_TRANSITION_LABEL_MIN_DURATION
+        and actual_sample_count >= 2
+    )
+
+func _focus_current_phase() -> String:
+    var replaying := _replay_focus_is_active(
+        _v171_replay_remaining,
+        _v171_replay_duration,
+        _v171_replay_actual.size()
+    )
+    var showing_result := _v177_panel != null and _v177_panel.visible
+    return _focus_phase_for(_focus_running, replaying, showing_result)
+
 func _focus_update_replay_timeline() -> void:
     super._focus_update_replay_timeline()
     if _focus_replay_stage_label == null:
