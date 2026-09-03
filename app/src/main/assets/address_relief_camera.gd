@@ -13,6 +13,7 @@ const ADDRESS_LOOK_LIFT := 0.065
 const ADDRESS_FOV_NEAR := 42.5
 const ADDRESS_FOV_FAR := 38.0
 const ADDRESS_FOV_RESPONSE := 5.0
+const ADDRESS_MAX_CAMERA_DELTA_S := 0.10
 const ADDRESS_RELIEF_SAMPLES := 5
 const ADDRESS_RELIEF_FOCUS_BLEND := 0.58
 const ADDRESS_RELIEF_SIGNAL_START_M := 0.018
@@ -198,12 +199,13 @@ func _v179_refresh() -> void:
     _session_apply_rep_hierarchy()
 
 func _address_damping_alpha(response_rate: float, delta: float) -> float:
-    # Exponential damping is invariant to frame slicing: two 1/120s frames converge by the same
-    # amount as one 1/60s frame. That keeps camera position, look target and lens breathing visually
-    # consistent when Forward Mobile or a TV briefly changes frame cadence.
+    # Exponential damping is invariant to normal frame slicing, while the bounded delta prevents a
+    # suspend/resume or long Forward Mobile hitch from collapsing the stationary address rig toward
+    # its target in a single visible frame. Invalid/backward time remains frozen.
     if not is_finite(response_rate) or response_rate <= 0.0 or not is_finite(delta) or delta <= 0.0:
         return 0.0
-    return 1.0 - exp(-delta * response_rate)
+    var safe_delta := minf(delta, ADDRESS_MAX_CAMERA_DELTA_S)
+    return 1.0 - exp(-safe_delta * response_rate)
 
 func _update_camera(ball_world: Vector3, running: bool, phase: String, distance_to_cup: float, immediate: bool, delta: float) -> void:
     # Never fight inherited rolling/cup/replay cameras.

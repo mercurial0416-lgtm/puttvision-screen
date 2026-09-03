@@ -17,24 +17,37 @@ class AddressCameraFrameInvarianceRegressionTest {
     private fun dampingAlpha(rate: Double, delta: Double): Double = 1.0 - exp(-delta * rate)
 
     @Test
-    fun addressCameraUsesExponentialDampingForPositionLookAndFov() {
+    fun addressCameraUsesBoundedExponentialDampingForPositionLookAndFov() {
         val script = asset("address_relief_camera.gd")
         assertTrue(script.contains("func _address_damping_alpha(response_rate: float, delta: float) -> float:"))
-        assertTrue(script.contains("return 1.0 - exp(-delta * response_rate)"))
+        assertTrue(script.contains("const ADDRESS_MAX_CAMERA_DELTA_S := 0.10"))
+        assertTrue(script.contains("var safe_delta := minf(delta, ADDRESS_MAX_CAMERA_DELTA_S)"))
+        assertTrue(script.contains("return 1.0 - exp(-safe_delta * response_rate)"))
         assertTrue(script.contains("_address_damping_alpha(5.8, delta)"))
         assertTrue(script.contains("_address_damping_alpha(6.6, delta)"))
         assertTrue(script.contains("_address_damping_alpha(ADDRESS_FOV_RESPONSE, delta)"))
+        assertFalse(script.contains("return 1.0 - exp(-delta * response_rate)"))
         assertFalse(script.contains("minf(1.0, delta * 5.0)"))
     }
 
     @Test
-    fun exponentialLensResponseIsInvariantToFrameSlicing() {
+    fun exponentialLensResponseIsInvariantToNormalFrameSlicing() {
         val rate = 5.0
         val oneSixtieth = dampingAlpha(rate, 1.0 / 60.0)
         val oneOneTwentieth = dampingAlpha(rate, 1.0 / 120.0)
         val twoSmallFramesCombined = 1.0 - (1.0 - oneOneTwentieth) * (1.0 - oneOneTwentieth)
 
         assertEquals(oneSixtieth, twoSmallFramesCombined, 1e-12)
+    }
+
+    @Test
+    fun hitchCapOnlyChangesLongSingleFrameSteps() {
+        val rate = 5.0
+        val capped = dampingAlpha(rate, 0.10)
+        val oneSecondUnbounded = dampingAlpha(rate, 1.0)
+
+        assertTrue(capped < oneSecondUnbounded)
+        assertEquals(dampingAlpha(rate, 1.0 / 60.0), dampingAlpha(rate, minOf(1.0 / 60.0, 0.10)), 1e-12)
     }
 
     @Test
