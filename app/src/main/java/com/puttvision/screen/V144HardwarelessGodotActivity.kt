@@ -24,11 +24,11 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * V160 full no-hardware simulator presentation.
+ * Full no-hardware simulator presentation.
  *
  * Android/GameEngine remains the only physics authority. Synthetic buttons generate calibrated
  * launches, while TEST MAKE starts only that LAB shot close to the regulation cup so the user can
- * inspect real V135 rim/capture/drop behaviour without adding any assist to normal gameplay.
+ * inspect real rim/capture/drop behaviour without adding any assist to normal gameplay.
  */
 class V148HardwarelessFullActivity : GodotActivity() {
     private lateinit var engine: GameEngine
@@ -39,6 +39,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
     private val distances = doubleArrayOf(3.0, 5.0, 7.0, 10.0)
     private var distanceIndex = 1
     private var profile = 8
+    private var greenPreset = HardwarelessGreenPreset.RIGHT_BREAK
     private var lastTickNs = 0L
     private var lastRunning = false
     private var godotReady = false
@@ -51,12 +52,6 @@ class V148HardwarelessFullActivity : GodotActivity() {
         // Close enough to make cup entry easy to inspect, far enough to see true roll and spin first.
         const val TEST_MAKE_DISTANCE_M = 0.22
         const val TEST_MAKE_CUP_SPEED_MPS = 0.28
-
-        // Hardwareless LAB must exercise the same slope/read path that a real measured green does.
-        // Keeping this intentionally non-flat makes the downhill flow grid, read ribbon and break
-        // response observable without faking motion inside the flat-green presentation shader.
-        const val LAB_SIDE_SLOPE_PCT = 1.35
-        const val LAB_LONG_SLOPE_PCT = -0.45
     }
 
     private enum class Scenario(
@@ -146,7 +141,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
         V143GodotRuntime.lastFailure = null
         markStage("godot-ready")
         handler.post {
-            updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
+            updateStatus(readyStatus(), StatusTone.NEUTRAL)
             maybeStartPump()
         }
         handler.postDelayed({
@@ -222,8 +217,8 @@ class V148HardwarelessFullActivity : GodotActivity() {
         engine.gameModes.setMode(PracticeMode.PRACTICE)
         engine.settings.stimpMeters = 2.8
         engine.settings.holeDistanceM = distances[distanceIndex]
-        engine.settings.sideSlopePct = LAB_SIDE_SLOPE_PCT
-        engine.settings.longSlopePct = LAB_LONG_SLOPE_PCT
+        engine.settings.sideSlopePct = greenPreset.sideSlopePct
+        engine.settings.longSlopePct = greenPreset.longSlopePct
         engine.settings.terrainProfileId = profile
         engine.resetSimulation()
     }
@@ -247,7 +242,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
             setPadding(dp(14), dp(14), dp(14), dp(14))
         }
 
-        controls.addView(label("NO HARDWARE · REAL V160 · FULL", 12.5f, Color.rgb(105, 233, 170), true))
+        controls.addView(label("NO HARDWARE · REAL PHYSICS · FULL", 12.5f, Color.rgb(105, 233, 170), true))
         controls.addView(label("합성 샷만 사용 · 렌더/그린/볼/컵 물리는 실제 TV와 동일", 8.7f, Color.rgb(206, 215, 216), false).apply {
             setPadding(0, dp(4), 0, dp(10))
         })
@@ -277,7 +272,6 @@ class V148HardwarelessFullActivity : GodotActivity() {
         })
         controls.addView(primaryShotButton(Scenario.TEST_MAKE) { inject(Scenario.TEST_MAKE) }, primaryButtonLp())
 
-        // Preserve power/break diagnostics without letting secondary controls dominate the approved UI.
         val diagnostics = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         diagnostics.addView(compactButton("LONG") { inject(Scenario.LONG) }, LinearLayout.LayoutParams(0, dp(34), 1f))
         diagnostics.addView(compactButton("BREAK") { inject(Scenario.BREAK) }, LinearLayout.LayoutParams(0, dp(34), 1f).apply {
@@ -285,18 +279,35 @@ class V148HardwarelessFullActivity : GodotActivity() {
         })
         controls.addView(diagnostics, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
 
+        controls.addView(label("GREEN READ · 실시간 경사 비교", 8.6f, Color.rgb(124, 213, 166), true).apply {
+            setPadding(0, dp(11), 0, dp(4))
+        })
+        val breakRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        breakRow.addView(presetButton(HardwarelessGreenPreset.LEFT_BREAK), LinearLayout.LayoutParams(0, dp(36), 1f))
+        breakRow.addView(presetButton(HardwarelessGreenPreset.RIGHT_BREAK), LinearLayout.LayoutParams(0, dp(36), 1f).apply {
+            marginStart = dp(6)
+        })
+        controls.addView(breakRow, LinearLayout.LayoutParams(-1, -2))
+
+        val paceRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        paceRow.addView(presetButton(HardwarelessGreenPreset.UPHILL), LinearLayout.LayoutParams(0, dp(36), 1f))
+        paceRow.addView(presetButton(HardwarelessGreenPreset.DOWNHILL), LinearLayout.LayoutParams(0, dp(36), 1f).apply {
+            marginStart = dp(6)
+        })
+        controls.addView(paceRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+
         val targetRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         targetRow.addView(compactButton("거리 ${distanceLabel()}") { cycleDistance() }, LinearLayout.LayoutParams(0, dp(34), 1f))
         targetRow.addView(compactButton("그린 +1") { cycleGreen() }, LinearLayout.LayoutParams(0, dp(34), 1f).apply {
             marginStart = dp(6)
         })
-        controls.addView(targetRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
+        controls.addView(targetRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(9) })
 
         controls.addView(compactButton("RESET") {
             if (!::engine.isInitialized) return@compactButton
             engine.resetSimulation()
             if (godotReady) V143GodotRenderBridge.publish(engine)
-            updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
+            updateStatus(readyStatus(), StatusTone.NEUTRAL)
         }, LinearLayout.LayoutParams(-1, dp(34)).apply { topMargin = dp(7) })
 
         panel.addView(controls, FrameLayout.LayoutParams(-1, -2))
@@ -321,6 +332,17 @@ class V148HardwarelessFullActivity : GodotActivity() {
             marginEnd = dp(7)
         })
         return overlay
+    }
+
+    private fun presetButton(preset: HardwarelessGreenPreset) = compactButton(preset.label) {
+        selectGreenPreset(preset)
+    }
+
+    private fun selectGreenPreset(preset: HardwarelessGreenPreset) {
+        if (!::engine.isInitialized || engine.state?.running == true) return
+        greenPreset = preset
+        applyTarget(reset = true)
+        updateStatus(readyStatus(), StatusTone.NEUTRAL)
     }
 
     private fun inject(scenario: Scenario) {
@@ -363,14 +385,14 @@ class V148HardwarelessFullActivity : GodotActivity() {
         V143GodotRenderBridge.publish(engine)
         lastRunning = engine.state?.running == true
         val suffix = if (scenario == Scenario.TEST_MAKE) " · CUP 22 cm" else ""
-        updateStatus("${scenario.label} · ROLLING · ${"%.2f".format(ballSpeed)} m/s$suffix", StatusTone.ROLLING)
+        updateStatus("${scenario.label} · ${greenPreset.directionLabel} · ROLLING · ${"%.2f".format(ballSpeed)} m/s$suffix", StatusTone.ROLLING)
         maybeStartPump()
     }
 
     /**
      * Stimp is defined from a 1.95072 m/s launch. Solve v² = u² + 2as backwards from a target cup
      * speed, then compensate the solver's initial skid/roll blend. TEST MAKE uses the same equation
-     * from a 22 cm LAB-only start; the real 6DOF cup solver still decides capture/drop.
+     * from a 22 cm LAB-only start; the real cup solver still decides capture/drop.
      */
     private fun scenarioBallSpeed(scenario: Scenario): Double {
         val distance = if (scenario == Scenario.TEST_MAKE) {
@@ -396,22 +418,22 @@ class V148HardwarelessFullActivity : GodotActivity() {
         if (!::engine.isInitialized || engine.state?.running == true) return
         distanceIndex = (distanceIndex + 1) % distances.size
         applyTarget(reset = true)
-        updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
+        updateStatus(readyStatus(), StatusTone.NEUTRAL)
     }
 
     private fun cycleGreen() {
         if (!::engine.isInitialized || engine.state?.running == true) return
         profile = (profile + 1) % 24
         applyTarget(reset = true)
-        updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
+        updateStatus(readyStatus(), StatusTone.NEUTRAL)
     }
 
     private fun applyTarget(reset: Boolean) {
         if (!::engine.isInitialized) return
         engine.settings.holeDistanceM = distances[distanceIndex]
         engine.settings.stimpMeters = 2.8
-        engine.settings.sideSlopePct = LAB_SIDE_SLOPE_PCT
-        engine.settings.longSlopePct = LAB_LONG_SLOPE_PCT
+        engine.settings.sideSlopePct = greenPreset.sideSlopePct
+        engine.settings.longSlopePct = greenPreset.longSlopePct
         engine.settings.terrainProfileId = profile
         if (reset) engine.resetSimulation()
         if (godotReady) V143GodotRenderBridge.publish(engine)
@@ -421,7 +443,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
         if (!::engine.isInitialized) return
         val result = engine.lastResult
         when {
-            result == null -> updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
+            result == null -> updateStatus(readyStatus(), StatusTone.NEUTRAL)
             result.holed -> updateStatus("✓  SHOT COMPLETE · HOLED", StatusTone.HOLED)
             result.lipOut -> updateStatus("SHOT COMPLETE · LIP OUT", StatusTone.MISS)
             result.distanceToCupM <= 0.30 -> updateStatus(
@@ -460,9 +482,12 @@ class V148HardwarelessFullActivity : GodotActivity() {
         status.background = roundedDrawable(bg, 8, stroke, 1)
     }
 
+    private fun readyStatus(): String =
+        "READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${greenPreset.directionLabel} · ${gradeLabel()}"
+
     private fun distanceLabel(): String = "${distances[distanceIndex].toInt()}m"
     private fun greenLabel(): String = "%02d".format(profile)
-    private fun gradeLabel(): String = "GRADE ${"%.2f".format(hypot(LAB_SIDE_SLOPE_PCT, LAB_LONG_SLOPE_PCT))}%"
+    private fun gradeLabel(): String = "GRADE ${"%.2f".format(greenPreset.gradePct)}%"
 
     private fun label(text: String, sp: Float, color: Int, bold: Boolean) = TextView(this).apply {
         this.text = text
