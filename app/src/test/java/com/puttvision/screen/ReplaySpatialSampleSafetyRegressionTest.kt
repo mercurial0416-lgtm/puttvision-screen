@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,12 +35,16 @@ class ReplaySpatialSampleSafetyRegressionTest {
     }
 
     @Test
-    fun replayHeadingUsesTheSameSanitizedTrail() {
+    fun replayHeadingUsesTheSameSanitizedSpatialTrail() {
         val production = asset("replay_spatial_pacing.gd")
 
         assertTrue(production.contains("func _v175_trail_heading(points: Array, progress: float) -> Vector2:"))
-        assertTrue(production.contains("return super._v175_trail_heading(valid_points, p)"))
+        assertTrue(production.contains("var valid_points := _replay_spatial_valid_points(points)"))
         assertTrue(production.contains("var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0"))
+        assertTrue(production.contains("var before := _v175_trail_point(valid_points, before_p)"))
+        assertTrue(production.contains("var after := _v175_trail_point(valid_points, after_p)"))
+        assertTrue(production.contains("return heading.normalized()"))
+        assertFalse(production.contains("return super._v175_trail_heading(valid_points, p)"))
     }
 
     @Test
