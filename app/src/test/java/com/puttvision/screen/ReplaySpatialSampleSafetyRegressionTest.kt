@@ -40,10 +40,11 @@ class ReplaySpatialSampleSafetyRegressionTest {
 
         assertTrue(production.contains("func _v175_trail_heading(points: Array, progress: float) -> Vector2:"))
         assertTrue(production.contains("var valid_points := _replay_spatial_valid_points(points)"))
-        assertTrue(production.contains("var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0"))
-        assertTrue(production.contains("var before := _v175_trail_point(valid_points, before_p)"))
-        assertTrue(production.contains("var after := _v175_trail_point(valid_points, after_p)"))
-        assertTrue(production.contains("return heading.normalized()"))
+        assertTrue(production.contains("var total_length := _replay_spatial_total_length_valid(valid_points)"))
+        assertTrue(production.contains("V175_HEADING_SAMPLE_M / total_length"))
+        assertTrue(production.contains("V175_HEADING_WIDE_SAMPLE_M / total_length"))
+        assertTrue(production.contains("_replay_spatial_point_valid(valid_points"))
+        assertTrue(production.contains("else Vector2.UP"))
         assertFalse(production.contains("return super._v175_trail_heading(valid_points, p)"))
     }
 
