@@ -43,4 +43,15 @@ class GreenOverviewAimClarityRegressionTest {
         assertFalse(source.contains("ballVelocity ="))
         assertFalse(source.contains("paceDeltaCm ="))
     }
+
+    @Test
+    fun offMapAimOwnsFooterInsteadOfCollidingWithLegend() {
+        val source = asset("green_read_direction_truth.gd")
+        assertTrue(source.contains("var _overview_legend_label: Label"))
+        assertTrue(source.contains("_overview_legend_label = label"))
+        assertTrue(source.contains("_overview_aim_label.size.x = OVERVIEW_AIM_OFF_MAP_WIDTH if off_map else OVERVIEW_AIM_NORMAL_WIDTH"))
+        assertTrue(source.contains("_overview_legend_label.visible = active and not off_map"))
+        assertTrue(source.contains("const OVERVIEW_AIM_OFF_MAP_WIDTH := 298.0"))
+        assertTrue(source.contains("text += \" · OFF MAP\""))
+    }
 }
