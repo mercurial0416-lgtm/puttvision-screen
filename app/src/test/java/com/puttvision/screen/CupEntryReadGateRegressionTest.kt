@@ -29,22 +29,28 @@ class CupEntryReadGateRegressionTest {
         assertTrue(script.contains("var normal := Vector2(-tangent.y, tangent.x)"))
         assertTrue(script.contains("center + normal * ENTRY_HALF_WIDTH_PX"))
         assertTrue(script.contains("center - normal * ENTRY_HALF_WIDTH_PX"))
-        assertTrue(script.contains("var badge_width := 106.0"))
+        assertTrue(script.contains("const ENTRY_BADGE_WIDTH_PX := 132.0"))
+        assertTrue(script.contains("var badge_width := ENTRY_BADGE_WIDTH_PX"))
         assertTrue(script.contains("center.x - badge_width - 10.0"))
         assertTrue(script.contains("panel_size.x - badge_width - 4.0"))
         assertTrue(script.contains("clampf(center.y - 8.0"))
     }
 
     @Test
-    fun cupEntryBadgeQuantifiesFinalApproachAngleAgainstBallToCupBaseline() {
+    fun cupEntryBadgeQuantifiesSignedFinalApproachAngleAgainstBallToCupBaseline() {
         val script = asset("cup_entry_read_gate.gd")
+        assertTrue(script.contains("func _entry_signed_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> float:"))
         assertTrue(script.contains("func _entry_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> float:"))
         assertTrue(script.contains("var baseline := (curve[curve.size() - 1] - curve[0]).normalized()"))
-        assertTrue(script.contains("var dot_value := clampf(tangent.dot(baseline), -1.0, 1.0)"))
-        assertTrue(script.contains("return rad_to_deg(acos(dot_value))"))
+        assertTrue(script.contains("var dot_value := clampf(baseline.dot(tangent), -1.0, 1.0)"))
+        assertTrue(script.contains("var cross_value := baseline.x * tangent.y - baseline.y * tangent.x"))
+        assertTrue(script.contains("return rad_to_deg(atan2(cross_value, dot_value))"))
+        assertTrue(script.contains("return absf(_entry_signed_angle_degrees(curve, geometry))"))
         assertTrue(script.contains("return \"CUP ENTRY  STRAIGHT\""))
-        assertTrue(script.contains("return \"CUP ENTRY  %.0f°\" % angle_deg"))
+        assertTrue(script.contains("var direction := \"RIGHT\" if signed_angle_deg > 0.0 else \"LEFT\""))
+        assertTrue(script.contains("return \"CUP ENTRY  %s %.0f°\" % [direction, absf(signed_angle_deg)]"))
         assertTrue(script.contains("_badge.text = _entry_badge_text(curve, geometry)"))
+        assertFalse(script.contains("return rad_to_deg(acos(dot_value))"))
         assertFalse(script.contains("curve[curve.size() - 1] - center"))
     }
 
