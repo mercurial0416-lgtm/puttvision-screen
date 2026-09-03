@@ -26,6 +26,15 @@ func _process(delta: float) -> void:
     assert((launch_sample["point"] as Vector2).distance_to(Vector2(0.8, 1.0)) < 0.01)
     assert((launch_sample["tangent"] as Vector2).distance_to(Vector2.RIGHT) < 0.01)
 
+    # Raw spatial sampling remains segment-exact, but directional landmarks smooth across a solver
+    # vertex so a tiny sample-spacing change cannot snap an arrow by 90 degrees on screen.
+    var corner := PackedVector2Array([Vector2(0, 0), Vector2(0, 5), Vector2(5, 5)])
+    var corner_sample := probe._read_path_sample(corner, 0.5)
+    assert((corner_sample["point"] as Vector2).distance_to(Vector2(0, 5)) < 0.01)
+    assert((corner_sample["tangent"] as Vector2).distance_to(Vector2.DOWN) < 0.01)
+    var corner_tangent := probe._read_smoothed_tangent(corner, 0.5, corner_sample["tangent"] as Vector2)
+    assert(corner_tangent.distance_to(Vector2(1, 1).normalized()) < 0.02)
+
     # A bent path must choose the tangent of the segment containing the requested traveled distance,
     # rather than inheriting a neighboring dense sample's direction.
     var bent := PackedVector2Array([Vector2(0, 0), Vector2(0, 1), Vector2(8, 1)])
