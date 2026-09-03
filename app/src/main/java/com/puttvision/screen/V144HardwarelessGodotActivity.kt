@@ -51,6 +51,12 @@ class V148HardwarelessFullActivity : GodotActivity() {
         // Close enough to make cup entry easy to inspect, far enough to see true roll and spin first.
         const val TEST_MAKE_DISTANCE_M = 0.22
         const val TEST_MAKE_CUP_SPEED_MPS = 0.28
+
+        // Hardwareless LAB must exercise the same slope/read path that a real measured green does.
+        // Keeping this intentionally non-flat makes the downhill flow grid, read ribbon and break
+        // response observable without faking motion inside the flat-green presentation shader.
+        const val LAB_SIDE_SLOPE_PCT = 1.35
+        const val LAB_LONG_SLOPE_PCT = -0.45
     }
 
     private enum class Scenario(
@@ -140,7 +146,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
         V143GodotRuntime.lastFailure = null
         markStage("godot-ready")
         handler.post {
-            updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}", StatusTone.NEUTRAL)
+            updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
             maybeStartPump()
         }
         handler.postDelayed({
@@ -216,8 +222,8 @@ class V148HardwarelessFullActivity : GodotActivity() {
         engine.gameModes.setMode(PracticeMode.PRACTICE)
         engine.settings.stimpMeters = 2.8
         engine.settings.holeDistanceM = distances[distanceIndex]
-        engine.settings.sideSlopePct = 0.0
-        engine.settings.longSlopePct = 0.0
+        engine.settings.sideSlopePct = LAB_SIDE_SLOPE_PCT
+        engine.settings.longSlopePct = LAB_LONG_SLOPE_PCT
         engine.settings.terrainProfileId = profile
         engine.resetSimulation()
     }
@@ -290,7 +296,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
             if (!::engine.isInitialized) return@compactButton
             engine.resetSimulation()
             if (godotReady) V143GodotRenderBridge.publish(engine)
-            updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}", StatusTone.NEUTRAL)
+            updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
         }, LinearLayout.LayoutParams(-1, dp(34)).apply { topMargin = dp(7) })
 
         panel.addView(controls, FrameLayout.LayoutParams(-1, -2))
@@ -390,22 +396,22 @@ class V148HardwarelessFullActivity : GodotActivity() {
         if (!::engine.isInitialized || engine.state?.running == true) return
         distanceIndex = (distanceIndex + 1) % distances.size
         applyTarget(reset = true)
-        updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}", StatusTone.NEUTRAL)
+        updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
     }
 
     private fun cycleGreen() {
         if (!::engine.isInitialized || engine.state?.running == true) return
         profile = (profile + 1) % 24
         applyTarget(reset = true)
-        updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}", StatusTone.NEUTRAL)
+        updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
     }
 
     private fun applyTarget(reset: Boolean) {
         if (!::engine.isInitialized) return
         engine.settings.holeDistanceM = distances[distanceIndex]
         engine.settings.stimpMeters = 2.8
-        engine.settings.sideSlopePct = 0.0
-        engine.settings.longSlopePct = 0.0
+        engine.settings.sideSlopePct = LAB_SIDE_SLOPE_PCT
+        engine.settings.longSlopePct = LAB_LONG_SLOPE_PCT
         engine.settings.terrainProfileId = profile
         if (reset) engine.resetSimulation()
         if (godotReady) V143GodotRenderBridge.publish(engine)
@@ -415,7 +421,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
         if (!::engine.isInitialized) return
         val result = engine.lastResult
         when {
-            result == null -> updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()}", StatusTone.NEUTRAL)
+            result == null -> updateStatus("READY · ${distanceLabel()} · GREEN ${greenLabel()} · ${gradeLabel()}", StatusTone.NEUTRAL)
             result.holed -> updateStatus("✓  SHOT COMPLETE · HOLED", StatusTone.HOLED)
             result.lipOut -> updateStatus("SHOT COMPLETE · LIP OUT", StatusTone.MISS)
             result.distanceToCupM <= 0.30 -> updateStatus(
@@ -456,6 +462,7 @@ class V148HardwarelessFullActivity : GodotActivity() {
 
     private fun distanceLabel(): String = "${distances[distanceIndex].toInt()}m"
     private fun greenLabel(): String = "%02d".format(profile)
+    private fun gradeLabel(): String = "GRADE ${"%.2f".format(hypot(LAB_SIDE_SLOPE_PCT, LAB_LONG_SLOPE_PCT))}%"
 
     private fun label(text: String, sp: Float, color: Int, bold: Boolean) = TextView(this).apply {
         this.text = text
