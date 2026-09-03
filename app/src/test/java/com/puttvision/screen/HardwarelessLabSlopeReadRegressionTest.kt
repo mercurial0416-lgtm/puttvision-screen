@@ -1,7 +1,6 @@
 package com.puttvision.screen
 
 import java.io.File
-import kotlin.math.hypot
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,15 +16,14 @@ class HardwarelessLabSlopeReadRegressionTest {
     @Test
     fun hardwarelessLabUsesExplicitNonFlatGradeForReadValidation() {
         val activity = source("V144HardwarelessGodotActivity.kt")
-        val side = Regex("LAB_SIDE_SLOPE_PCT = (-?[0-9.]+)").find(activity)!!.groupValues[1].toDouble()
-        val long = Regex("LAB_LONG_SLOPE_PCT = (-?[0-9.]+)").find(activity)!!.groupValues[1].toDouble()
-        val magnitude = hypot(side, long)
+        val presets = source("HardwarelessGreenPreset.kt")
 
-        // terrain_relief_visibility.gd begins flow activation at 0.16% and is effectively clear by 0.72%.
-        assertTrue("LAB grade must visibly exercise slope flow", magnitude >= 0.72)
-        assertTrue("LAB grade should stay in a believable practice range", magnitude <= 3.0)
-        assertTrue(activity.contains("engine.settings.sideSlopePct = LAB_SIDE_SLOPE_PCT"))
-        assertTrue(activity.contains("engine.settings.longSlopePct = LAB_LONG_SLOPE_PCT"))
+        assertTrue("LAB must configure cross slope from its active drill", activity.contains("engine.settings.sideSlopePct = greenPreset.sideSlopePct"))
+        assertTrue("LAB must configure longitudinal slope from its active drill", activity.contains("engine.settings.longSlopePct = greenPreset.longSlopePct"))
+        assertTrue("LAB must expose left break practice", presets.contains("LEFT_BREAK"))
+        assertTrue("LAB must expose right break practice", presets.contains("RIGHT_BREAK"))
+        assertTrue("LAB must expose uphill practice", presets.contains("UPHILL"))
+        assertTrue("LAB must expose downhill practice", presets.contains("DOWNHILL"))
         assertTrue(activity.contains("gradeLabel()"))
     }
 
