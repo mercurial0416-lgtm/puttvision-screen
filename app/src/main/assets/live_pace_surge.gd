@@ -35,6 +35,10 @@ func _live_pace_speed_text(current_speed: float) -> String:
 
 func _live_pace_readout(current_speed: float, launch_speed: float) -> String:
     if not is_finite(current_speed) or not is_finite(launch_speed) or launch_speed <= 0.001:
+        # Invalid telemetry must also clear the presentation-only hysteresis latch. Otherwise a
+        # single malformed bridge sample can leave the HUD stuck in SURGING when the next valid
+        # ratio lands inside the neutral 1.03-1.07 hysteresis band.
+        _live_pace_surging = false
         return "PACE --"
     var raw_ratio := maxf(0.0, current_speed / launch_speed)
     var display_ratio := minf(raw_ratio, LIVE_PACE_MAX_DISPLAY_RATIO)
