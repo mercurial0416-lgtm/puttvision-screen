@@ -6,10 +6,13 @@ extends "res://relief_depth_finish.gd"
 
 var _overview_aim_marker: Line2D
 var _overview_aim_label: Label
+var _overview_legend_label: Label
 
 const OVERVIEW_AIM_DEADBAND_M := 0.015
 const OVERVIEW_AIM_VISUAL_SPAN_M := 1.8
 const OVERVIEW_AIM_VISUAL_SPAN_PX := 62.0
+const OVERVIEW_AIM_NORMAL_WIDTH := 140.0
+const OVERVIEW_AIM_OFF_MAP_WIDTH := 298.0
 const GREEN_READ_BREAK_DEADBAND_PCT := 0.05
 
 func _overview_aim_text(offset_m: float) -> String:
@@ -69,12 +72,13 @@ func _build_hud() -> void:
                 label.size = Vector2(154, 18)
                 label.text = "gold read  •  teal fall"
                 label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+                _overview_legend_label = label
                 break
 
     _overview_aim_label = _v174_text(
         _v183_panel,
         Vector2(20, 222),
-        Vector2(140, 18),
+        Vector2(OVERVIEW_AIM_NORMAL_WIDTH, 18),
         "AIM CENTER",
         10,
         Color("#f4dda0")
@@ -103,6 +107,13 @@ func _overview_refresh_aim_cue() -> void:
     var off_map := _overview_aim_is_off_map(offset)
     _overview_aim_label.visible = active
     _overview_aim_label.text = _overview_aim_panel_text(offset)
+    # OFF MAP is the highest-priority address warning in this footer. The old fixed 140 px AIM slot
+    # could let a long centimeter value collide with the color key on a TV. Temporarily give the
+    # actionable readout the full footer width and hide the non-actionable legend; restore the split
+    # layout as soon as the recommendation returns on-map. No solver/read value is changed.
+    _overview_aim_label.size.x = OVERVIEW_AIM_OFF_MAP_WIDTH if off_map else OVERVIEW_AIM_NORMAL_WIDTH
+    if _overview_legend_label != null:
+        _overview_legend_label.visible = active and not off_map
     _overview_aim_marker.visible = active and absf(offset) >= OVERVIEW_AIM_DEADBAND_M
     _overview_aim_marker.position = _overview_aim_target_position(offset)
     # The map marker clamps at the visual edge. Rotate the established chevron outward when the
