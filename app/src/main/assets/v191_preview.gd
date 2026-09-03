@@ -19,14 +19,19 @@ func _process(delta: float) -> void:
         get_tree().quit(22)
         return
 
-    _v179_samples = [
-        Vector2(12.0, 5.0),
-        Vector2(10.0, 4.0),
-        Vector2(4.0, 3.0),
-        Vector2(3.0, 2.0),
-        Vector2(2.0, 1.0)
-    ]
+    # Establish a LINE focus from historical reps first. Only reps appended after this refresh were
+    # actually played against that focus and may count toward the pressure ladder.
+    _v179_samples = [Vector2(12.0, 5.0), Vector2(10.0, 4.0)]
+    _v191_focus_axis = "BUILDING"
+    _v191_focus_start_index = 0
     _v179_preview_force_visible = true
+    _v179_refresh()
+    if _v191_focus_axis != "LINE" or _v191_streak != 0:
+        push_error("Practice pressure ladder prospective focus boundary regression")
+        get_tree().quit(22)
+        return
+
+    _v179_samples.append_array([Vector2(4.0, 3.0), Vector2(3.0, 2.0), Vector2(2.0, 1.0)])
     _v179_refresh()
     if not _v191_bar.visible or _v191_streak != 3 or not _v191_streak_label.text.contains("ADVANCE READY"):
         push_error("Practice pressure ladder advance regression")
@@ -38,26 +43,23 @@ func _process(delta: float) -> void:
             get_tree().quit(22)
             return
 
-    _v179_samples = [
-        Vector2(12.0, 5.0),
-        Vector2(10.0, 4.0),
-        Vector2(4.0, 3.0),
-        Vector2(3.0, 2.0),
-        Vector2(8.0, 1.0)
-    ]
+    # A miss played after the focus is active must reset the earned streak and keep correction copy.
+    _v179_samples.append(Vector2(8.0, 1.0))
     _v179_refresh()
     if _v191_streak != 0 or not _v191_streak_label.text.contains("RESET") or not _v191_streak_label.text.contains("LEFT"):
         push_error("Practice pressure ladder reset coaching regression")
         get_tree().quit(22)
         return
 
-    _v179_samples = [
-        Vector2(1.0, -28.0),
-        Vector2(0.0, -24.0),
-        Vector2(2.0, -10.0),
-        Vector2(-1.0, -8.0),
-        Vector2(1.0, -7.0)
-    ]
+    # Switching to PACE must start a fresh prospective window; the two reps that select PACE do not
+    # count. Three subsequent pace-window reps then earn the streak normally.
+    _v179_samples = [Vector2(1.0, -28.0), Vector2(0.0, -24.0)]
+    _v179_refresh()
+    if _v191_focus_axis != "PACE" or _v191_streak != 0:
+        push_error("Practice pressure ladder pace focus boundary regression")
+        get_tree().quit(22)
+        return
+    _v179_samples.append_array([Vector2(2.0, -10.0), Vector2(-1.0, -8.0), Vector2(1.0, -7.0)])
     _v179_refresh()
     if not _v190_target_caption.text.contains("PACE") or _v191_streak != 3:
         push_error("Practice pressure ladder pace-axis regression")
