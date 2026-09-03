@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource path="res://presentation_telemetry_guard.gd" type="Script" id="1_v143"]
 [ext_resource path="res://shot_map_correction_target.gd" type="Script" id="2_target"]
@@ -7,6 +7,10 @@
 [ext_resource path="res://live_break_summary_layout.gd" type="Script" id="5_live_break_layout"]
 [ext_resource path="res://session_dispersion_edge_truth.gd" type="Script" id="6_dispersion_edge"]
 [ext_resource path="res://session_correction_cap_truth.gd" type="Script" id="7_correction_cap"]
+# Keep the established replay entry point explicit in the production scene contract while the
+# root guard subclasses it. Existing presentation-chain regressions can therefore verify that the
+# authoritative replay/read stack remains present instead of being silently replaced.
+[ext_resource path="res://replay_timeline_camera_truth.gd" type="Script" id="8_replay_entry_contract"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
