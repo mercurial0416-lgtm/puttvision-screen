@@ -3,6 +3,7 @@ extends "res://replay_timeline_camera_truth.gd"
 # Presentation-only boundary guard. Native Android physics, GreenTerrain and GreenReadAdvisor
 # remain authoritative; this only prevents malformed bridge values from reaching Godot presentation.
 const PRESENTATION_SPATIAL_KEYS := ["ballX", "ballY", "holeDistance"]
+const PRESENTATION_BALL_KEYS := ["ballX", "ballY"]
 
 var _presentation_last_spatial := {}
 
@@ -21,11 +22,28 @@ func _presentation_safe_snapshot(s: Dictionary) -> Dictionary:
         safe.erase("readLineDeltaCm")
         safe.erase("paceDeltaCm")
 
-    # A malformed position sample must never poison Node3D transforms, terrain sampling, replay
-    # cameras or the aim line. Reuse the last finite presentation coordinate when possible so a
-    # single bad bridge packet does not visibly snap the ball/cup back to an arbitrary default.
-    # This cache is presentation-only and never flows back into native physics or read advice.
+    # Ball coordinates are a semantic pair. If either value is malformed, erase both from the
+    # presentation copy instead of replacing them with cached values. The inherited replay truth
+    # layer already holds the last measured transform for missing coordinates while preserving the
+    # missing-position signal, so live-break telemetry can correctly report TRACKING/LAST OBS rather
+    # than manufacturing a fresh sample or exact REST from a stale cached position.
+    var malformed_ball_pair := false
+    for key in PRESENTATION_BALL_KEYS:
+        if s.has(key) and not is_finite(float(s.get(key, 0.0))):
+            malformed_ball_pair = true
+            break
+    if malformed_ball_pair:
+        if not copied:
+            safe = s.duplicate(false)
+            copied = true
+        safe.erase("ballX")
+        safe.erase("ballY")
+
+    # Non-ball spatial values can safely reuse their last finite presentation coordinate. This cache
+    # never flows back into native physics or read advice.
     for key in PRESENTATION_SPATIAL_KEYS:
+        if key in PRESENTATION_BALL_KEYS:
+            continue
         if not s.has(key):
             continue
         var value := float(s.get(key, 0.0))
