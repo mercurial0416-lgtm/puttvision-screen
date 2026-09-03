@@ -14,22 +14,23 @@ class ReplaySpatialHeadingRegressionTest {
     }
 
     @Test
-    fun replayHeadingUsesSameSpatialDomainAsReplayPosition() {
+    fun replayHeadingPreservesPhysicalDistanceSmoothingWithoutRepeatedSanitizing() {
         val script = asset("replay_spatial_pacing.gd")
 
-        assertTrue(script.contains("const REPLAY_HEADING_SAMPLE_FRACTION := 0.006"))
-        assertTrue(script.contains("var before := _v175_trail_point(valid_points, before_p)"))
-        assertTrue(script.contains("var after := _v175_trail_point(valid_points, after_p)"))
-        assertTrue(script.contains("return heading.normalized()"))
+        assertTrue(script.contains("V175_HEADING_SAMPLE_M / total_length"))
+        assertTrue(script.contains("V175_HEADING_WIDE_SAMPLE_M / total_length"))
+        assertTrue(script.contains("var heading := near_heading * 0.68 + wide_heading * 0.32"))
+        assertTrue(script.contains("_replay_spatial_point_valid(valid_points"))
         assertFalse(script.contains("return super._v175_trail_heading(valid_points, p)"))
     }
 
     @Test
-    fun replayHeadingSanitizesInputsAndKeepsPhysicsUntouched() {
+    fun replayHeadingSanitizesOnceAndKeepsNonzeroFallback() {
         val script = asset("replay_spatial_pacing.gd")
 
         assertTrue(script.contains("var valid_points := _replay_spatial_valid_points(points)"))
-        assertTrue(script.contains("if not heading.is_finite()"))
+        assertTrue(script.contains("var total_length := _replay_spatial_total_length_valid(valid_points)"))
+        assertTrue(script.contains("else Vector2.UP"))
         assertFalse(script.contains("GreenTerrain("))
         assertFalse(script.contains("GreenReadAdvisor("))
     }
