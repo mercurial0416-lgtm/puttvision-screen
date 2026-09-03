@@ -17,9 +17,18 @@ func _replay_transition_status(progress: float, remaining: float, duration: floa
         return "BLEND · →CUP %.1fs" % eta_cup
     return "CUP · %.1fs" % safe_remaining
 
+func _replay_transition_is_active(remaining: float, actual_sample_count: int) -> bool:
+    return is_finite(remaining) and remaining > 0.0 and actual_sample_count >= 2
+
 func _focus_update_replay_timeline() -> void:
     super._focus_update_replay_timeline()
     if _focus_replay_stage_label == null:
+        return
+    # The parent timeline owns the idle/completed label. Do not replace it with a stale camera cue
+    # after the replay clock reaches zero or when there is no valid trail to replay; otherwise the
+    # HUD can sit on "CUP · 0.0s" between shots. This is presentation-only and leaves replay timing,
+    # camera choreography, physics, GreenTerrain and GreenReadAdvisor untouched.
+    if not _replay_transition_is_active(_v171_replay_remaining, _v171_replay_actual.size()):
         return
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
     _focus_replay_stage_label.text = _replay_transition_status(progress, _v171_replay_remaining, _v171_replay_duration)
