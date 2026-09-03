@@ -6,15 +6,18 @@ extends Node
 const SESSION_EDGE_BAR_THIN := 6.0
 const SESSION_EDGE_BAR_LONG := 18.0
 const SESSION_CORNER_SIZE := Vector2(14.0, 14.0)
-const SESSION_LINE_SCALE_CM := 5.0
-const SESSION_PACE_SCALE_CM := 15.0
+# These thresholds are the full SESSION DISPERSION plot bounds, not the smaller ±5/±15 make window.
+# Keep them aligned with V179_LINE_SCALE_CM / V179_PACE_SCALE_CM. The regression test intentionally
+# compares both assets so a future plot-scale change cannot silently reintroduce false corner arrows.
+const SESSION_VIEW_LINE_SCALE_CM := 30.0
+const SESSION_VIEW_PACE_SCALE_CM := 70.0
 
 var _last_samples: Array = []
 
 func _session_dispersion_clip_axes(sample: Vector2) -> Vector2i:
     return Vector2i(
-        1 if absf(sample.x) > SESSION_LINE_SCALE_CM else 0,
-        1 if absf(sample.y) > SESSION_PACE_SCALE_CM else 0
+        1 if absf(sample.x) > SESSION_VIEW_LINE_SCALE_CM else 0,
+        1 if absf(sample.y) > SESSION_VIEW_PACE_SCALE_CM else 0
     )
 
 func _session_dispersion_clipped_size(sample: Vector2) -> Vector2:
