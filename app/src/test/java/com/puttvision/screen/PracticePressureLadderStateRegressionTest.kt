@@ -56,7 +56,8 @@ class PracticePressureLadderStateRegressionTest {
         assertTrue(source.contains("const V191_COPY_RESET_WIDTH := 524.0"))
         assertTrue(source.contains("_v191_streak_label.size.x = V191_COPY_RESET_WIDTH if reset_focus else V191_COPY_COMPACT_WIDTH"))
         assertTrue(source.contains("segment.visible = not reset_focus"))
-        assertTrue(source.contains("axis != \"BUILDING\" and _v191_streak == 0 and not _v179_samples.is_empty()"))
+        assertTrue(source.contains("axis != \"BUILDING\" and _v191_streak == 0 and _v191_has_focus_samples()"))
+        assertFalse(source.contains("axis != \"BUILDING\" and _v191_streak == 0 and not _v179_samples.is_empty()"))
     }
 
     @Test
