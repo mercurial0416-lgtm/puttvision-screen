@@ -72,11 +72,22 @@ func _replay_build_chapter_label(text_value: String, tint: Color) -> Label:
     _focus_replay_timeline.add_child(label)
     return label
 
+func _replay_playhead_rotated_extent() -> float:
+    var radians := deg_to_rad(REPLAY_PLAYHEAD_ROTATION_DEG)
+    return REPLAY_PLAYHEAD_SIZE * (absf(cos(radians)) + absf(sin(radians)))
+
+func _replay_track_has_playhead_room(track_width: float) -> bool:
+    if not is_finite(track_width) or track_width <= 0.0:
+        return false
+    # A 45-degree square is wider than its unrotated Control bounds. On very narrow Forward Mobile
+    # layouts the anchored replay track can collapse while the child playhead would otherwise remain
+    # visible over the neighboring labels. Suppress only the ornament until its full rotated footprint fits.
+    return track_width >= _replay_playhead_rotated_extent()
+
 func _replay_playhead_half_extent(track_width: float) -> float:
     if not is_finite(track_width) or track_width <= 0.0:
         return 0.0
-    var radians := deg_to_rad(REPLAY_PLAYHEAD_ROTATION_DEG)
-    var rotated_half_extent := REPLAY_PLAYHEAD_SIZE * 0.5 * (absf(cos(radians)) + absf(sin(radians)))
+    var rotated_half_extent := _replay_playhead_rotated_extent() * 0.5
     return minf(rotated_half_extent, track_width * 0.5)
 
 func _replay_playhead_x(progress: float, track_width: float) -> float:
@@ -143,6 +154,9 @@ func _focus_update_replay_timeline() -> void:
     _replay_place_chapter_label(_replay_cup_label, chapters["cup"], "CUP")
 
     if _replay_playhead == null:
+        return
+    _replay_playhead.visible = _replay_track_has_playhead_room(track_width)
+    if not _replay_playhead.visible:
         return
     var x := _replay_playhead_x(progress, track_width)
     _replay_playhead.position = Vector2(
