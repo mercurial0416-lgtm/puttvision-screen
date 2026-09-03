@@ -148,10 +148,27 @@ void fragment() {
     vec3 ribbon_color = relief_color * 1.38 + vec3(0.028, 0.040, 0.012);
     relief_color = mix(relief_color, ribbon_color, ribbon_strength);
 
+    // Commercial-style moving slope grid, driven only by the already encoded authoritative grade.
+    // Flat sections stay almost still; steeper sections flow downhill faster so direction and severity
+    // are readable from address without rebuilding meshes or touching any Android/solver state.
+    float flow_active = smoothstep(0.16, 0.72, slope_pct);
+    float flow_speed = mix(0.0, 0.46, flow_active);
+    vec2 green_m = UV * vec2(11.8, 34.5);
+    vec2 moving_m = green_m + downhill * (TIME * flow_speed);
+    vec2 grid_coord = moving_m / 0.58;
+    vec2 cell = abs(fract(grid_coord) - vec2(0.5));
+    float moving_grid = smoothstep(0.438, 0.492, max(cell.x, cell.y));
+    float travel_phase = fract(dot(green_m, downhill) * 0.72 - TIME * (0.32 + flow_active * 0.74));
+    float travel_pulse = 1.0 - smoothstep(0.08, 0.30, abs(travel_phase - 0.5));
+    float flow_grid = moving_grid * flow_active * (0.48 + travel_pulse * 0.52);
+    vec3 flow_color = mix(vec3(0.58, 0.86, 0.78), vec3(0.82, 0.96, 0.70), travel_pulse);
+    relief_color = mix(relief_color, flow_color, flow_grid * 0.32);
+
     ALBEDO = relief_color;
     float base_alpha = 0.022 + active * (0.096 + 0.018 * abs(height_bias));
     float ribbon_alpha = elevation_ribbon * active * 0.28;
-    ALPHA = min(0.40, base_alpha + ribbon_alpha);
+    float flow_alpha = flow_grid * 0.16;
+    ALPHA = min(0.46, base_alpha + ribbon_alpha + flow_alpha);
 }
 """
     var material := ShaderMaterial.new()
