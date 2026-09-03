@@ -7,6 +7,7 @@ extends "res://practice_ring_boundary_finish.gd"
 # aim or scoring.
 const READ_SPATIAL_EPSILON := 0.0001
 const READ_APEX_MIN_DEVIATION_PX := 0.5
+const READ_TANGENT_SAMPLE_FRACTION := 0.025
 
 func _read_path_sample(curve: PackedVector2Array, fraction: float) -> Dictionary:
     if curve.is_empty():
@@ -41,6 +42,26 @@ func _read_path_sample(curve: PackedVector2Array, fraction: float) -> Dictionary
         traversed += segment_length
 
     return {"point": curve[curve.size() - 1], "tangent": fallback_tangent}
+
+func _read_smoothed_tangent(curve: PackedVector2Array, fraction: float, fallback: Vector2) -> Vector2:
+    # Landmark positions remain exactly on the authoritative rendered read path. Directional glyphs,
+    # however, should not snap from an incoming segment to an outgoing segment when their spatial
+    # anchor lands on a solver vertex. Sample a tiny path-length neighborhood and use its chord as a
+    # presentation-only tangent. This produces stable launch/gate/flow orientation without changing
+    # any read point, aim value or physics result.
+    if curve.size() < 3 or not is_finite(fraction):
+        return fallback
+    var p := clampf(fraction, 0.0, 1.0)
+    var before_fraction := maxf(0.0, p - READ_TANGENT_SAMPLE_FRACTION)
+    var after_fraction := minf(1.0, p + READ_TANGENT_SAMPLE_FRACTION)
+    if after_fraction - before_fraction <= READ_SPATIAL_EPSILON:
+        return fallback
+    var before: Vector2 = _read_path_sample(curve, before_fraction)["point"]
+    var after: Vector2 = _read_path_sample(curve, after_fraction)["point"]
+    var chord := after - before
+    if not is_finite(chord.x) or not is_finite(chord.y) or chord.length_squared() <= READ_SPATIAL_EPSILON:
+        return fallback
+    return chord.normalized()
 
 func _read_baseline_deviation(point: Vector2, start: Vector2, finish: Vector2) -> float:
     var baseline := finish - start
@@ -85,14 +106,13 @@ func _read_launch_geometry(offset_m: float) -> Dictionary:
     if curve.size() < 3:
         return super._read_launch_geometry(offset_m)
 
-    # The launch cue used to choose its tip from a raw sample index while the other read landmarks
-    # already used traveled distance. Uneven solver samples could therefore make the launch arrow
-    # visually too short/long and point along a dense neighboring segment. Use the same spatial
-    # sampler for a coherent, truthful commercial read overlay.
+    # The launch cue uses traveled distance for both anchor and orientation. The tiny symmetric
+    # tangent window keeps the arrow visually continuous at solver vertices while preserving the
+    # exact anchor point selected from the authoritative recommendation path.
     var sample := _read_path_sample(curve, READ_LAUNCH_FRACTION)
     var start: Vector2 = curve[0]
     var tip: Vector2 = sample["point"]
-    var tangent: Vector2 = sample["tangent"]
+    var tangent: Vector2 = _read_smoothed_tangent(curve, READ_LAUNCH_FRACTION, sample["tangent"])
     if tangent.length_squared() < 0.5:
         tangent = (tip - start).normalized()
     if tangent.length_squared() < 0.5:
@@ -113,7 +133,7 @@ func _read_start_gate_geometry(offset_m: float) -> Dictionary:
         return super._read_start_gate_geometry(offset_m)
     var sample := _read_path_sample(curve, READ_START_GATE_FRACTION)
     var center: Vector2 = sample["point"]
-    var tangent: Vector2 = sample["tangent"]
+    var tangent: Vector2 = _read_smoothed_tangent(curve, READ_START_GATE_FRACTION, sample["tangent"])
     if tangent.length_squared() < 0.5:
         tangent = Vector2.UP
     var normal := Vector2(-tangent.y, tangent.x)
@@ -128,9 +148,10 @@ func _read_flow_geometry(offset_m: float, fraction: float) -> Dictionary:
     var curve := _v183_path(offset_m)
     if curve.size() < 3:
         return super._read_flow_geometry(offset_m, fraction)
-    var sample := _read_path_sample(curve, clampf(fraction, 0.05, 0.95))
+    var p := clampf(fraction, 0.05, 0.95)
+    var sample := _read_path_sample(curve, p)
     var center: Vector2 = sample["point"]
-    var tangent: Vector2 = sample["tangent"]
+    var tangent: Vector2 = _read_smoothed_tangent(curve, p, sample["tangent"])
     if tangent.length_squared() < 0.5:
         tangent = Vector2.UP
     var normal := Vector2(-tangent.y, tangent.x)
