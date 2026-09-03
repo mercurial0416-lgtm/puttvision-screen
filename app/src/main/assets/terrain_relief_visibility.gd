@@ -168,7 +168,8 @@ void fragment() {
     float base_alpha = 0.022 + active * (0.096 + 0.018 * abs(height_bias));
     float ribbon_alpha = elevation_ribbon * active * 0.28;
     float flow_alpha = flow_grid * 0.16;
-    ALPHA = min(0.46, base_alpha + ribbon_alpha + flow_alpha);
+    ALPHA = min(0.40, base_alpha + ribbon_alpha);
+    ALPHA = min(0.46, ALPHA + flow_alpha);
 }
 """
     var material := ShaderMaterial.new()
