@@ -19,7 +19,9 @@ class ReplayRollDistanceCueRegressionTest {
         assertTrue(timeline.contains("_focus_replay_stage_label.text = \"%s  ·  %s\""))
         assertTrue(timeline.contains("_focus_replay_roll_distance(progress)"))
         assertTrue(layout.contains("CLEAR_REMAINING_SUFFIX := \" TO STOP\""))
-        assertTrue(layout.contains("stage.text = stage.text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)"))
+        assertTrue(layout.contains("presented_text = presented_text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)"))
+        assertTrue(layout.contains("if presented_text != source_text:"))
+        assertTrue(layout.contains("stage.text = presented_text"))
     }
 
     @Test

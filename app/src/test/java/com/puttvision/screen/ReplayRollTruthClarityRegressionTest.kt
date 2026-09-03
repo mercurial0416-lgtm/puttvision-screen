@@ -30,7 +30,8 @@ class ReplayRollTruthClarityRegressionTest {
         assertTrue(layout.contains("const PREVIEW_SAMPLE_DISTANCE := \"0.9m TO STOP\""))
         assertTrue(layout.contains("const LEGACY_REMAINING_SUFFIX := \" REST\""))
         assertTrue(layout.contains("const CLEAR_REMAINING_SUFFIX := \" TO STOP\""))
-        assertTrue(layout.contains("stage.text = stage.text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)"))
+        assertTrue(layout.contains("presented_text = presented_text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)"))
+        assertTrue(layout.contains("stage.text = presented_text"))
         assertFalse(layout.contains("set_process(false)"))
     }
 

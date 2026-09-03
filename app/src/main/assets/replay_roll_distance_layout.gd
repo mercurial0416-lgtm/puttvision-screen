@@ -13,6 +13,11 @@ const LEGACY_REMAINING_SUFFIX := " REST"
 const CLEAR_REMAINING_SUFFIX := " TO STOP"
 
 var _layout_done := false
+var _cached_stage: Label = null
+var _cached_track: Control = null
+var _cached_preview_stage: Label = null
+var _last_source_text := ""
+var _last_presented_text := ""
 
 func _ready() -> void:
     process_priority = 120
@@ -22,28 +27,17 @@ func _process(_delta: float) -> void:
     if root == null:
         return
 
-    var stage: Label = null
-    var track: Control = null
-    if root.has_method("get"):
-        stage = root.get("_focus_replay_stage_label") as Label
-        track = root.get("_focus_replay_track") as Control
+    # Resolve scene references once and only rebind after a node is replaced/freed. This helper runs
+    # every frame during replay, so recursive tree walks here used to be needless TV/mobile frame cost.
+    if not is_instance_valid(_cached_stage) or not is_instance_valid(_cached_track):
+        _bind_nodes(root)
 
-    var preview_stage := root.find_child("PreviewReplayCameraStage", true, false) as Label
-    if stage == null and preview_stage != null:
-        stage = preview_stage
-    if track == null:
-        track = root.find_child("PreviewReplayTimelineTrack", true, false) as Control
-
+    var stage := _cached_stage
+    var track := _cached_track
     if stage == null or track == null:
         return
 
-    if preview_stage != null and stage == preview_stage and not stage.text.contains("TO STOP"):
-        stage.text = "%s · %s" % [stage.text, PREVIEW_SAMPLE_DISTANCE]
-
-    # The underlying timeline owns the measured value and may refresh every frame. Rewrite only the
-    # presentation suffix after that update; no replay clock, trail point, camera or physics data changes.
-    if stage.text.contains(LEGACY_REMAINING_SUFFIX):
-        stage.text = stage.text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)
+    _present_stage_text(stage)
 
     if _layout_done:
         return
@@ -62,3 +56,42 @@ func _process(_delta: float) -> void:
         track.size.x = maxf(1.0, 1920.0 - track_left - SIDE_INSET - STATUS_WIDTH - TRACK_GAP)
 
     _layout_done = true
+
+func _bind_nodes(root: Node) -> void:
+    _cached_stage = null
+    _cached_track = null
+    _cached_preview_stage = root.find_child("PreviewReplayCameraStage", true, false) as Label
+
+    if root.has_method("get"):
+        _cached_stage = root.get("_focus_replay_stage_label") as Label
+        _cached_track = root.get("_focus_replay_track") as Control
+
+    if _cached_stage == null and _cached_preview_stage != null:
+        _cached_stage = _cached_preview_stage
+    if _cached_track == null:
+        _cached_track = root.find_child("PreviewReplayTimelineTrack", true, false) as Control
+
+    _layout_done = false
+    _last_source_text = ""
+    _last_presented_text = ""
+
+func _present_stage_text(stage: Label) -> void:
+    var source_text := stage.text
+    # If our own previous presentation text is still on screen, nothing upstream changed and there is
+    # no reason to allocate/replace strings again. The timeline remains free to publish a new value.
+    if source_text == _last_presented_text:
+        return
+
+    var presented_text := source_text
+    if _cached_preview_stage != null and stage == _cached_preview_stage and not presented_text.contains(CLEAR_REMAINING_SUFFIX):
+        presented_text = "%s · %s" % [presented_text, PREVIEW_SAMPLE_DISTANCE]
+
+    # The underlying timeline owns the measured value and may refresh every frame. Rewrite only the
+    # presentation suffix after that update; no replay clock, trail point, camera or physics data changes.
+    if presented_text.contains(LEGACY_REMAINING_SUFFIX):
+        presented_text = presented_text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)
+
+    _last_source_text = source_text
+    _last_presented_text = presented_text
+    if presented_text != source_text:
+        stage.text = presented_text
