@@ -9,39 +9,65 @@ const READ_SPATIAL_EPSILON := 0.0001
 const READ_APEX_MIN_DEVIATION_PX := 0.5
 const READ_TANGENT_SAMPLE_FRACTION := 0.025
 
+func _read_point_is_finite(point: Vector2) -> bool:
+    return is_finite(point.x) and is_finite(point.y)
+
+func _read_first_finite_point(curve: PackedVector2Array, fallback: Vector2 = Vector2.ZERO) -> Vector2:
+    for point in curve:
+        if _read_point_is_finite(point):
+            return point
+    return fallback
+
+func _read_last_finite_point(curve: PackedVector2Array, fallback: Vector2 = Vector2.ZERO) -> Vector2:
+    for index in range(curve.size() - 1, -1, -1):
+        var point := curve[index]
+        if _read_point_is_finite(point):
+            return point
+    return fallback
+
 func _read_path_sample(curve: PackedVector2Array, fraction: float) -> Dictionary:
     if curve.is_empty():
         return {"point": Vector2.ZERO, "tangent": Vector2.UP}
     if curve.size() == 1:
-        return {"point": curve[0], "tangent": Vector2.UP}
+        var only_point := curve[0]
+        return {"point": only_point if _read_point_is_finite(only_point) else Vector2.ZERO, "tangent": Vector2.UP}
 
     var p := clampf(fraction, 0.0, 1.0) if is_finite(fraction) else 0.0
+    var first_finite := _read_first_finite_point(curve)
     var total_length := 0.0
     for index in range(1, curve.size()):
-        var segment_length := curve[index - 1].distance_to(curve[index])
+        var a := curve[index - 1]
+        var b := curve[index]
+        if not _read_point_is_finite(a) or not _read_point_is_finite(b):
+            continue
+        var segment_length := a.distance_to(b)
         if is_finite(segment_length):
             total_length += segment_length
 
     if total_length <= READ_SPATIAL_EPSILON:
-        return {"point": curve[0], "tangent": Vector2.UP}
+        return {"point": first_finite, "tangent": Vector2.UP}
 
     var target_length := total_length * p
     var traversed := 0.0
     var fallback_tangent := Vector2.UP
+    var fallback_point := first_finite
     for index in range(1, curve.size()):
         var a := curve[index - 1]
         var b := curve[index]
+        if not _read_point_is_finite(a) or not _read_point_is_finite(b):
+            continue
         var segment_length := a.distance_to(b)
         if not is_finite(segment_length) or segment_length <= READ_SPATIAL_EPSILON:
             continue
         var tangent := (b - a) / segment_length
         fallback_tangent = tangent
+        fallback_point = b
         if traversed + segment_length >= target_length:
             var local_t := clampf((target_length - traversed) / segment_length, 0.0, 1.0)
             return {"point": a.lerp(b, local_t), "tangent": tangent}
         traversed += segment_length
 
-    return {"point": curve[curve.size() - 1], "tangent": fallback_tangent}
+    return {"point": fallback_point, "tangent": fallback_tangent}
 
 func _read_smoothed_tangent(curve: PackedVector2Array, fraction: float, fallback: Vector2) -> Vector2:
     # Landmark positions remain exactly on the authoritative rendered read path. Directional glyphs,
@@ -64,6 +90,8 @@ func _read_smoothed_tangent(curve: PackedVector2Array, fraction: float, fallback
     return chord.normalized()
 
 func _read_baseline_deviation(point: Vector2, start: Vector2, finish: Vector2) -> float:
+    if not _read_point_is_finite(point) or not _read_point_is_finite(start) or not _read_point_is_finite(finish):
+        return 0.0
     var baseline := finish - start
     var baseline_length := baseline.length()
     if baseline_length <= READ_SPATIAL_EPSILON:
@@ -82,8 +110,10 @@ func _read_apex_point(offset_m: float) -> Vector2:
     # departure from the ball-to-cup baseline. For a polyline the maximum perpendicular departure
     # occurs at a vertex, so scanning the existing rendered recommendation is exact, allocation-free,
     # and independent of uneven solver sample spacing. This is presentation-only; no read value moves.
-    var start := curve[0]
-    var finish := curve[curve.size() - 1]
+    # Malformed bridge points are ignored at this display boundary so one bad sample cannot poison
+    # every landmark transform; native terrain/read solving remains untouched.
+    var start := _read_first_finite_point(curve)
+    var finish := _read_last_finite_point(curve, start)
     if start.distance_to(finish) <= READ_SPATIAL_EPSILON:
         return _read_path_sample(curve, 0.5)["point"] as Vector2
 
@@ -110,7 +140,7 @@ func _read_launch_geometry(offset_m: float) -> Dictionary:
     # tangent window keeps the arrow visually continuous at solver vertices while preserving the
     # exact anchor point selected from the authoritative recommendation path.
     var sample := _read_path_sample(curve, READ_LAUNCH_FRACTION)
-    var start: Vector2 = curve[0]
+    var start: Vector2 = _read_first_finite_point(curve)
     var tip: Vector2 = sample["point"]
     var tangent: Vector2 = _read_smoothed_tangent(curve, READ_LAUNCH_FRACTION, sample["tangent"])
     if tangent.length_squared() < 0.5:
