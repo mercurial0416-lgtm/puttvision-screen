@@ -24,6 +24,7 @@ class GreenOverviewInvalidAimRegressionTest {
     fun invalidOffsetNeverReachesClampOrOffMapDirectionMath() {
         val source = asset("green_read_direction_truth.gd")
         assertTrue(source.contains("if not _overview_aim_is_valid(offset_m):"))
-        assertTrue(source.contains("return _overview_aim_is_valid(offset_m) and absf(offset_m) > OVERVIEW_AIM_VISUAL_SPAN_M"))
+        assertTrue(source.contains("return false\n    return absf(offset_m) > OVERVIEW_AIM_VISUAL_SPAN_M"))
+        assertTrue(source.contains("return Vector2(center_x, V183_MAP_ORIGIN.y + 18.0)"))
     }
 }
