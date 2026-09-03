@@ -1,6 +1,6 @@
 [gd_scene load_steps=9 format=3]
 
-[ext_resource path="res://presentation_telemetry_guard.gd" type="Script" id="1_v143"]
+[ext_resource path="res://live_origin_truth_guard.gd" type="Script" id="1_v143"]
 [ext_resource path="res://shot_map_correction_target.gd" type="Script" id="2_target"]
 [ext_resource path="res://replay_roll_distance_layout.gd" type="Script" id="3_replay_layout"]
 [ext_resource path="res://cup_entry_read_gate.gd" type="Script" id="4_cup_entry"]
