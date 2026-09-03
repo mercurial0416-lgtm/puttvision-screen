@@ -15,6 +15,8 @@ var _v197_correction_tip: Line2D
 
 const V197_LINE_WINDOW_CM := 9.0
 const V197_PACE_WINDOW_CM := 22.0
+const V197_IDLE_LEGEND := "GREEN BOX = MAKE"
+const V197_IDLE_LEGEND_COLOR := Color(0.47, 0.84, 0.66, 0.92)
 const V197_IDLE_FILL := Color(0.28, 0.84, 0.62, 0.10)
 const V197_IDLE_OUTLINE := Color(0.38, 0.92, 0.70, 0.72)
 const V197_MAKE_FILL := Color(0.30, 0.94, 0.66, 0.22)
@@ -67,6 +69,14 @@ func _v197_promote_shot_indicators() -> void:
         _v188_dot.z_index = V197_RESULT_Z_INDEX
     if _v188_overflow_label != null:
         _v188_overflow_label.z_index = V197_RESULT_Z_INDEX
+
+func _v197_set_idle_legend() -> void:
+    # Hidden shot-map state means there is no current result. Clear the prior shot verdict and its
+    # emphasis so a stale FIX/MAKE result cannot flash when the panel is shown before fresh telemetry.
+    if _v196_center_legend == null:
+        return
+    _v196_center_legend.text = V197_IDLE_LEGEND
+    _v196_center_legend.add_theme_color_override("font_color", V197_IDLE_LEGEND_COLOR)
 
 func _v197_correction_target(line_delta_cm: float, pace_delta_cm: float) -> Vector2:
     # Project a miss to a small safety margin inside the same strict success window used by the
@@ -178,10 +188,7 @@ func _build_hud() -> void:
     _v197_axis_left = _v197_axis_label("LEFT", "ShotMapAxisLeft", Vector2(34, 80), Vector2(34, 10), HORIZONTAL_ALIGNMENT_LEFT)
     _v197_axis_right = _v197_axis_label("RIGHT", "ShotMapAxisRight", Vector2(84, 80), Vector2(34, 10), HORIZONTAL_ALIGNMENT_RIGHT)
     _v197_promote_shot_indicators()
-
-    if _v196_center_legend != null:
-        _v196_center_legend.text = "GREEN BOX = MAKE"
-        _v196_center_legend.add_theme_color_override("font_color", Color(0.47, 0.84, 0.66, 0.92))
+    _v197_set_idle_legend()
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
     super._v188_refresh(line_delta_cm, pace_delta_cm, visible)
@@ -195,6 +202,7 @@ func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) ->
             _v197_correction_line.visible = false
         if _v197_correction_tip != null:
             _v197_correction_tip.visible = false
+        _v197_set_idle_legend()
         return
 
     var made := _v197_inside_make_window(line_delta_cm, pace_delta_cm)
