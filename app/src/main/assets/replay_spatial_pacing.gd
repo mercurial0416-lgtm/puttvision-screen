@@ -5,6 +5,7 @@ extends "res://practice_ring_edge_truth.gd"
 # cinematic camera crawl through dense clusters then jump across sparse ones. Normalize replay
 # interpolation by traveled arc length so the fixed replay clock produces smooth spatial motion.
 const REPLAY_SPATIAL_EPSILON := 0.0001
+const REPLAY_HEADING_SAMPLE_FRACTION := 0.006
 
 func _replay_spatial_valid_points(points: Array) -> Array[Vector2]:
     var valid: Array[Vector2] = []
@@ -36,9 +37,23 @@ func _v175_trail_total_length(points: Array) -> float:
     return total_length
 
 func _v175_trail_heading(points: Array, progress: float) -> Vector2:
+    # Heading must be sampled in the same arc-length domain as replay position. Delegating to the
+    # inherited index-based helper made the camera look in the wrong direction whenever capture
+    # density changed sharply along the roll, producing small but obvious yaw snaps on premium TV.
     var valid_points := _replay_spatial_valid_points(points)
+    if valid_points.size() < 2:
+        return Vector2.UP
     var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
-    return super._v175_trail_heading(valid_points, p)
+    var before_p := maxf(0.0, p - REPLAY_HEADING_SAMPLE_FRACTION)
+    var after_p := minf(1.0, p + REPLAY_HEADING_SAMPLE_FRACTION)
+    if is_equal_approx(before_p, after_p):
+        return (valid_points[valid_points.size() - 1] - valid_points[0]).normalized()
+    var before := _v175_trail_point(valid_points, before_p)
+    var after := _v175_trail_point(valid_points, after_p)
+    var heading := after - before
+    if not heading.is_finite() or heading.length_squared() <= REPLAY_SPATIAL_EPSILON * REPLAY_SPATIAL_EPSILON:
+        return (valid_points[valid_points.size() - 1] - valid_points[0]).normalized()
+    return heading.normalized()
 
 func _v175_trail_point(points: Array, progress: float) -> Vector2:
     var valid_points := _replay_spatial_valid_points(points)
