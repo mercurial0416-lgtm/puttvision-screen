@@ -5,6 +5,14 @@ extends "res://replay_transition_cues.gd"
 # truthful bounded radius inside the plot, hide the envelope rather than shrinking/capping it into
 # a misleadingly tight group. Physics, GreenTerrain and GreenReadAdvisor remain untouched.
 
+# Kept for downstream boundary-finish compatibility. The production truth guard no longer renders
+# clipped arcs, but descendants still resolve this helper at parse time.
+func _practice_ring_point_inside(point: Vector2) -> bool:
+    return point.x >= PRACTICE_RECENT_RING_EDGE_INSET \
+        and point.y >= PRACTICE_RECENT_RING_EDGE_INSET \
+        and point.x <= V179_PLOT_SIZE.x - PRACTICE_RECENT_RING_EDGE_INSET \
+        and point.y <= V179_PLOT_SIZE.y - PRACTICE_RECENT_RING_EDGE_INSET
+
 func _practice_recent_ring_geometry(samples: Array[Vector2]) -> Dictionary:
     if samples.size() < PRACTICE_TREND_MIN_SAMPLES:
         return {"visible": false}
