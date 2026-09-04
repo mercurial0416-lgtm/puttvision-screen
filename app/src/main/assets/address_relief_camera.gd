@@ -41,6 +41,7 @@ const SESSION_DISPERSION_HISTORY_SIZE := Vector2(9.0, 9.0)
 const SESSION_DISPERSION_RECENT_COLOR := Color("#f4dda0")
 const SESSION_DISPERSION_HISTORY_COLOR := Color("#76d7b6")
 const SESSION_DISPERSION_ZERO_EPSILON_CM := 0.5
+const SESSION_EXACT_ZERO_EPSILON_CM := 0.05
 const SESSION_SUMMARY_FONT_SIZE := 17
 const SESSION_SUMMARY_OUTLINE_SIZE := 2
 const SESSION_SUMMARY_TEXT_COLOR := Color(0.95, 0.98, 0.96, 0.98)
@@ -167,20 +168,27 @@ func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) ->
         "cup_frame_signal": cup_frame_signal
     }
 
+func _session_near_zero_text(abs_cm: float, anchor: String) -> String:
+    # Do not round a real sub-centimetre miss down to a perfect-looking zero. Reserve 0 cm for
+    # values inside a tiny display deadband; otherwise keep the premium summary compact and truthful.
+    if abs_cm < SESSION_EXACT_ZERO_EPSILON_CM:
+        return "%s 0 cm" % anchor
+    return "%s <1 cm" % anchor
+
 func _session_line_average_text(value_cm: float) -> String:
     # Practice summary is presentation-only, but malformed bridge samples must never become a
     # believable LEFT/RIGHT result. Keep the card neutral until a finite measured value returns.
     if not is_finite(value_cm):
         return "LINE --"
     if absf(value_cm) < SESSION_DISPERSION_ZERO_EPSILON_CM:
-        return "CENTER 0 cm"
+        return _session_near_zero_text(absf(value_cm), "CENTER")
     return "RIGHT %.0f cm" % absf(value_cm) if value_cm > 0.0 else "LEFT %.0f cm" % absf(value_cm)
 
 func _session_pace_average_text(value_cm: float) -> String:
     if not is_finite(value_cm):
         return "PACE --"
     if absf(value_cm) < SESSION_DISPERSION_ZERO_EPSILON_CM:
-        return "CUP 0 cm"
+        return _session_near_zero_text(absf(value_cm), "CUP")
     return "LONG %.0f cm" % absf(value_cm) if value_cm > 0.0 else "SHORT %.0f cm" % absf(value_cm)
 
 func _session_apply_rep_hierarchy() -> void:
