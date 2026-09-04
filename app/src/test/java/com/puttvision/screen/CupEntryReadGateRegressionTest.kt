@@ -29,11 +29,13 @@ class CupEntryReadGateRegressionTest {
         assertTrue(script.contains("var normal := Vector2(-tangent.y, tangent.x)"))
         assertTrue(script.contains("center + normal * ENTRY_HALF_WIDTH_PX"))
         assertTrue(script.contains("center - normal * ENTRY_HALF_WIDTH_PX"))
-        assertTrue(script.contains("const ENTRY_BADGE_WIDTH_PX := 132.0"))
+        assertTrue(script.contains("const ENTRY_BADGE_WIDTH_PX := 156.0"))
+        assertTrue(script.contains("const ENTRY_BADGE_HEIGHT_PX := 20.0"))
         assertTrue(script.contains("var badge_width := ENTRY_BADGE_WIDTH_PX"))
         assertTrue(script.contains("center.x - badge_width - 10.0"))
         assertTrue(script.contains("panel_size.x - badge_width - 4.0"))
-        assertTrue(script.contains("clampf(center.y - 8.0"))
+        assertTrue(script.contains("center.y - ENTRY_BADGE_HEIGHT_PX * 0.5"))
+        assertTrue(script.contains("panel_size.y - ENTRY_BADGE_HEIGHT_PX - 4.0"))
     }
 
     @Test
