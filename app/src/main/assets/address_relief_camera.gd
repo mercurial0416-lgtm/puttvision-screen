@@ -41,6 +41,10 @@ const SESSION_DISPERSION_HISTORY_SIZE := Vector2(9.0, 9.0)
 const SESSION_DISPERSION_RECENT_COLOR := Color("#f4dda0")
 const SESSION_DISPERSION_HISTORY_COLOR := Color("#76d7b6")
 const SESSION_DISPERSION_ZERO_EPSILON_CM := 0.5
+const SESSION_SUMMARY_FONT_SIZE := 17
+const SESSION_SUMMARY_OUTLINE_SIZE := 2
+const SESSION_SUMMARY_TEXT_COLOR := Color(0.95, 0.98, 0.96, 0.98)
+const SESSION_SUMMARY_OUTLINE_COLOR := Color(0.02, 0.05, 0.05, 0.92)
 
 func _address_visual_height(terrain_height_m: float) -> float:
     var relief_delta := clampf(
@@ -188,14 +192,26 @@ func _session_apply_rep_hierarchy() -> void:
         dot.modulate.a = 1.0 if latest else 0.48 + 0.30 * float(index + 1) / float(maxi(1, active_count))
         dot.position = _v179_plot_position(_v179_samples[index]) - dot.size * 0.5
 
+func _session_apply_summary_hierarchy(label: Label) -> void:
+    # TV practice sessions are read from several metres away. Keep the existing measured values and
+    # layout, but give both average miss labels a stable broadcast-style edge treatment so they do
+    # not disappear into bright green/terrain behind translucent cards. Refresh-only work; no frame loop.
+    label.add_theme_font_size_override("font_size", SESSION_SUMMARY_FONT_SIZE)
+    label.add_theme_constant_override("outline_size", SESSION_SUMMARY_OUTLINE_SIZE)
+    label.add_theme_color_override("font_color", SESSION_SUMMARY_TEXT_COLOR)
+    label.add_theme_color_override("font_outline_color", SESSION_SUMMARY_OUTLINE_COLOR)
+    label.clip_text = true
+
 func _v179_refresh() -> void:
     super._v179_refresh()
     if _v179_panel == null:
         return
     if _v179_line_mean_label != null:
         _v179_line_mean_label.text = _session_line_average_text(_v179_mean(0))
+        _session_apply_summary_hierarchy(_v179_line_mean_label)
     if _v179_pace_mean_label != null:
         _v179_pace_mean_label.text = _session_pace_average_text(_v179_mean(1))
+        _session_apply_summary_hierarchy(_v179_pace_mean_label)
     _session_apply_rep_hierarchy()
 
 func _address_damping_alpha(response_rate: float, delta: float) -> float:
