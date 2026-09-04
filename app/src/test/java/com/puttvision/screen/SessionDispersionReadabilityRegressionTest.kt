@@ -13,14 +13,15 @@ class SessionDispersionReadabilityRegressionTest {
     }
 
     @Test
-    fun averagesUseSemanticDirectionsInsteadOfSignedNumbers() {
+    fun averagesUseSemanticDirectionsWithoutRoundingRealSubCentimeterMissesToZero() {
         val source = asset("address_relief_camera.gd")
-        assertTrue(source.contains("CENTER 0 cm"))
+        assertTrue(source.contains("_session_near_zero_text(absf(value_cm), \"CENTER\")"))
+        assertTrue(source.contains("return \"%s <1 cm\" % anchor"))
         assertTrue(source.contains("RIGHT %.0f cm"))
         assertTrue(source.contains("LEFT %.0f cm"))
         assertFalse(source.contains("return \"R %.0f cm\""))
         assertFalse(source.contains("else \"L %.0f cm\""))
-        assertTrue(source.contains("CUP 0 cm"))
+        assertTrue(source.contains("_session_near_zero_text(absf(value_cm), \"CUP\")"))
         assertTrue(source.contains("LONG %.0f cm"))
         assertTrue(source.contains("SHORT %.0f cm"))
         assertTrue(source.contains("_session_line_average_text(_v179_mean(0))"))
