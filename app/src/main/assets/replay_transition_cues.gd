@@ -5,6 +5,7 @@ extends "res://live_pace_surge.gd"
 const REPLAY_TRANSITION_LABEL_MIN_DURATION := 0.05
 const REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX := " REST"
 const REPLAY_TRANSITION_DISTANCE_SUFFIX := " TO STOP"
+const REPLAY_TRANSITION_SEPARATOR := " · "
 
 func _replay_transition_status(progress: float, remaining: float, duration: float) -> String:
     var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
@@ -21,18 +22,26 @@ func _replay_transition_status(progress: float, remaining: float, duration: floa
         return "→CUP %.1fs" % eta_cup
     return "CUP %.1fs" % safe_remaining
 
-func _replay_transition_readout(progress: float, remaining: float, duration: float) -> String:
-    var cue := _replay_transition_status(progress, remaining, duration)
-    if not is_finite(remaining) or not is_finite(duration) or duration <= REPLAY_TRANSITION_LABEL_MIN_DURATION:
-        return cue
+func _replay_transition_parent_distance(parent_readout: String) -> String:
+    # The parent timeline has already rendered the authoritative trail-derived distance into its
+    # status string. Extract that presentation result instead of reaching into a downstream replay
+    # cache; this keeps the inheritance graph one-way and leaves ownership of distance calculation
+    # with replay_timeline_camera_truth.gd.
+    var separator_index := parent_readout.rfind(REPLAY_TRANSITION_SEPARATOR)
+    if separator_index < 0:
+        return ""
+    var distance := parent_readout.substr(separator_index + REPLAY_TRANSITION_SEPARATOR.length()).strip_edges()
+    if distance.ends_with(REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX):
+        distance = distance.trim_suffix(REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX) + REPLAY_TRANSITION_DISTANCE_SUFFIX
+    if not distance.ends_with(REPLAY_TRANSITION_DISTANCE_SUFFIX):
+        return ""
+    return distance
 
-    # super._focus_update_replay_timeline() caches the measured replay trail length before this layer
-    # runs. Preserve that truth instead of replacing the whole status label with only a camera cue.
-    # Wording is presentation-only; the distance remains derived from the recorded actual trail.
-    var distance := _focus_replay_roll_distance(progress)
-    if distance.contains(REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX):
-        distance = distance.replace(REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX, REPLAY_TRANSITION_DISTANCE_SUFFIX)
-    return "%s · %s" % [cue, distance]
+func _replay_transition_readout(cue: String, parent_readout: String) -> String:
+    var distance := _replay_transition_parent_distance(parent_readout)
+    if distance.is_empty():
+        return cue
+    return "%s%s%s" % [cue, REPLAY_TRANSITION_SEPARATOR, distance]
 
 func _replay_transition_is_active(remaining: float, actual_sample_count: int) -> bool:
     return is_finite(remaining) and remaining > 0.0 and actual_sample_count >= 2
@@ -63,15 +72,16 @@ func _focus_update_replay_timeline() -> void:
     super._focus_update_replay_timeline()
     if _focus_replay_stage_label == null:
         return
-    # The parent timeline owns the idle/completed label. Do not replace it with a stale camera cue
-    # after the replay clock reaches zero or when there is no valid trail to replay; otherwise the
-    # HUD can sit on a dead camera status between shots. This is presentation-only and leaves replay
-    # timing, camera choreography, physics, GreenTerrain and GreenReadAdvisor untouched.
-    if not _replay_transition_is_active(_v171_replay_remaining, _v171_replay_actual.size()):
+    # Capture the parent's complete presentation before adding the camera cue. That parent readout
+    # already owns the measured remaining roll; preserving it avoids duplicate distance math and keeps
+    # this layer presentation-only.
+    var parent_readout := _focus_replay_stage_label.text
+    if not _replay_focus_is_active(
+        _v171_replay_remaining,
+        _v171_replay_duration,
+        _v171_replay_actual.size()
+    ):
         return
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
-    _focus_replay_stage_label.text = _replay_transition_readout(
-        progress,
-        _v171_replay_remaining,
-        _v171_replay_duration
-    )
+    var cue := _replay_transition_status(progress, _v171_replay_remaining, _v171_replay_duration)
+    _focus_replay_stage_label.text = _replay_transition_readout(cue, parent_readout)
