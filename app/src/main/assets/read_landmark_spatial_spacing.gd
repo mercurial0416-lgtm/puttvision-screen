@@ -98,6 +98,24 @@ func _read_baseline_deviation(point: Vector2, start: Vector2, finish: Vector2) -
         return 0.0
     return absf(baseline.cross(point - start)) / baseline_length
 
+func _read_curve_has_meaningful_apex(curve: PackedVector2Array) -> bool:
+    # APEX is useful only when the rendered authoritative path has a visible bend. The parent cue
+    # historically keyed visibility from lateral recommendation magnitude alone, which could leave an
+    # attention-grabbing midpoint badge on an almost straight path. Judge only the already-rendered
+    # path geometry, so this remains presentation-only and costs one tiny scan on read refresh.
+    if curve.size() < 3:
+        return false
+    var start := _read_first_finite_point(curve)
+    var finish := _read_last_finite_point(curve, start)
+    if start.distance_to(finish) <= READ_SPATIAL_EPSILON:
+        return false
+    var best_deviation := 0.0
+    for index in range(1, curve.size() - 1):
+        var deviation := _read_baseline_deviation(curve[index], start, finish)
+        if is_finite(deviation):
+            best_deviation = maxf(best_deviation, deviation)
+    return best_deviation >= READ_APEX_MIN_DEVIATION_PX
+
 func _read_apex_point(offset_m: float) -> Vector2:
     var curve := _v183_path(offset_m)
     if curve.is_empty():
@@ -193,3 +211,16 @@ func _read_flow_geometry(offset_m: float, fraction: float) -> Dictionary:
         "right": base - normal * READ_FLOW_WING_HALF_WIDTH,
         "tangent": tangent
     }
+
+func _refresh_read_apex() -> void:
+    super._refresh_read_apex()
+    if _read_apex_ring == null or _v183_panel == null or not _read_apex_ring.visible:
+        return
+    var curve := _v183_path(_v165_recommended_offset)
+    if _read_curve_has_meaningful_apex(curve):
+        return
+    _read_apex_ring.visible = false
+    _read_apex_leader.visible = false
+    _read_apex_badge.visible = false
+    _read_apex_ring.points = PackedVector2Array()
+    _read_apex_leader.points = PackedVector2Array()
