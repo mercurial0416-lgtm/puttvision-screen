@@ -10,8 +10,12 @@ const ENTRY_RING_RADIUS_PX := 3.0
 const ENTRY_RING_SEGMENTS := 14
 const REFRESH_INTERVAL_S := 0.12
 const ENTRY_COLOR := Color(0.76, 0.95, 1.0, 0.94)
-const BADGE_COLOR := Color(0.78, 0.95, 1.0, 0.96)
-const ENTRY_BADGE_WIDTH_PX := 132.0
+const BADGE_COLOR := Color(0.92, 0.98, 1.0, 0.98)
+const BADGE_OUTLINE_COLOR := Color(0.02, 0.05, 0.06, 0.94)
+const ENTRY_BADGE_WIDTH_PX := 156.0
+const ENTRY_BADGE_HEIGHT_PX := 20.0
+const ENTRY_BADGE_FONT_SIZE := 11
+const ENTRY_BADGE_OUTLINE_SIZE := 2
 
 var _panel: Control
 var _gate: Line2D
@@ -27,8 +31,16 @@ func _circle_points(radius: float, segments: int) -> PackedVector2Array:
         points.append(Vector2(cos(angle), sin(angle)) * radius)
     return points
 
-func _entry_geometry(curve: PackedVector2Array) -> Dictionary:
+func _entry_curve_is_valid(curve: PackedVector2Array) -> bool:
     if curve.size() < 3:
+        return false
+    for point in curve:
+        if not is_finite(point.x) or not is_finite(point.y):
+            return false
+    return true
+
+func _entry_geometry(curve: PackedVector2Array) -> Dictionary:
+    if not _entry_curve_is_valid(curve):
         return {}
     var index := clampi(int(round(float(curve.size() - 1) * ENTRY_FRACTION)), 1, curve.size() - 2)
     var center: Vector2 = curve[index]
@@ -44,7 +56,7 @@ func _entry_geometry(curve: PackedVector2Array) -> Dictionary:
     }
 
 func _entry_signed_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> float:
-    if curve.size() < 2 or geometry.is_empty():
+    if not _entry_curve_is_valid(curve) or geometry.is_empty():
         return 0.0
     var tangent: Vector2 = geometry.get("tangent", Vector2.UP)
     var baseline := (curve[curve.size() - 1] - curve[0]).normalized()
@@ -58,8 +70,12 @@ func _entry_angle_degrees(curve: PackedVector2Array, geometry: Dictionary) -> fl
     return absf(_entry_signed_angle_degrees(curve, geometry))
 
 func _entry_badge_text(curve: PackedVector2Array, geometry: Dictionary) -> String:
+    if not _entry_curve_is_valid(curve) or geometry.is_empty():
+        return "CUP ENTRY  --"
     var signed_angle_deg := _entry_signed_angle_degrees(curve, geometry)
-    if not is_finite(signed_angle_deg) or absf(signed_angle_deg) < 0.5:
+    if not is_finite(signed_angle_deg):
+        return "CUP ENTRY  --"
+    if absf(signed_angle_deg) < 0.5:
         return "CUP ENTRY  STRAIGHT"
     var direction := "RIGHT" if signed_angle_deg > 0.0 else "LEFT"
     return "CUP ENTRY  %s %.0f°" % [direction, absf(signed_angle_deg)]
@@ -99,35 +115,55 @@ func _bind() -> void:
 
     _badge = Label.new()
     _badge.name = "CommercialReadCupEntryBadge"
-    _badge.text = "CUP ENTRY  STRAIGHT"
-    _badge.size = Vector2(ENTRY_BADGE_WIDTH_PX, 16.0)
-    _badge.add_theme_font_size_override("font_size", 8)
+    _badge.text = "CUP ENTRY  --"
+    _badge.size = Vector2(ENTRY_BADGE_WIDTH_PX, ENTRY_BADGE_HEIGHT_PX)
+    _badge.add_theme_font_size_override("font_size", ENTRY_BADGE_FONT_SIZE)
+    _badge.add_theme_constant_override("outline_size", ENTRY_BADGE_OUTLINE_SIZE)
     _badge.add_theme_color_override("font_color", BADGE_COLOR)
+    _badge.add_theme_color_override("font_outline_color", BADGE_OUTLINE_COLOR)
     _badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    _badge.clip_text = true
     _panel.add_child(_badge)
     _refresh()
+
+func _entry_hide() -> void:
+    if _gate != null:
+        _gate.visible = false
+        _gate.points = PackedVector2Array()
+    if _center_ring != null:
+        _center_ring.visible = false
+    if _badge != null:
+        _badge.visible = false
+        _badge.text = "CUP ENTRY  --"
 
 func _refresh() -> void:
     var root := get_parent()
     if root == null or _panel == null or _gate == null or _center_ring == null or _badge == null:
         return
     var visible := _panel.visible and root.has_method("_v183_path")
-    _gate.visible = visible
-    _center_ring.visible = visible
-    _badge.visible = visible
     if not visible:
+        _entry_hide()
         return
 
     var offset_variant = root.get("_v165_recommended_offset")
-    var offset_m := float(offset_variant) if offset_variant != null else 0.0
+    if offset_variant == null:
+        _entry_hide()
+        return
+    var offset_m := float(offset_variant)
+    if not is_finite(offset_m):
+        _entry_hide()
+        return
+
     var curve: PackedVector2Array = root.call("_v183_path", offset_m)
     var geometry := _entry_geometry(curve)
     if geometry.is_empty():
-        _gate.visible = false
-        _center_ring.visible = false
-        _badge.visible = false
+        _entry_hide()
         return
 
+    _gate.visible = true
+    _center_ring.visible = true
+    _badge.visible = true
     var center: Vector2 = geometry["center"]
     _gate.points = PackedVector2Array([geometry["left"], geometry["right"]])
     _center_ring.position = center
@@ -139,5 +175,5 @@ func _refresh() -> void:
     var badge_width := ENTRY_BADGE_WIDTH_PX
     var badge_x_unclamped := center.x + 10.0 if center.x <= panel_size.x * 0.5 else center.x - badge_width - 10.0
     var badge_x := clampf(badge_x_unclamped, 4.0, maxf(4.0, panel_size.x - badge_width - 4.0))
-    var badge_y := clampf(center.y - 8.0, 4.0, maxf(4.0, panel_size.y - 20.0))
+    var badge_y := clampf(center.y - ENTRY_BADGE_HEIGHT_PX * 0.5, 4.0, maxf(4.0, panel_size.y - ENTRY_BADGE_HEIGHT_PX - 4.0))
     _badge.position = Vector2(badge_x, badge_y)
