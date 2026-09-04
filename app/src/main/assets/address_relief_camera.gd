@@ -168,14 +168,17 @@ func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) ->
     }
 
 func _session_line_average_text(value_cm: float) -> String:
-    # Keep practice-result direction language identical to live break and green overview. On a TV,
-    # R/L forced the player to re-parse the same lateral miss after every shot; full words are still
-    # compact enough for the existing two-column result card and do not alter any measurement.
+    # Practice summary is presentation-only, but malformed bridge samples must never become a
+    # believable LEFT/RIGHT result. Keep the card neutral until a finite measured value returns.
+    if not is_finite(value_cm):
+        return "LINE --"
     if absf(value_cm) < SESSION_DISPERSION_ZERO_EPSILON_CM:
         return "CENTER 0 cm"
     return "RIGHT %.0f cm" % absf(value_cm) if value_cm > 0.0 else "LEFT %.0f cm" % absf(value_cm)
 
 func _session_pace_average_text(value_cm: float) -> String:
+    if not is_finite(value_cm):
+        return "PACE --"
     if absf(value_cm) < SESSION_DISPERSION_ZERO_EPSILON_CM:
         return "CUP 0 cm"
     return "LONG %.0f cm" % absf(value_cm) if value_cm > 0.0 else "SHORT %.0f cm" % absf(value_cm)

@@ -26,6 +26,24 @@ class PracticeSummaryHierarchyRegressionTest {
     }
 
     @Test
+    fun malformedPracticeTelemetryStaysNeutral() {
+        val helper = asset("address_relief_camera.gd")
+        val lineText = helper.substringAfter("func _session_line_average_text(value_cm: float) -> String:")
+            .substringBefore("func _session_pace_average_text")
+        val paceText = helper.substringAfter("func _session_pace_average_text(value_cm: float) -> String:")
+            .substringBefore("func _session_apply_rep_hierarchy")
+
+        assertTrue(lineText.contains("if not is_finite(value_cm):"))
+        assertTrue(lineText.contains("return \"LINE --\""))
+        assertTrue(paceText.contains("if not is_finite(value_cm):"))
+        assertTrue(paceText.contains("return \"PACE --\""))
+        assertFalse(lineText.contains("GreenTerrain("))
+        assertFalse(lineText.contains("GreenReadAdvisor("))
+        assertFalse(paceText.contains("GreenTerrain("))
+        assertFalse(paceText.contains("GreenReadAdvisor("))
+    }
+
+    @Test
     fun practiceHierarchyStaysPresentationOnly() {
         val helper = asset("address_relief_camera.gd")
         val hierarchy = helper.substringAfter("func _session_apply_summary_hierarchy(label: Label) -> void:")
