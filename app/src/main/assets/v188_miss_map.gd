@@ -119,11 +119,14 @@ func _v188_point(line_delta_cm: float, pace_delta_cm: float) -> Vector2:
 func _v188_metrics_are_finite(line_delta_cm: float, pace_delta_cm: float) -> bool:
     return is_finite(line_delta_cm) and is_finite(pace_delta_cm)
 
+func _v188_metric_is_finite_number(value: Variant) -> bool:
+    var value_type := typeof(value)
+    return (value_type == TYPE_INT or value_type == TYPE_FLOAT) and is_finite(float(value))
+
 func _v188_snapshot_has_metrics(s: Dictionary) -> bool:
-    return s.has("readLineDeltaCm") and s.has("paceDeltaCm") and _v188_metrics_are_finite(
-        float(s.get("readLineDeltaCm", 0.0)),
-        float(s.get("paceDeltaCm", 0.0))
-    )
+    return s.has("readLineDeltaCm") and s.has("paceDeltaCm") and _v188_metric_is_finite_number(
+        s.get("readLineDeltaCm")
+    ) and _v188_metric_is_finite_number(s.get("paceDeltaCm"))
 
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
     if _v188_panel == null:

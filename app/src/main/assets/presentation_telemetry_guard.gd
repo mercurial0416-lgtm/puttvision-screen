@@ -7,10 +7,14 @@ const PRESENTATION_BALL_KEYS := ["ballX", "ballY"]
 
 var _presentation_last_spatial := {}
 
+func _presentation_is_finite_number(value: Variant) -> bool:
+    var value_type := typeof(value)
+    return (value_type == TYPE_INT or value_type == TYPE_FLOAT) and is_finite(float(value))
+
 func _presentation_metrics_are_finite(s: Dictionary) -> bool:
     if not s.has("readLineDeltaCm") or not s.has("paceDeltaCm"):
         return true
-    return is_finite(float(s.get("readLineDeltaCm", 0.0))) and is_finite(float(s.get("paceDeltaCm", 0.0)))
+    return _presentation_is_finite_number(s.get("readLineDeltaCm")) and _presentation_is_finite_number(s.get("paceDeltaCm"))
 
 func _presentation_safe_snapshot(s: Dictionary) -> Dictionary:
     var safe := s
@@ -29,7 +33,7 @@ func _presentation_safe_snapshot(s: Dictionary) -> Dictionary:
     # than manufacturing a fresh sample or exact REST from a stale cached position.
     var malformed_ball_pair := false
     for key in PRESENTATION_BALL_KEYS:
-        if s.has(key) and not is_finite(float(s.get(key, 0.0))):
+        if s.has(key) and not _presentation_is_finite_number(s.get(key)):
             malformed_ball_pair = true
             break
     if malformed_ball_pair:
@@ -40,15 +44,16 @@ func _presentation_safe_snapshot(s: Dictionary) -> Dictionary:
         safe.erase("ballY")
 
     # Non-ball spatial values can safely reuse their last finite presentation coordinate. This cache
-    # never flows back into native physics or read advice.
+    # never flows back into native physics or read advice. Reject non-numeric bridge payloads before
+    # any float coercion so malformed strings cannot silently become a plausible zero coordinate.
     for key in PRESENTATION_SPATIAL_KEYS:
         if key in PRESENTATION_BALL_KEYS:
             continue
         if not s.has(key):
             continue
-        var value := float(s.get(key, 0.0))
-        if is_finite(value):
-            _presentation_last_spatial[key] = value
+        var raw_value: Variant = s.get(key)
+        if _presentation_is_finite_number(raw_value):
+            _presentation_last_spatial[key] = float(raw_value)
             continue
         if not copied:
             safe = s.duplicate(false)

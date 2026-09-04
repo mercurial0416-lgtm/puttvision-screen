@@ -16,6 +16,7 @@ class PresentationSpatialTelemetryGuardRegressionTest {
         val production = asset("presentation_telemetry_guard.gd")
         assertTrue(production.contains("PRESENTATION_BALL_KEYS := [\"ballX\", \"ballY\"]"))
         assertTrue(production.contains("var malformed_ball_pair := false"))
+        assertTrue(production.contains("not _presentation_is_finite_number(s.get(key))"))
         assertTrue(production.contains("safe.erase(\"ballX\")"))
         assertTrue(production.contains("safe.erase(\"ballY\")"))
         assertTrue(!production.contains("safe[\"ballX\"] ="))
@@ -27,7 +28,8 @@ class PresentationSpatialTelemetryGuardRegressionTest {
         val production = asset("presentation_telemetry_guard.gd")
         assertTrue(production.contains("PRESENTATION_SPATIAL_KEYS := [\"ballX\", \"ballY\", \"holeDistance\"]"))
         assertTrue(production.contains("if key in PRESENTATION_BALL_KEYS:"))
-        assertTrue(production.contains("_presentation_last_spatial[key] = value"))
+        assertTrue(production.contains("if _presentation_is_finite_number(raw_value):"))
+        assertTrue(production.contains("_presentation_last_spatial[key] = float(raw_value)"))
         assertTrue(production.contains("safe[key] = float(_presentation_last_spatial[key])"))
     }
 
