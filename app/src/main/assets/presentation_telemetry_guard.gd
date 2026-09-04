@@ -1,4 +1,4 @@
-extends "res://replay_timeline_camera_truth.gd"
+extends "res://replay_stop_distance_clarity.gd"
 
 # Presentation-only boundary guard. Native Android physics, GreenTerrain and GreenReadAdvisor
 # remain authoritative; this only prevents malformed bridge values from reaching Godot presentation.
