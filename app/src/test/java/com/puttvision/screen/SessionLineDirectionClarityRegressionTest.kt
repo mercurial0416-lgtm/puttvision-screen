@@ -13,11 +13,13 @@ class SessionLineDirectionClarityRegressionTest {
     }
 
     @Test
-    fun sessionLineUsesTvReadableDirectionWords() {
+    fun sessionLineUsesTvReadableDirectionWordsAndTruthfulNearZeroCopy() {
         val script = asset("address_relief_camera.gd")
         assertTrue(script.contains("func _session_line_average_text(value_cm: float) -> String:"))
         assertTrue(script.contains("return \"RIGHT %.0f cm\" % absf(value_cm) if value_cm > 0.0 else \"LEFT %.0f cm\" % absf(value_cm)"))
-        assertTrue(script.contains("return \"CENTER 0 cm\""))
+        assertTrue(script.contains("_session_near_zero_text(absf(value_cm), \"CENTER\")"))
+        assertTrue(script.contains("return \"%s <1 cm\" % anchor"))
+        assertFalse(script.contains("return \"CENTER 0 cm\""))
         assertFalse(script.contains("return \"R %.0f cm\" % absf(value_cm)"))
         assertFalse(script.contains("else \"L %.0f cm\" % absf(value_cm)"))
     }
