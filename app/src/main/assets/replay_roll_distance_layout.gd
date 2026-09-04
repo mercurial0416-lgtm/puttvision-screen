@@ -11,6 +11,10 @@ const TRACK_GAP := 14.0
 const PREVIEW_SAMPLE_DISTANCE := "0.9m TO STOP"
 const LEGACY_REMAINING_SUFFIX := " REST"
 const CLEAR_REMAINING_SUFFIX := " TO STOP"
+const STATUS_FONT_SIZE := 17
+const STATUS_OUTLINE_SIZE := 2
+const STATUS_TEXT_COLOR := Color(0.94, 0.98, 0.96, 0.98)
+const STATUS_OUTLINE_COLOR := Color(0.02, 0.05, 0.05, 0.92)
 
 var _layout_done := false
 var _cached_stage: Label = null
@@ -55,6 +59,7 @@ func _process(_delta: float) -> void:
         var track_left := track.position.x
         track.size.x = maxf(1.0, 1920.0 - track_left - SIDE_INSET - STATUS_WIDTH - TRACK_GAP)
 
+    _apply_stage_hierarchy(stage)
     _layout_done = true
 
 func _bind_nodes(root: Node) -> void:
@@ -74,6 +79,18 @@ func _bind_nodes(root: Node) -> void:
     _layout_done = false
     _last_source_text = ""
     _last_presented_text = ""
+
+func _apply_stage_hierarchy(stage: Label) -> void:
+    # Broadcast-style readout: distance remains the dominant terminal cue, aligned to the edge of the
+    # timeline so eyes travel naturally from replay progress into remaining roll. Styling is applied
+    # only on bind/layout, never per frame, and never touches replay timing, trails, camera or physics.
+    stage.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+    stage.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    stage.clip_text = true
+    stage.add_theme_font_size_override("font_size", STATUS_FONT_SIZE)
+    stage.add_theme_constant_override("outline_size", STATUS_OUTLINE_SIZE)
+    stage.add_theme_color_override("font_color", STATUS_TEXT_COLOR)
+    stage.add_theme_color_override("font_outline_color", STATUS_OUTLINE_COLOR)
 
 func _present_stage_text(stage: Label) -> void:
     var source_text := stage.text
