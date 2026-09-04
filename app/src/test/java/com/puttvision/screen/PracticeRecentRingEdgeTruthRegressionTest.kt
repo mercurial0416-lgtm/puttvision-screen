@@ -25,15 +25,28 @@ class PracticeRecentRingEdgeTruthRegressionTest {
     }
 
     @Test
+    fun productionOverrideDelegatesToTheTruthGuardInsteadOfDrawingClippedArcs() {
+        val production = asset("practice_ring_edge_truth.gd")
+
+        assertTrue(production.contains("return super._practice_recent_ring_geometry(samples)"))
+        assertFalse(production.contains("clampf("))
+        assertFalse(production.contains("visible_arc"))
+        assertFalse(production.contains("best_len"))
+    }
+
+    @Test
     fun envelopeTruthGuardRemainsPresentationOnlyAndBounded() {
         val trend = asset("practice_trend_vector.gd")
+        val production = asset("practice_ring_edge_truth.gd")
 
         assertTrue(trend.contains("const PRACTICE_RECENT_RING_SEGMENTS := 20"))
         assertTrue(trend.contains("PRACTICE_RECENT_GROUP_SIZE := 3"))
-        assertFalse(trend.contains("GreenTerrain.set"))
-        assertFalse(trend.contains("GreenReadAdvisor.set"))
-        assertFalse(trend.contains("ballVelocity ="))
-        assertFalse(trend.contains("readLineDeltaCm ="))
-        assertFalse(trend.contains("paceDeltaCm ="))
+        for (source in listOf(trend, production)) {
+            assertFalse(source.contains("GreenTerrain.set"))
+            assertFalse(source.contains("GreenReadAdvisor.set"))
+            assertFalse(source.contains("ballVelocity ="))
+            assertFalse(source.contains("readLineDeltaCm ="))
+            assertFalse(source.contains("paceDeltaCm ="))
+        }
     }
 }
