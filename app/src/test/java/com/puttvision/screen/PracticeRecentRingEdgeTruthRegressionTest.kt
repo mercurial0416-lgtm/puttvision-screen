@@ -13,7 +13,7 @@ class PracticeRecentRingEdgeTruthRegressionTest {
     }
 
     @Test
-    fun consistencyEnvelopeNeverShrinksToFakeA tighterGroupAtPlotEdges() {
+    fun consistencyEnvelopeNeverShrinksToFakeATighterGroupAtPlotEdges() {
         val trend = asset("practice_trend_vector.gd")
 
         assertTrue(trend.contains("var raw_radius := max_distance + PRACTICE_RECENT_RING_PADDING"))
