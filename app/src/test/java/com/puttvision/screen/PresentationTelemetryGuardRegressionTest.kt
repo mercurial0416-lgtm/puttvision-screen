@@ -20,8 +20,9 @@ class PresentationTelemetryGuardRegressionTest {
     @Test
     fun malformedReadAndPacePairIsRemovedWithoutMutatingSourceSnapshot() {
         val production = asset("presentation_telemetry_guard.gd")
-        assertTrue(production.contains("is_finite(float(s.get(\"readLineDeltaCm\", 0.0)))"))
-        assertTrue(production.contains("is_finite(float(s.get(\"paceDeltaCm\", 0.0)))"))
+        assertTrue(production.contains("func _presentation_is_finite_number(value: Variant) -> bool:"))
+        assertTrue(production.contains("_presentation_is_finite_number(s.get(\"readLineDeltaCm\"))"))
+        assertTrue(production.contains("_presentation_is_finite_number(s.get(\"paceDeltaCm\"))"))
         assertTrue(production.contains("safe = s.duplicate(false)"))
         assertTrue(production.contains("safe.erase(\"readLineDeltaCm\")"))
         assertTrue(production.contains("safe.erase(\"paceDeltaCm\")"))
