@@ -14,8 +14,8 @@ class GreenOverviewInvalidAimRegressionTest {
     @Test
     fun invalidAdvisorOffsetKeepsOverviewNeutralAndMarkerHidden() {
         val source = asset("green_read_direction_truth.gd")
-        assertTrue(source.contains("func _overview_aim_is_valid(offset_m: float) -> bool:"))
-        assertTrue(source.contains("return is_finite(offset_m)"))
+        assertTrue(source.contains("func _telemetry_value_is_valid(value: float) -> bool:\n    return is_finite(value)"))
+        assertTrue(source.contains("func _overview_aim_is_valid(offset_m: float) -> bool:\n    return _telemetry_value_is_valid(offset_m)"))
         assertTrue(source.contains("return \"AIM --\""))
         assertTrue(source.contains("active and valid and absf(offset) >= OVERVIEW_AIM_DEADBAND_M"))
     }
