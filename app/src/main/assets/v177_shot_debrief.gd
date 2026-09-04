@@ -48,6 +48,18 @@ func _v177_pace_text(delta_cm: float) -> String:
         return "CUP PACE"
     return "%s %d cm" % [("LONG" if delta_cm > 0.0 else "SHORT"), int(round(abs(delta_cm)))]
 
+func _v177_leave_text(value: Variant) -> String:
+    # FINAL LEAVE is a measured presentation value, not a safe default. Godot's float() coercion can
+    # turn malformed bridge strings into 0.0, which falsely looks like a tap-in/holed result. Keep the
+    # rest of the debrief useful while explicitly withholding only the untrusted distance readout.
+    var value_type := typeof(value)
+    if value_type != TYPE_INT and value_type != TYPE_FLOAT:
+        return "--"
+    var leave_m := float(value)
+    if not is_finite(leave_m):
+        return "--"
+    return "%.2f m" % max(0.0, leave_m)
+
 func _v177_coach(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_out: bool) -> String:
     if holed:
         return "CENTERED READ  •  PACE CONTROLLED"
@@ -171,13 +183,12 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
 
     var line_delta: float = float(s.get("readLineDeltaCm", 0.0))
     var pace_delta: float = float(s.get("paceDeltaCm", 0.0))
-    var leave_m: float = max(0.0, float(s.get("distanceToCup", 0.0)))
     var score: int = _v177_metric_score(line_delta, pace_delta, holed)
 
     _v177_grade_label.text = "%s  %02d" % [_v177_grade(score), score]
     _v177_line_value.text = _v177_line_text(line_delta)
     _v177_pace_value.text = _v177_pace_text(pace_delta)
-    _v177_leave_value.text = "%.2f m" % leave_m
+    _v177_leave_value.text = _v177_leave_text(s.get("distanceToCup", null))
     _v177_coach_label.text = _v177_coach(line_delta, pace_delta, holed, lip_out)
 
     var line_bar := _v177_bar_geometry(line_delta, 30.0)
