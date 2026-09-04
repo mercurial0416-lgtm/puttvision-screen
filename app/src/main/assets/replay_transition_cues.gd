@@ -3,19 +3,36 @@ extends "res://live_pace_surge.gd"
 # Presentation-only replay cueing. Camera timing and authoritative shot/terrain physics are untouched;
 # this layer only tells the viewer how long remains until the next cinematic camera handoff.
 const REPLAY_TRANSITION_LABEL_MIN_DURATION := 0.05
+const REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX := " REST"
+const REPLAY_TRANSITION_DISTANCE_SUFFIX := " TO STOP"
 
 func _replay_transition_status(progress: float, remaining: float, duration: float) -> String:
     var p := clampf(progress, 0.0, 1.0) if is_finite(progress) else 0.0
     if not is_finite(remaining) or not is_finite(duration) or duration <= REPLAY_TRANSITION_LABEL_MIN_DURATION:
         return _focus_replay_stage(p)
     var safe_remaining := maxf(0.0, remaining)
+    # The timeline itself already labels the ROLL / BLEND / CUP chapters. Keep this edge readout short
+    # enough for the fixed TV status column so the measured distance can remain visible beside the ETA.
     if p < REPLAY_CUP_CHAPTER_START:
         var eta_blend := maxf(0.0, duration * (REPLAY_CUP_CHAPTER_START - p))
-        return "TRAIL · →BLEND %.1fs" % eta_blend
+        return "→BLEND %.1fs" % eta_blend
     if p < REPLAY_CUP_CHAPTER_FULL:
         var eta_cup := maxf(0.0, duration * (REPLAY_CUP_CHAPTER_FULL - p))
-        return "BLEND · →CUP %.1fs" % eta_cup
-    return "CUP · %.1fs" % safe_remaining
+        return "→CUP %.1fs" % eta_cup
+    return "CUP %.1fs" % safe_remaining
+
+func _replay_transition_readout(progress: float, remaining: float, duration: float) -> String:
+    var cue := _replay_transition_status(progress, remaining, duration)
+    if not is_finite(remaining) or not is_finite(duration) or duration <= REPLAY_TRANSITION_LABEL_MIN_DURATION:
+        return cue
+
+    # super._focus_update_replay_timeline() caches the measured replay trail length before this layer
+    # runs. Preserve that truth instead of replacing the whole status label with only a camera cue.
+    # Wording is presentation-only; the distance remains derived from the recorded actual trail.
+    var distance := _focus_replay_roll_distance(progress)
+    if distance.contains(REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX):
+        distance = distance.replace(REPLAY_TRANSITION_LEGACY_DISTANCE_SUFFIX, REPLAY_TRANSITION_DISTANCE_SUFFIX)
+    return "%s · %s" % [cue, distance]
 
 func _replay_transition_is_active(remaining: float, actual_sample_count: int) -> bool:
     return is_finite(remaining) and remaining > 0.0 and actual_sample_count >= 2
@@ -48,9 +65,13 @@ func _focus_update_replay_timeline() -> void:
         return
     # The parent timeline owns the idle/completed label. Do not replace it with a stale camera cue
     # after the replay clock reaches zero or when there is no valid trail to replay; otherwise the
-    # HUD can sit on "CUP · 0.0s" between shots. This is presentation-only and leaves replay timing,
-    # camera choreography, physics, GreenTerrain and GreenReadAdvisor untouched.
+    # HUD can sit on a dead camera status between shots. This is presentation-only and leaves replay
+    # timing, camera choreography, physics, GreenTerrain and GreenReadAdvisor untouched.
     if not _replay_transition_is_active(_v171_replay_remaining, _v171_replay_actual.size()):
         return
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
-    _focus_replay_stage_label.text = _replay_transition_status(progress, _v171_replay_remaining, _v171_replay_duration)
+    _focus_replay_stage_label.text = _replay_transition_readout(
+        progress,
+        _v171_replay_remaining,
+        _v171_replay_duration
+    )
