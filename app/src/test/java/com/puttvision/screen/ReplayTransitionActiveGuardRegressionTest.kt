@@ -13,22 +13,30 @@ class ReplayTransitionActiveGuardRegressionTest {
     }
 
     @Test
-    fun transitionCueOnlyOverridesTimelineDuringRealReplay() {
+    fun transitionCueOnlyOverridesTimelineDuringRenderableReplay() {
         val cue = asset("replay_transition_cues.gd")
+        val update = cue.substringAfter("func _focus_update_replay_timeline() -> void:")
 
-        assertTrue(cue.contains("func _replay_transition_is_active(remaining: float, actual_sample_count: int) -> bool:"))
-        assertTrue(cue.contains("is_finite(remaining) and remaining > 0.0 and actual_sample_count >= 2"))
-        assertTrue(cue.contains("if not _replay_transition_is_active(_v171_replay_remaining, _v171_replay_actual.size()):"))
-        assertTrue(cue.contains("return\n    var progress := _focus_replay_progress"))
+        assertTrue(cue.contains("func _replay_focus_is_active(remaining: float, duration: float, actual_sample_count: int) -> bool:"))
+        assertTrue(cue.contains("and duration > REPLAY_TRANSITION_LABEL_MIN_DURATION"))
+        assertTrue(cue.contains("and actual_sample_count >= 2"))
+        assertTrue(update.contains("if not _replay_focus_is_active("))
+        assertTrue(update.indexOf("if not _replay_focus_is_active(") < update.indexOf("_focus_replay_progress("))
+        assertTrue(update.contains("_focus_replay_stage_label.text = _replay_transition_readout(cue, parent_readout)"))
     }
 
     @Test
-    fun completedReplayDoesNotInstallSyntheticIdleCopy() {
+    fun completedReplayKeepsParentIdleCopyAndDistanceTruth() {
         val cue = asset("replay_transition_cues.gd")
+        val update = cue.substringAfter("func _focus_update_replay_timeline() -> void:")
 
         assertFalse(cue.contains("_focus_replay_stage_label.text = \"CUP · 0.0s\""))
-        assertTrue(cue.contains("The parent timeline owns the idle/completed label"))
-        assertTrue(cue.contains("leaves replay timing,"))
-        assertTrue(cue.contains("GreenTerrain and GreenReadAdvisor untouched"))
+        assertTrue(update.contains("super._focus_update_replay_timeline()"))
+        assertTrue(update.contains("var parent_readout := _focus_replay_stage_label.text"))
+        assertTrue(update.contains("if not _replay_focus_is_active("))
+        assertTrue(update.contains("):\n        return"))
+        assertTrue(cue.contains("leaves ownership of distance calculation"))
+        assertFalse(update.contains("GreenTerrain("))
+        assertFalse(update.contains("GreenReadAdvisor("))
     }
 }
