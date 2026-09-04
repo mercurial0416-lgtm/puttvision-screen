@@ -35,6 +35,18 @@ func _process(delta: float) -> void:
     var corner_tangent := probe._read_smoothed_tangent(corner, 0.5, corner_sample["tangent"] as Vector2)
     assert(corner_tangent.distance_to(Vector2(1, 1).normalized()) < 0.02)
 
+    # APEX should only compete for attention when the actual rendered recommendation visibly bends.
+    # Lateral offset magnitude alone is not enough: a near-straight path must stay quiet, while a
+    # pronounced break above the same display threshold remains eligible for the landmark.
+    var straightish := PackedVector2Array([Vector2(0, 0), Vector2(0.2, 5), Vector2(0, 10)])
+    var curved := PackedVector2Array([Vector2(0, 0), Vector2(2.0, 5), Vector2(0, 10)])
+    assert(not probe._read_curve_has_meaningful_apex(straightish))
+    assert(probe._read_curve_has_meaningful_apex(curved))
+
+    # Malformed points cannot accidentally manufacture a visible apex.
+    var malformed := PackedVector2Array([Vector2(0, 0), Vector2(NAN, 4), Vector2(0, 10)])
+    assert(not probe._read_curve_has_meaningful_apex(malformed))
+
     # A bent path must choose the tangent of the segment containing the requested traveled distance,
     # rather than inheriting a neighboring dense sample's direction.
     var bent := PackedVector2Array([Vector2(0, 0), Vector2(0, 1), Vector2(8, 1)])
