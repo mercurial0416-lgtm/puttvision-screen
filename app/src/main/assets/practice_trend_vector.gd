@@ -23,6 +23,7 @@ const PRACTICE_RECENT_RING_MAX_RADIUS := 22.0
 const PRACTICE_RECENT_RING_PADDING := 5.0
 const PRACTICE_RECENT_RING_SEGMENTS := 20
 const PRACTICE_RECENT_RING_EDGE_INSET := 1.0
+const PRACTICE_RECENT_RING_FIT_EPSILON := 0.01
 
 var _practice_trend_line: Line2D
 var _practice_trend_head: Line2D
@@ -136,12 +137,22 @@ func _practice_recent_ring_geometry(samples: Array[Vector2]) -> Dictionary:
     var max_distance := 0.0
     for index in range(from_index, samples.size()):
         max_distance = maxf(max_distance, _v179_plot_position(samples[index]).distance_to(center))
-    var desired_radius := clampf(max_distance + PRACTICE_RECENT_RING_PADDING, PRACTICE_RECENT_RING_MIN_RADIUS, PRACTICE_RECENT_RING_MAX_RADIUS)
+    var raw_radius := max_distance + PRACTICE_RECENT_RING_PADDING
+    var desired_radius := clampf(raw_radius, PRACTICE_RECENT_RING_MIN_RADIUS, PRACTICE_RECENT_RING_MAX_RADIUS)
     var edge_radius := minf(
         minf(center.x, V179_PLOT_SIZE.x - center.x),
         minf(center.y, V179_PLOT_SIZE.y - center.y)
     ) - PRACTICE_RECENT_RING_EDGE_INSET
-    var radius := minf(desired_radius, maxf(0.0, edge_radius))
+
+    # A consistency envelope is only useful if it truthfully contains the recent group. Shrinking
+    # it to fit the plot edge made edge-biased sessions look artificially tighter; capping a group
+    # larger than the visual budget did the same. Hide the envelope instead of presenting false
+    # precision. The samples/centroid remain visible through the existing bounded shot map.
+    if raw_radius > PRACTICE_RECENT_RING_MAX_RADIUS + PRACTICE_RECENT_RING_FIT_EPSILON:
+        return {"visible": false, "clipped": true}
+    if edge_radius + PRACTICE_RECENT_RING_FIT_EPSILON < desired_radius:
+        return {"visible": false, "clipped": true}
+    var radius := desired_radius
     if radius <= 0.0:
         return {"visible": false}
     var points := PackedVector2Array()
