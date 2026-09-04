@@ -15,8 +15,11 @@ const OVERVIEW_AIM_NORMAL_WIDTH := 140.0
 const OVERVIEW_AIM_OFF_MAP_WIDTH := 298.0
 const GREEN_READ_BREAK_DEADBAND_PCT := 0.05
 
+func _telemetry_value_is_valid(value: float) -> bool:
+    return is_finite(value)
+
 func _overview_aim_is_valid(offset_m: float) -> bool:
-    return is_finite(offset_m)
+    return _telemetry_value_is_valid(offset_m)
 
 func _overview_aim_text(offset_m: float) -> String:
     # Malformed presentation telemetry must never become a believable LEFT/RIGHT recommendation.
@@ -39,6 +42,10 @@ func _overview_aim_panel_text(offset_m: float) -> String:
     return text
 
 func _v183_break_text(side_pct: float) -> String:
+    # Presentation telemetry can momentarily be malformed while snapshots reconnect. Never turn that
+    # into a believable directional read; keep the overview neutral until a finite sample arrives.
+    if not _telemetry_value_is_valid(side_pct):
+        return "BREAK  --"
     # GREEN READ and GREEN OVERVIEW must agree on when a tiny sampled cross-slope is effectively
     # straight. One shared presentation deadband prevents contradictory read cards around zero.
     if abs(side_pct) < GREEN_READ_BREAK_DEADBAND_PCT:
@@ -49,11 +56,15 @@ func _live_curve_readout(cross_track_cm: float) -> String:
     # Keep live-roll direction language identical to the rest/overview surfaces. The inherited
     # meter used R/L while the same shot switched to RIGHT/LEFT at rest, which made one HUD card
     # change vocabulary mid-roll on a TV. This is presentation-only telemetry.
+    if not _telemetry_value_is_valid(cross_track_cm):
+        return "--"
     if absf(cross_track_cm) < 0.05:
         return "CENTER"
     return "%s %.1f cm" % [("RIGHT" if cross_track_cm > 0.0 else "LEFT"), absf(cross_track_cm)]
 
 func _live_peak_readout(peak_signed_cm: float) -> String:
+    if not _telemetry_value_is_valid(peak_signed_cm):
+        return "PEAK --"
     if absf(peak_signed_cm) < 0.05:
         return "PEAK CENTER"
     return "PEAK %s %.1f cm" % [("RIGHT" if peak_signed_cm > 0.0 else "LEFT"), absf(peak_signed_cm)]
@@ -139,11 +150,16 @@ func _v165_update_hud(side_pct: float, long_pct: float) -> void:
     if _v165_aim_label == null:
         return
 
-    var side_abs: float = abs(side_pct)
     # Reuse the overview formatter so both commercial read surfaces use the same advisor sign,
     # deadband and centimeter unit. This is presentation-only; the advisor value itself is untouched.
     var aim_text := _overview_aim_text(_v165_recommended_offset)
+    var slope_valid := _telemetry_value_is_valid(side_pct) and _telemetry_value_is_valid(long_pct)
+    if not slope_valid:
+        _v165_aim_label.text = "%s   |   READ --" % aim_text
+        _v165_detail_label.text = "BREAK --   |   LIVE FLOW | CONTOUR | CUP 0.125m"
+        return
 
+    var side_abs: float = abs(side_pct)
     var break_dir := "STRAIGHT"
     if side_abs >= GREEN_READ_BREAK_DEADBAND_PCT:
         # GreenSettings semantics: positive side slope means the right side is lower, so gravity
