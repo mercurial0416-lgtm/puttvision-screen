@@ -29,10 +29,12 @@ class CupEntryDirectionRegressionTest {
     fun widerDirectionalBadgeStillClampsInsideOverviewPanel() {
         val script = asset("cup_entry_read_gate.gd")
 
-        assertTrue(script.contains("const ENTRY_BADGE_WIDTH_PX := 132.0"))
-        assertTrue(script.contains("_badge.size = Vector2(ENTRY_BADGE_WIDTH_PX, 16.0)"))
+        assertTrue(script.contains("const ENTRY_BADGE_WIDTH_PX := 156.0"))
+        assertTrue(script.contains("const ENTRY_BADGE_HEIGHT_PX := 20.0"))
+        assertTrue(script.contains("_badge.size = Vector2(ENTRY_BADGE_WIDTH_PX, ENTRY_BADGE_HEIGHT_PX)"))
         assertTrue(script.contains("var badge_width := ENTRY_BADGE_WIDTH_PX"))
         assertTrue(script.contains("panel_size.x - badge_width - 4.0"))
+        assertTrue(script.contains("panel_size.y - ENTRY_BADGE_HEIGHT_PX - 4.0"))
     }
 
     @Test
