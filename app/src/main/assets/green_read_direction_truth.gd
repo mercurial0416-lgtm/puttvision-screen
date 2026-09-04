@@ -15,13 +15,21 @@ const OVERVIEW_AIM_NORMAL_WIDTH := 140.0
 const OVERVIEW_AIM_OFF_MAP_WIDTH := 298.0
 const GREEN_READ_BREAK_DEADBAND_PCT := 0.05
 
+func _overview_aim_is_valid(offset_m: float) -> bool:
+    return is_finite(offset_m)
+
 func _overview_aim_text(offset_m: float) -> String:
+    # Malformed presentation telemetry must never become a believable LEFT/RIGHT recommendation.
+    if not _overview_aim_is_valid(offset_m):
+        return "AIM --"
     if absf(offset_m) < OVERVIEW_AIM_DEADBAND_M:
         return "AIM CENTER"
     var direction := "RIGHT" if offset_m > 0.0 else "LEFT"
     return "AIM %s %d cm" % [direction, int(round(absf(offset_m) * 100.0))]
 
 func _overview_aim_is_off_map(offset_m: float) -> bool:
+    if not _overview_aim_is_valid(offset_m):
+        return false
     return absf(offset_m) > OVERVIEW_AIM_VISUAL_SPAN_M
 
 func _overview_aim_panel_text(offset_m: float) -> String:
@@ -53,8 +61,10 @@ func _live_peak_readout(peak_signed_cm: float) -> String:
 func _overview_aim_target_position(offset_m: float) -> Vector2:
     # Mirror the overview's existing horizontal recommendation scale, but expose the advisor's
     # target as an explicit address cue instead of forcing the player to infer it from curve shape.
-    var normalized := clampf(offset_m / OVERVIEW_AIM_VISUAL_SPAN_M, -1.0, 1.0)
     var center_x := V183_MAP_ORIGIN.x + V183_MAP_SIZE.x * 0.5
+    if not _overview_aim_is_valid(offset_m):
+        return Vector2(center_x, V183_MAP_ORIGIN.y + 18.0)
+    var normalized := clampf(offset_m / OVERVIEW_AIM_VISUAL_SPAN_M, -1.0, 1.0)
     return Vector2(center_x + normalized * OVERVIEW_AIM_VISUAL_SPAN_PX, V183_MAP_ORIGIN.y + 18.0)
 
 func _build_hud() -> void:
@@ -104,6 +114,7 @@ func _overview_refresh_aim_cue() -> void:
         return
     var active := _v183_panel.visible
     var offset := _v165_recommended_offset
+    var valid := _overview_aim_is_valid(offset)
     var off_map := _overview_aim_is_off_map(offset)
     _overview_aim_label.visible = active
     _overview_aim_label.text = _overview_aim_panel_text(offset)
@@ -114,7 +125,7 @@ func _overview_refresh_aim_cue() -> void:
     _overview_aim_label.size.x = OVERVIEW_AIM_OFF_MAP_WIDTH if off_map else OVERVIEW_AIM_NORMAL_WIDTH
     if _overview_legend_label != null:
         _overview_legend_label.visible = active and not off_map
-    _overview_aim_marker.visible = active and absf(offset) >= OVERVIEW_AIM_DEADBAND_M
+    _overview_aim_marker.visible = active and valid and absf(offset) >= OVERVIEW_AIM_DEADBAND_M
     _overview_aim_marker.position = _overview_aim_target_position(offset)
     # The map marker clamps at the visual edge. Rotate the established chevron outward when the
     # authoritative aim is beyond that edge so the clamped glyph cannot masquerade as an exact target.
