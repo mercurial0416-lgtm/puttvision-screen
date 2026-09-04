@@ -25,11 +25,13 @@ class PracticeRecentRingEdgeTruthRegressionTest {
     }
 
     @Test
-    fun productionOverrideDelegatesToTheTruthGuardInsteadOfDrawingClippedArcs() {
+    fun productionOverrideAppliesTheSameTruthGuardInsteadOfDrawingClippedArcs() {
         val production = asset("practice_ring_edge_truth.gd")
 
-        assertTrue(production.contains("return super._practice_recent_ring_geometry(samples)"))
-        assertFalse(production.contains("clampf("))
+        assertTrue(production.contains("var raw_radius := max_distance + PRACTICE_RECENT_RING_PADDING"))
+        assertTrue(production.contains("if raw_radius > PRACTICE_RECENT_RING_MAX_RADIUS + PRACTICE_RECENT_RING_FIT_EPSILON:"))
+        assertTrue(production.contains("if edge_radius + PRACTICE_RECENT_RING_FIT_EPSILON < desired_radius:"))
+        assertTrue(production.contains("var radius := desired_radius"))
         assertFalse(production.contains("visible_arc"))
         assertFalse(production.contains("best_len"))
     }
