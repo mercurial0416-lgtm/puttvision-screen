@@ -18,12 +18,21 @@ const READ_CORRIDOR_HALF_WIDTH := 6.5
 const READ_START_GATE_FRACTION := 0.24
 const READ_START_GATE_HALF_WIDTH := 8.5
 
+func _read_overlay_telemetry_valid(offset_m: float) -> bool:
+    # These cues are presentation geometry only. A reconnect can briefly publish malformed advisor
+    # telemetry; never let that produce NaN points, stray polygons, or believable directional cues.
+    return is_finite(offset_m)
+
 func _read_apex_descriptor(offset_m: float) -> String:
+    if not _read_overlay_telemetry_valid(offset_m):
+        return "APEX  --"
     if absf(offset_m) < 0.03:
         return "APEX  CENTER"
     return "APEX  %s %.0f cm" % [("RIGHT" if offset_m > 0.0 else "LEFT"), absf(offset_m) * 100.0]
 
 func _read_apex_point(offset_m: float) -> Vector2:
+    if not _read_overlay_telemetry_valid(offset_m):
+        return V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
     var curve := _v183_path(offset_m)
     if curve.is_empty():
         return V183_MAP_ORIGIN + V183_MAP_SIZE * 0.5
@@ -77,6 +86,9 @@ func _read_corridor_polygon(left: PackedVector2Array, right: PackedVector2Array)
     return polygon
 
 func _read_start_gate_geometry(offset_m: float) -> Dictionary:
+    if not _read_overlay_telemetry_valid(offset_m):
+        var neutral := V183_MAP_ORIGIN + V183_MAP_SIZE * Vector2(0.5, 0.72)
+        return {"center": neutral, "left": neutral, "right": neutral, "tangent": Vector2.UP}
     var curve := _v183_path(offset_m)
     if curve.size() < 3:
         var fallback := V183_MAP_ORIGIN + V183_MAP_SIZE * Vector2(0.5, 0.72)
@@ -169,11 +181,15 @@ func _build_hud() -> void:
 func _refresh_read_corridor() -> void:
     if _read_corridor_fill == null or _v183_panel == null:
         return
-    var visible := _v183_panel.visible
+    var valid := _read_overlay_telemetry_valid(_v165_recommended_offset)
+    var visible := _v183_panel.visible and valid
     _read_corridor_fill.visible = visible
     _read_corridor_left.visible = visible
     _read_corridor_right.visible = visible
     if not visible:
+        _read_corridor_fill.polygon = PackedVector2Array()
+        _read_corridor_left.points = PackedVector2Array()
+        _read_corridor_right.points = PackedVector2Array()
         return
     var curve := _v183_path(_v165_recommended_offset)
     var edges := _read_corridor_edges(curve)
@@ -186,11 +202,14 @@ func _refresh_read_corridor() -> void:
 func _refresh_read_start_gate() -> void:
     if _read_start_gate == null or _read_start_gate_center == null or _read_start_gate_badge == null or _v183_panel == null:
         return
-    var visible := _v183_panel.visible
+    var valid := _read_overlay_telemetry_valid(_v165_recommended_offset)
+    var visible := _v183_panel.visible and valid
     _read_start_gate.visible = visible
     _read_start_gate_center.visible = visible
     _read_start_gate_badge.visible = visible
     if not visible:
+        _read_start_gate.points = PackedVector2Array()
+        _read_start_gate_center.points = PackedVector2Array()
         return
 
     var geometry := _read_start_gate_geometry(_v165_recommended_offset)
@@ -207,11 +226,14 @@ func _refresh_read_apex() -> void:
     if _read_apex_ring == null or _v183_panel == null:
         return
 
-    var visible := _v183_panel.visible and absf(_v165_recommended_offset) >= 0.015
+    var valid := _read_overlay_telemetry_valid(_v165_recommended_offset)
+    var visible := _v183_panel.visible and valid and absf(_v165_recommended_offset) >= 0.015
     _read_apex_ring.visible = visible
     _read_apex_leader.visible = visible
     _read_apex_badge.visible = visible
     if not visible:
+        _read_apex_ring.points = PackedVector2Array()
+        _read_apex_leader.points = PackedVector2Array()
         return
 
     var apex := _read_apex_point(_v165_recommended_offset)
