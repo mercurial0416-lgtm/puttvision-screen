@@ -116,11 +116,24 @@ func _v188_point(line_delta_cm: float, pace_delta_cm: float) -> Vector2:
         normalized = normalized.normalized()
     return V188_CENTER + normalized * V188_RADIUS
 
+func _v188_metrics_are_finite(line_delta_cm: float, pace_delta_cm: float) -> bool:
+    return is_finite(line_delta_cm) and is_finite(pace_delta_cm)
+
+func _v188_snapshot_has_metrics(s: Dictionary) -> bool:
+    return s.has("readLineDeltaCm") and s.has("paceDeltaCm") and _v188_metrics_are_finite(
+        float(s.get("readLineDeltaCm", 0.0)),
+        float(s.get("paceDeltaCm", 0.0))
+    )
+
 func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) -> void:
     if _v188_panel == null:
         return
-    _v188_panel.visible = visible
-    if not visible:
+    # Missing/malformed presentation telemetry must never collapse to (0, 0), which visually reads
+    # as a perfect make. Hide the map until both measured deltas are finite again. This is strictly
+    # a presentation truth guard and does not modify the authoritative shot/read values.
+    var truthful_visible := visible and _v188_metrics_are_finite(line_delta_cm, pace_delta_cm)
+    _v188_panel.visible = truthful_visible
+    if not truthful_visible:
         if _v188_overflow_tick != null:
             _v188_overflow_tick.visible = false
         if _v188_overflow_label != null:
@@ -159,9 +172,10 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     super._v177_update_debrief(s, force_visible)
     if _v188_panel == null:
         return
-    var show: bool = _v177_panel != null and _v177_panel.visible
+    var metrics_valid := _v188_snapshot_has_metrics(s)
+    var show: bool = _v177_panel != null and _v177_panel.visible and metrics_valid
     _v188_refresh(
-        float(s.get("readLineDeltaCm", 0.0)),
-        float(s.get("paceDeltaCm", 0.0)),
+        float(s.get("readLineDeltaCm", 0.0)) if metrics_valid else 0.0,
+        float(s.get("paceDeltaCm", 0.0)) if metrics_valid else 0.0,
         show
     )
