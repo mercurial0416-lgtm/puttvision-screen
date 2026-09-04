@@ -17,8 +17,8 @@ class PresentationNumericTruthRegressionTest {
         val guard = asset("presentation_telemetry_guard.gd")
         assertTrue(guard.contains("func _presentation_is_finite_number(value: Variant) -> bool:"))
         assertTrue(guard.contains("value_type == TYPE_INT or value_type == TYPE_FLOAT"))
-        assertTrue(guard.contains("_presentation_is_finite_number(s.get(\"readLineDeltaCm\"))"))
-        assertTrue(guard.contains("_presentation_is_finite_number(s.get(\"paceDeltaCm\"))"))
+        assertTrue(guard.contains("const PRESENTATION_PRACTICE_METRIC_KEYS := [\"readLineDeltaCm\", \"paceDeltaCm\"]"))
+        assertTrue(guard.contains("for key in PRESENTATION_PRACTICE_METRIC_KEYS:"))
         assertTrue(guard.contains("not _presentation_is_finite_number(s.get(key))"))
         assertFalse(guard.contains("not is_finite(float(s.get(key, 0.0)))"))
     }

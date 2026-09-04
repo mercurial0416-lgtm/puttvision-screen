@@ -4,6 +4,7 @@ extends "res://replay_stop_distance_clarity.gd"
 # remain authoritative; this only prevents malformed bridge values from reaching Godot presentation.
 const PRESENTATION_SPATIAL_KEYS := ["ballX", "ballY", "holeDistance"]
 const PRESENTATION_BALL_KEYS := ["ballX", "ballY"]
+const PRESENTATION_PRACTICE_METRIC_KEYS := ["readLineDeltaCm", "paceDeltaCm"]
 
 var _presentation_last_spatial := {}
 
@@ -12,9 +13,13 @@ func _presentation_is_finite_number(value: Variant) -> bool:
     return (value_type == TYPE_INT or value_type == TYPE_FLOAT) and is_finite(float(value))
 
 func _presentation_metrics_are_finite(s: Dictionary) -> bool:
-    if not s.has("readLineDeltaCm") or not s.has("paceDeltaCm"):
-        return true
-    return _presentation_is_finite_number(s.get("readLineDeltaCm")) and _presentation_is_finite_number(s.get("paceDeltaCm"))
+    # Partial telemetry is allowed while the sibling value is still arriving, but every metric that
+    # is present must already be a finite numeric measurement. Otherwise a downstream float() can
+    # turn a malformed lone scalar into a plausible zero and falsely present a perfect read/pace.
+    for key in PRESENTATION_PRACTICE_METRIC_KEYS:
+        if s.has(key) and not _presentation_is_finite_number(s.get(key)):
+            return false
+    return true
 
 func _presentation_safe_snapshot(s: Dictionary) -> Dictionary:
     var safe := s
