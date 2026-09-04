@@ -51,16 +51,20 @@ func _process(delta: float) -> void:
         get_tree().quit(62)
         return
 
-    # The handoff layer used to replace the parent's measured roll-distance readout completely.
-    # Seed the cached presentation-only trail distance and lock in the combined commercial readout.
-    probe._focus_replay_roll_total_m = 1.8
-    if probe._replay_transition_readout(0.50, 1.40, 2.80) != "→BLEND 0.6s · 0.9m TO STOP":
-        push_error("Replay transition must preserve measured roll distance")
+    # Parent replay timeline owns measured trail distance. The transition layer must preserve that
+    # already-rendered truth without importing or reaching into downstream cache state.
+    if probe._replay_transition_readout("→BLEND 0.6s", "TRAIL · 0.9m REST") != "→BLEND 0.6s · 0.9m TO STOP":
+        push_error("Replay transition must preserve parent roll distance")
         probe.free()
         get_tree().quit(62)
         return
-    if probe._replay_transition_readout(0.78, NAN, 2.80) != "CAM BLEND":
-        push_error("Replay invalid timing must not fabricate distance")
+    if probe._replay_transition_readout("→CUP 0.3s", "CAM BLEND · 0.9m TO STOP") != "→CUP 0.3s · 0.9m TO STOP":
+        push_error("Replay transition clear-distance suffix regression")
+        probe.free()
+        get_tree().quit(62)
+        return
+    if probe._replay_transition_readout("CAM BLEND", "CAM BLEND") != "CAM BLEND":
+        push_error("Replay transition must not fabricate distance")
         probe.free()
         get_tree().quit(62)
         return
