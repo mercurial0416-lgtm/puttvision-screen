@@ -12,16 +12,6 @@ const RETICLE_COLOR := Color(0.82, 1.00, 0.90, 0.96)
 func _ready() -> void:
     call_deferred("_attach_reticle")
 
-func _segment(name: String, points: PackedVector2Array) -> Line2D:
-    var line := Line2D.new()
-    line.name = name
-    line.width = RETICLE_WIDTH_PX
-    line.default_color = RETICLE_COLOR
-    line.points = points
-    line.z_index = 1
-    line.mouse_filter = Control.MOUSE_FILTER_IGNORE if line is Control else 0
-    return line
-
 func _attach_reticle() -> void:
     var target := get_tree().current_scene.find_child("ShotMapCorrectionTarget", true, false)
     if target == null or not (target is Line2D):
