@@ -16,11 +16,11 @@ class ShotDebriefFinalLeaveTruthRegressionTest {
     fun malformedFinalLeaveCannotCoerceToAFalseZeroDistance() {
         val source = asset("v177_shot_debrief.gd")
 
-        assertTrue(source.contains("func _v177_leave_text(value: Variant) -> String:"))
+        assertTrue(source.contains("func _v177_leave_text(value: Variant, holed: bool = false) -> String:"))
         assertTrue(source.contains("value_type != TYPE_INT and value_type != TYPE_FLOAT"))
         assertTrue(source.contains("if not is_finite(leave_m):"))
         assertTrue(source.contains("return \"--\""))
-        assertTrue(source.contains("_v177_leave_value.text = _v177_leave_text(s.get(\"distanceToCup\", null))"))
+        assertTrue(source.contains("_v177_leave_value.text = _v177_leave_text(s.get(\"distanceToCup\", null), holed)"))
         assertFalse(source.contains("var leave_m: float = max(0.0, float(s.get(\"distanceToCup\", 0.0)))"))
     }
 
