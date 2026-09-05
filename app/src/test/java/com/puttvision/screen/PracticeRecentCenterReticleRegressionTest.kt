@@ -13,9 +13,11 @@ class PracticeRecentCenterReticleRegressionTest {
     }
 
     @Test
-    fun productionPresentationChainIncludesRecentCenterReticle() {
+    fun productionPresentationChainIncludesRecentCenterReticleAndReadout() {
         val root = asset("live_origin_truth_guard.gd")
-        assertTrue(root.startsWith("extends \"res://practice_recent_center_reticle.gd\""))
+        val readout = asset("practice_recent_center_readout.gd")
+        assertTrue(root.startsWith("extends \"res://practice_recent_center_readout.gd\""))
+        assertTrue(readout.startsWith("extends \"res://practice_recent_center_reticle.gd\""))
     }
 
     @Test
@@ -35,6 +37,38 @@ class PracticeRecentCenterReticleRegressionTest {
         assertTrue(source.contains("\"PracticeRecentCenterBias\""))
         assertTrue(source.contains("_v179_plot.add_child(_practice_recent_center_bias)"))
         assertTrue(source.contains("_practice_recent_center_bias.points = geometry[\"bias\"]"))
+    }
+
+    @Test
+    fun numericReadoutUsesTheSameFocusScopedCentroid() {
+        val source = asset("practice_recent_center_readout.gd")
+        assertTrue(source.contains("_practice_recent_center_geometry(_practice_recent_center_focus_samples())"))
+        assertTrue(source.contains("geometry.get(\"sample\", null)"))
+        assertTrue(source.contains("RECENT 3 CENTER"))
+        assertTrue(source.contains("RIGHT"))
+        assertTrue(source.contains("LEFT"))
+        assertTrue(source.contains("LONG"))
+        assertTrue(source.contains("SHORT"))
+    }
+
+    @Test
+    fun numericReadoutFailsClosedUntilThreeComparableFiniteRepsExist() {
+        val source = asset("practice_recent_center_readout.gd")
+        assertTrue(source.contains("var visible := bool(geometry.get(\"visible\", false))"))
+        assertTrue(source.contains("_practice_recent_center_readout.visible = visible"))
+        assertTrue(source.contains("if not is_finite(sample.x) or not is_finite(sample.y):"))
+        assertTrue(source.contains("DATA UNAVAILABLE"))
+        assertFalse(source.contains("clampf(sample.x"))
+        assertFalse(source.contains("clampf(sample.y"))
+    }
+
+    @Test
+    fun numericReadoutUsesReservedRightRailInsteadOfCoveringShotPlot() {
+        val source = asset("practice_recent_center_readout.gd")
+        assertTrue(source.contains("_v179_panel,"))
+        assertTrue(source.contains("Vector2(344, 124)"))
+        assertTrue(source.contains("Vector2(186, 38)"))
+        assertFalse(source.contains("_v179_plot.add_child(_practice_recent_center_readout)"))
     }
 
     @Test
@@ -68,18 +102,24 @@ class PracticeRecentCenterReticleRegressionTest {
     }
 
     @Test
-    fun markerRefreshesWithExistingDispersionRefreshWithoutProcessLoop() {
+    fun markerAndReadoutRefreshWithExistingDispersionRefreshWithoutProcessLoop() {
         val source = asset("practice_recent_center_reticle.gd")
+        val readout = asset("practice_recent_center_readout.gd")
         assertTrue(source.contains("func _v179_refresh() -> void:"))
         assertTrue(source.contains("super._v179_refresh()"))
         assertTrue(source.contains("_practice_recent_center_refresh()"))
+        assertTrue(readout.contains("func _v179_refresh() -> void:"))
+        assertTrue(readout.contains("super._v179_refresh()"))
+        assertTrue(readout.contains("_practice_recent_center_readout_refresh()"))
         assertFalse(source.contains("func _process("))
+        assertFalse(readout.contains("func _process("))
         assertFalse(source.contains("find_child("))
+        assertFalse(readout.contains("find_child("))
     }
 
     @Test
-    fun reticleRemainsPresentationOnly() {
-        val source = asset("practice_recent_center_reticle.gd")
+    fun reticleAndReadoutRemainPresentationOnly() {
+        val source = asset("practice_recent_center_reticle.gd") + asset("practice_recent_center_readout.gd")
         assertFalse(source.contains("GreenTerrain.set"))
         assertFalse(source.contains("GreenReadAdvisor.set"))
         assertFalse(source.contains("ballVelocity ="))
