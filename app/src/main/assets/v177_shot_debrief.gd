@@ -48,6 +48,17 @@ func _v177_outcome_title(holed: bool, lip_out: bool) -> String:
         return "SHOT DEBRIEF  •  LIP OUT"
     return "SHOT DEBRIEF"
 
+func _v177_metric_is_valid(value: Variant) -> bool:
+    var value_type := typeof(value)
+    if value_type != TYPE_INT and value_type != TYPE_FLOAT:
+        return false
+    return is_finite(float(value))
+
+func _v177_read_metrics_valid(s: Dictionary) -> bool:
+    return s.has("readLineDeltaCm") and s.has("paceDeltaCm") \
+        and _v177_metric_is_valid(s.get("readLineDeltaCm")) \
+        and _v177_metric_is_valid(s.get("paceDeltaCm"))
+
 func _v177_line_text(delta_cm: float) -> String:
     if abs(delta_cm) < 1.5:
         return "ON LINE"
@@ -71,20 +82,28 @@ func _v177_leave_text(value: Variant, holed: bool = false) -> String:
         return "--"
     return "%.2f m" % max(0.0, leave_m)
 
-func _v177_coach(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_out: bool) -> String:
+func _v177_next_rep(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_out: bool) -> String:
+    # Turn the measured miss into one immediately repeatable action. The correction is purely
+    # presentational: readLineDeltaCm remains the authoritative actual-vs-advisor delta and pace is
+    # kept qualitative so this layer never invents stroke physics or a new target model.
     if holed:
-        return "CENTERED READ  •  PACE CONTROLLED"
+        return "HOLD LINE  •  HOLD PACE"
     if lip_out and abs(line_delta_cm) <= 6.0:
-        return "LINE WAS LIVE  •  SOFTEN THE ENTRY PACE"
-    var line_bad: bool = abs(line_delta_cm) >= 9.0
-    var pace_bad: bool = abs(pace_delta_cm) >= 22.0
-    if line_bad and pace_bad:
-        return "RESET START LINE + PACE"
-    if line_bad:
-        return "MATCH THE GOLD READ LINE"
-    if pace_bad:
-        return "KEEP THE LINE  •  RECALIBRATE PACE"
-    return "GOOD WINDOW  •  REPEAT THE STROKE"
+        return "HOLD LIVE LINE  •  SOFTEN ENTRY PACE"
+
+    var line_cue := "HOLD LINE"
+    if abs(line_delta_cm) >= 1.5:
+        line_cue = "START %d cm %s" % [
+            int(round(abs(line_delta_cm))),
+            ("LEFT" if line_delta_cm > 0.0 else "RIGHT")
+        ]
+
+    var pace_cue := "HOLD PACE"
+    if pace_delta_cm >= 8.0:
+        pace_cue = "PACE SOFTER"
+    elif pace_delta_cm <= -8.0:
+        pace_cue = "PACE FIRMER"
+    return "%s  •  %s" % [line_cue, pace_cue]
 
 func _v177_severity_color(delta_cm: float, good_cm: float, reset_cm: float) -> Color:
     # Match the coaching thresholds so the bars communicate severity before text is read.
@@ -175,8 +194,8 @@ func _build_hud() -> void:
     divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(divider)
 
-    _v174_text(_v177_panel, Vector2(22, 170), Vector2(120, 18), "COACH", 11, Color(0.58, 0.67, 0.64, 0.92))
-    _v177_coach_label = _v174_text(_v177_panel, Vector2(22, 191), Vector2(504, 44), "GOOD WINDOW  •  REPEAT THE STROKE", 15, Color("#f4dda0"))
+    _v174_text(_v177_panel, Vector2(22, 170), Vector2(120, 18), "NEXT REP", 11, Color(0.58, 0.67, 0.64, 0.92))
+    _v177_coach_label = _v174_text(_v177_panel, Vector2(22, 191), Vector2(504, 44), "HOLD LINE  •  HOLD PACE", 15, Color("#f4dda0"))
 
 func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     if _v177_panel == null:
@@ -188,7 +207,7 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
 
     var actual_variant: Variant = s.get("actualTrail", [])
     var has_shot: bool = actual_variant is Array and (actual_variant as Array).size() >= 2
-    var has_read_metrics: bool = s.has("readLineDeltaCm") and s.has("paceDeltaCm")
+    var has_read_metrics: bool = _v177_read_metrics_valid(s)
     var running: bool = bool(s.get("running", false))
     var holed: bool = bool(s.get("holed", false))
     var lip_out: bool = bool(s.get("lipOut", false))
@@ -202,8 +221,12 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     if _v177_preview_force_visible and not force_visible and not has_read_metrics:
         return
 
-    var line_delta: float = float(s.get("readLineDeltaCm", 0.0))
-    var pace_delta: float = float(s.get("paceDeltaCm", 0.0))
+    # The panel only reaches this path with finite numeric metrics. This keeps reconnect garbage from
+    # being cast to 0.0 and masquerading as a perfect read or from tripping the presentation script.
+    if not has_read_metrics:
+        return
+    var line_delta: float = float(s.get("readLineDeltaCm"))
+    var pace_delta: float = float(s.get("paceDeltaCm"))
     var score: int = _v177_metric_score(line_delta, pace_delta, holed)
 
     _v177_title_label.text = _v177_outcome_title(holed, lip_out)
@@ -211,7 +234,7 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     _v177_line_value.text = _v177_line_text(line_delta)
     _v177_pace_value.text = _v177_pace_text(pace_delta)
     _v177_leave_value.text = _v177_leave_text(s.get("distanceToCup", null), holed)
-    _v177_coach_label.text = _v177_coach(line_delta, pace_delta, holed, lip_out)
+    _v177_coach_label.text = _v177_next_rep(line_delta, pace_delta, holed, lip_out)
 
     var line_bar := _v177_bar_geometry(line_delta, 30.0)
     _v177_line_bar.position.x = line_bar.x
