@@ -36,11 +36,15 @@ class LiveOriginTruthGuardRegressionTest {
     fun productionSceneUsesGuardAndPhysicsRemainOutsidePresentationLayer() {
         val scene = asset("v143_tv.tscn")
         val script = asset("live_origin_truth_guard.gd")
+        val recentCenter = asset("practice_recent_center_reticle.gd")
         assertTrue(scene.contains("res://live_origin_truth_guard.gd"))
-        assertTrue(script.contains("extends \"res://presentation_telemetry_guard.gd\""))
-        assertFalse(script.contains("GreenTerrain("))
-        assertFalse(script.contains("GreenReadAdvisor("))
-        assertFalse(script.contains("V135RigidBallPhysics("))
-        assertFalse(script.contains("V137RollingResistance("))
+        assertTrue(script.contains("extends \"res://practice_recent_center_reticle.gd\""))
+        assertTrue(recentCenter.contains("extends \"res://presentation_telemetry_guard.gd\""))
+        listOf(script, recentCenter).forEach { presentation ->
+            assertFalse(presentation.contains("GreenTerrain("))
+            assertFalse(presentation.contains("GreenReadAdvisor("))
+            assertFalse(presentation.contains("V135RigidBallPhysics("))
+            assertFalse(presentation.contains("V137RollingResistance("))
+        }
     }
 }
