@@ -13,19 +13,24 @@ class ShotMapTargetReticleRegressionTest {
     }
 
     @Test
-    fun landingTargetGetsCenteredTvReadableReticleWithoutPolling() {
+    fun landingTargetGetsCenteredTvReadableFocusTreatmentWithoutPolling() {
         val script = asset("shot_map_target_reticle.gd")
         assertTrue(script.contains("find_child(\"ShotMapCorrectionTarget\", true, false)"))
+        assertTrue(script.contains("TargetFocusDisc"))
+        assertTrue(script.contains("Polygon2D.new()"))
+        assertTrue(script.contains("FOCUS_DISC_SEGMENTS := 16"))
         assertTrue(script.contains("TargetReticleHorizontal"))
         assertTrue(script.contains("TargetReticleVertical"))
+        assertTrue(script.contains("target.add_child(focus_disc)"))
         assertTrue(script.contains("target.add_child(horizontal)"))
         assertTrue(script.contains("target.add_child(vertical)"))
         assertFalse(script.contains("func _process("))
         assertFalse(script.contains("Timer.new()"))
+        assertFalse(script.contains("Tween"))
     }
 
     @Test
-    fun reticleRemainsPresentationOnlyAndProductionWired() {
+    fun focusTreatmentRemainsPresentationOnlyAndProductionWired() {
         val script = asset("shot_map_target_reticle.gd")
         val scene = asset("v143_tv.tscn")
         assertTrue(scene.contains("res://shot_map_target_reticle.gd"))
