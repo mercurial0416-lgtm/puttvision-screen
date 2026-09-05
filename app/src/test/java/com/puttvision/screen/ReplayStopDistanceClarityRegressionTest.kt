@@ -22,13 +22,18 @@ class ReplayStopDistanceClarityRegressionTest {
     }
 
     @Test
-    fun productionPresentationRoutesThroughClarityLayerWithoutTouchingPhysics() {
+    fun productionPresentationRoutesThroughClarityAndOverlayWithoutTouchingPhysics() {
         val guard = asset("presentation_telemetry_guard.gd")
         val clarity = asset("replay_stop_distance_clarity.gd")
+        val overlayBridge = asset("replay_production_overlay_bridge.gd")
         assertTrue(guard.startsWith("extends \"res://replay_stop_distance_clarity.gd\""))
-        assertTrue(clarity.contains("extends \"res://replay_timeline_camera_truth.gd\""))
+        assertTrue(clarity.contains("extends \"res://replay_production_overlay_bridge.gd\""))
+        assertTrue(overlayBridge.contains("extends \"res://replay_timeline_camera_truth.gd\""))
         assertFalse(clarity.contains("GreenTerrain.set"))
         assertFalse(clarity.contains("GreenReadAdvisor.set"))
         assertFalse(clarity.contains("bridge."))
+        assertFalse(overlayBridge.contains("GreenTerrain.set"))
+        assertFalse(overlayBridge.contains("GreenReadAdvisor.set"))
+        assertFalse(overlayBridge.contains("ballVelocity ="))
     }
 }
