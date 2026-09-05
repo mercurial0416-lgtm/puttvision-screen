@@ -1,4 +1,4 @@
-extends "res://practice_recent_center_readout.gd"
+extends "res://practice_recent_center_reticle.gd"
 
 # Presentation-only launch-origin guard. Native Android physics, GreenTerrain and GreenReadAdvisor
 # remain authoritative. A malformed or omitted start coordinate must never rotate a valid live roll
