@@ -33,9 +33,13 @@ func _v191_copy(streak: int, axis: String) -> String:
         return "PRESSURE LADDER  ·  %s  ·  %s  ·  HOLD IT" % [axis, progress]
 
     var correction := _v191_reset_coaching(axis)
-    if _v192_trailing_failures(axis) >= V192_RESET_FAILURES:
-        return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  -0.5 m EASIER" % [axis, correction]
-    return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  0/3" % [axis, correction]
+    # The ladder already tracks consecutive misses to decide when an easier distance should be
+    # suggested. Surface that real progress instead of showing 0/3 after the first and second miss.
+    # Clamp only the displayed count so an extended miss run remains truthful without noisy 4/3 copy.
+    var failures := mini(_v192_trailing_failures(axis), V192_RESET_FAILURES)
+    if failures >= V192_RESET_FAILURES:
+        return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d  ·  -0.5 m EASIER" % [axis, correction, failures, V192_RESET_FAILURES]
+    return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d TO EASIER" % [axis, correction, failures, V192_RESET_FAILURES]
 
 func _v191_refresh() -> void:
     super._v191_refresh()
