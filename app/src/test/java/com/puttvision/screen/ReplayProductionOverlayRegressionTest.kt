@@ -35,21 +35,27 @@ class ReplayProductionOverlayRegressionTest {
 
         assertTrue(bridge.contains("ReplayRollBlendHandoff"))
         assertTrue(bridge.contains("ReplayBlendCupHandoff"))
-        assertTrue(bridge.contains("func _production_replay_update_handoff_markers(track_width: float, chapters: Dictionary) -> void:"))
+        assertTrue(bridge.contains("func _production_replay_update_handoff_markers(track_width: float, chapters: Dictionary, timing_valid: bool) -> void:"))
         assertTrue(bridge.contains("var roll_blend_x := clampf(roll.x + roll.y, 0.0, track_width)"))
         assertTrue(bridge.contains("var blend_cup_x := clampf(cup.x, 0.0, track_width)"))
-        assertTrue(bridge.contains("_production_replay_update_handoff_markers(track_width, chapters)"))
+        assertTrue(bridge.contains("_production_replay_update_handoff_markers(track_width, chapters, timing_valid)"))
         assertFalse(bridge.contains("GreenTerrain.set"))
         assertFalse(bridge.contains("GreenReadAdvisor.set"))
         assertFalse(bridge.contains("ballVelocity ="))
     }
 
     @Test
-    fun replayHandoffMarkersFailClosedOnNarrowForwardMobileTracks() {
+    fun replayHandoffMarkersFailClosedOnInvalidTimingNarrowTracksAndDegenerateChapters() {
         val bridge = asset("replay_production_overlay_bridge.gd")
 
         assertTrue(bridge.contains("const REPLAY_HANDOFF_MARKER_MIN_TRACK_WIDTH := 132.0"))
-        assertTrue(bridge.contains("var visible := is_finite(track_width) and track_width >= REPLAY_HANDOFF_MARKER_MIN_TRACK_WIDTH"))
+        assertTrue(bridge.contains("var chapter_geometry_valid := ("))
+        assertTrue(bridge.contains("and roll.y > 0.0"))
+        assertTrue(bridge.contains("and blend.y > 0.0"))
+        assertTrue(bridge.contains("and cup.y > 0.0"))
+        assertTrue(bridge.contains("timing_valid\n        and is_finite(track_width)"))
+        assertTrue(bridge.contains("and track_width >= REPLAY_HANDOFF_MARKER_MIN_TRACK_WIDTH"))
+        assertTrue(bridge.contains("and chapter_geometry_valid"))
         assertTrue(bridge.contains("_replay_roll_blend_handoff.visible = visible"))
         assertTrue(bridge.contains("_replay_blend_cup_handoff.visible = visible"))
         assertTrue(bridge.contains("if not visible:\n        return"))
