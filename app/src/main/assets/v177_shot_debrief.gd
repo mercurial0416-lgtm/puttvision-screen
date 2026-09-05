@@ -89,7 +89,7 @@ func _v177_coach(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_ou
 func _v177_severity_color(delta_cm: float, good_cm: float, reset_cm: float) -> Color:
     # Match the coaching thresholds so the bars communicate severity before text is read.
     # This is presentation-only and runs only while the post-shot debrief is visible.
-    var magnitude := abs(delta_cm)
+    var magnitude: float = abs(delta_cm)
     if magnitude < good_cm:
         return V177_GOOD_COLOR
     if magnitude < reset_cm:
