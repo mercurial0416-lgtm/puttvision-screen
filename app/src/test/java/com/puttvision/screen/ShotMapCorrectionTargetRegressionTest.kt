@@ -13,39 +13,39 @@ class ShotMapCorrectionTargetRegressionTest {
     }
 
     @Test
-    fun actionableInMapMissGetsCorrectionEndpointLandingTarget() {
-        val script = asset("shot_map_correction_target.gd")
-        assertTrue(script.contains("root.find_child(\"ShotMapCorrectionVector\", true, false)"))
-        assertTrue(script.contains("_target_ring.position = _correction_vector.points[_correction_vector.points.size() - 1]"))
-        assertTrue(script.contains("_target_ring.visible = true"))
+    fun actionableInMapMissGetsEventDrivenCorrectionLandingTarget() {
+        val script = asset("v197_shot_map_make_window.gd")
+        assertTrue(script.contains("ShotMapCorrectionTarget"))
+        assertTrue(script.contains("_v197_correction_target_marker.position = target"))
+        assertTrue(script.contains("_v197_correction_target_marker.visible = correction_visible and not offscale"))
+        assertTrue(script.contains("var correction_visible := start.distance_to(target) >= 2.0"))
     }
 
     @Test
     fun successfulAndOffScaleCuesDoNotShowMisleadingTarget() {
-        val script = asset("shot_map_correction_target.gd")
-        assertTrue(script.contains("if _correction_vector == null or not _correction_vector.visible:"))
-        assertTrue(script.contains("if _overflow_tick != null and _overflow_tick.visible:"))
-        assertTrue(script.contains("_target_ring.visible = false"))
+        val script = asset("v197_shot_map_make_window.gd")
+        assertTrue(script.contains("func _v197_hide_correction() -> void:"))
+        assertTrue(script.contains("_v197_correction_target_marker.visible = false"))
+        assertTrue(script.contains("var offscale := _v188_normalized_miss(line_delta_cm, pace_delta_cm).length() > 1.0"))
     }
 
     @Test
-    fun targetCueStaysPresentationOnlyAndMobileBounded() {
-        val script = asset("shot_map_correction_target.gd")
-        assertTrue(script.contains("const TARGET_SEGMENTS := 14"))
-        assertTrue(script.contains("const REFRESH_INTERVAL_S := 0.10"))
+    fun targetCueStaysPresentationOnlyWithoutPolling() {
+        val script = asset("v197_shot_map_make_window.gd")
+        assertFalse(script.contains("Timer.new()"))
         assertFalse(script.contains("func _process("))
-        assertFalse(script.contains("GreenTerrain.set"))
-        assertFalse(script.contains("GreenReadAdvisor.set"))
+        assertFalse(script.contains("GreenTerrain" + ".set"))
+        assertFalse(script.contains("GreenReadAdvisor" + ".set"))
         assertFalse(script.contains("readLineDeltaCm ="))
         assertFalse(script.contains("paceDeltaCm ="))
         assertFalse(script.contains("ballVelocity"))
     }
 
     @Test
-    fun productionTvScenePreservesRootAndLoadsHelper() {
+    fun productionTvSceneNoLongerLoadsPollingHelper() {
         val scene = asset("v143_tv.tscn")
         assertTrue(scene.contains("res://replay_timeline_camera_truth.gd"))
-        assertTrue(scene.contains("res://shot_map_correction_target.gd"))
-        assertTrue(scene.contains("ShotMapCorrectionTargetHelper"))
+        assertFalse(scene.contains("res://shot_map_correction_target.gd"))
+        assertFalse(scene.contains("ShotMapCorrectionTargetHelper"))
     }
 }
