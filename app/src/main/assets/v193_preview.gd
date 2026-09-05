@@ -14,6 +14,7 @@ func _process(delta: float) -> void:
         return
 
     _v179_preview_force_visible = true
+    _v191_focus_start_index = 0
     _v179_samples = [
         Vector2(18.0, 40.0),
         Vector2(4.0, 8.0),
@@ -34,6 +35,7 @@ func _process(delta: float) -> void:
         get_tree().quit(24)
         return
 
+    _v191_focus_start_index = 0
     _v179_samples = [Vector2(3.0, 4.0)]
     _v188_refresh(3.0, 4.0, true)
     if _v193_ghost.visible or _v193_ghost_label.visible:
@@ -41,6 +43,33 @@ func _process(delta: float) -> void:
         get_tree().quit(24)
         return
 
+    # A rep from a retired focus objective can be numerically closer to center but is not a valid
+    # benchmark for the active cue. Only samples captured after the current focus window began may
+    # become the ghost, while the newest rep still belongs to the solid SHOT MAP dot.
+    _v179_samples = [
+        Vector2(1.0, 1.0),
+        Vector2(6.0, 12.0),
+        Vector2(13.0, 30.0)
+    ]
+    _v191_focus_start_index = 1
+    _v188_refresh(13.0, 30.0, true)
+    expected = _v188_point(6.0, 12.0)
+    if not _v193_ghost.visible or _v193_ghost.position.distance_to(expected) > 0.2:
+        push_error("Best-prior ghost leaked a retired focus sample")
+        get_tree().quit(24)
+        return
+
+    # Immediately after a focus switch there is no prior rep against the new objective yet. Do not
+    # resurrect an old-objective sample merely to keep the ghost visible.
+    _v179_samples = [Vector2(1.0, 1.0), Vector2(8.0, 16.0)]
+    _v191_focus_start_index = 1
+    _v188_refresh(8.0, 16.0, true)
+    if _v193_ghost.visible or _v193_ghost_label.visible:
+        push_error("Best-prior ghost appeared before a comparable focus rep existed")
+        get_tree().quit(24)
+        return
+
+    _v191_focus_start_index = 0
     _v179_samples = [
         Vector2(18.0, 40.0),
         Vector2(4.0, 8.0),
