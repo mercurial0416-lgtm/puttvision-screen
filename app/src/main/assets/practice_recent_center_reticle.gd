@@ -12,11 +12,14 @@ const PRACTICE_RECENT_CENTER_GROUP_SIZE := 3
 const PRACTICE_RECENT_CENTER_HALF_SPAN := 7.0
 const PRACTICE_RECENT_CENTER_RING_RADIUS := 3.5
 const PRACTICE_RECENT_CENTER_RING_SEGMENTS := 12
+const PRACTICE_RECENT_CENTER_LINE_DEADBAND_CM := 2.5
+const PRACTICE_RECENT_CENTER_PACE_DEADBAND_CM := 8.0
 
 var _practice_recent_center_bias: Line2D
 var _practice_recent_center_h: Line2D
 var _practice_recent_center_v: Line2D
 var _practice_recent_center_ring: Line2D
+var _practice_recent_center_readout: Label
 
 func _practice_recent_center_geometry(samples: Array[Vector2]) -> Dictionary:
     if samples.size() < PRACTICE_RECENT_CENTER_MIN_SAMPLES:
@@ -82,6 +85,32 @@ func _practice_recent_center_line(name: String, width: float, color := Color(0.9
     line.visible = false
     return line
 
+func _practice_recent_center_axis_text(value_cm: float, negative: String, positive: String, deadband_cm: float, hold_text: String) -> String:
+    if not is_finite(value_cm):
+        return "--"
+    if absf(value_cm) <= deadband_cm:
+        return hold_text
+    return "%s %.0fcm" % [positive if value_cm > 0.0 else negative, absf(value_cm)]
+
+func _practice_recent_center_readout_text(sample: Vector2) -> String:
+    if not is_finite(sample.x) or not is_finite(sample.y):
+        return "RECENT 3 · DATA UNAVAILABLE"
+    var line_text := _practice_recent_center_axis_text(
+        sample.x,
+        "LEFT",
+        "RIGHT",
+        PRACTICE_RECENT_CENTER_LINE_DEADBAND_CM,
+        "LINE OK"
+    )
+    var pace_text := _practice_recent_center_axis_text(
+        sample.y,
+        "SHORT",
+        "LONG",
+        PRACTICE_RECENT_CENTER_PACE_DEADBAND_CM,
+        "PACE OK"
+    )
+    return "RECENT 3 · %s · %s" % [line_text, pace_text]
+
 func _build_hud() -> void:
     super._build_hud()
     if _v179_plot == null:
@@ -101,6 +130,23 @@ func _build_hud() -> void:
     _v179_plot.add_child(_practice_recent_center_h)
     _v179_plot.add_child(_practice_recent_center_v)
     _v179_plot.add_child(_practice_recent_center_ring)
+
+    if _v179_panel != null:
+        # Use the narrow strip between the header row and the plot. The right rail below is occupied by
+        # practice focus/target controls, so putting another label there creates unreadable overlap.
+        _practice_recent_center_readout = _v174_text(
+            _v179_panel,
+            Vector2(24, 38),
+            Vector2(300, 12),
+            "RECENT 3 · --",
+            8,
+            Color(0.76, 0.91, 0.86, 0.94),
+            HORIZONTAL_ALIGNMENT_LEFT
+        )
+        _practice_recent_center_readout.name = "PracticeRecentCenterReadout"
+        _practice_recent_center_readout.visible = false
+        _practice_recent_center_readout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
     _practice_recent_center_refresh()
 
 func _practice_recent_center_refresh() -> void:
@@ -112,12 +158,23 @@ func _practice_recent_center_refresh() -> void:
     _practice_recent_center_h.visible = visible
     _practice_recent_center_v.visible = visible
     _practice_recent_center_ring.visible = visible
+    if _practice_recent_center_readout != null:
+        _practice_recent_center_readout.visible = visible
     if not visible:
+        if _practice_recent_center_readout != null:
+            _practice_recent_center_readout.text = "RECENT 3 · --"
         return
     _practice_recent_center_bias.points = geometry["bias"]
     _practice_recent_center_h.points = geometry["horizontal"]
     _practice_recent_center_v.points = geometry["vertical"]
     _practice_recent_center_ring.points = geometry["ring"]
+    if _practice_recent_center_readout != null:
+        var sample_variant: Variant = geometry.get("sample", null)
+        if sample_variant is Vector2:
+            _practice_recent_center_readout.text = _practice_recent_center_readout_text(sample_variant as Vector2)
+        else:
+            _practice_recent_center_readout.visible = false
+            _practice_recent_center_readout.text = "RECENT 3 · --"
 
 func _v179_refresh() -> void:
     super._v179_refresh()
