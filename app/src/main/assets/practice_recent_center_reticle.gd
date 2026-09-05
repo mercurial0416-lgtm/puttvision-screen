@@ -35,10 +35,11 @@ func _practice_recent_center_geometry(samples: Array[Vector2]) -> Dictionary:
         total += sample
 
     var centroid := total / float(count)
-    # Do not clamp an off-map centroid onto the edge: that would present a false center. Individual
-    # clipped misses remain visible through the established edge-truth treatment.
+    # Do not clamp an off-map centroid onto the edge: that would present a false center. Preserve the
+    # real sample for the textual coaching rail so a large miss remains actionable instead of making
+    # the coach disappear exactly when the player needs it most.
     if absf(centroid.x) > V179_LINE_SCALE_CM or absf(centroid.y) > V179_PACE_SCALE_CM:
-        return {"visible": false, "clipped": true}
+        return {"visible": false, "clipped": true, "sample": centroid}
 
     var target_center := _v179_plot_position(Vector2.ZERO)
     var center := _v179_plot_position(centroid)
@@ -153,28 +154,30 @@ func _practice_recent_center_refresh() -> void:
     if _practice_recent_center_bias == null or _practice_recent_center_h == null or _practice_recent_center_v == null or _practice_recent_center_ring == null:
         return
     var geometry := _practice_recent_center_geometry(_practice_recent_center_focus_samples())
-    var visible := bool(geometry.get("visible", false))
-    _practice_recent_center_bias.visible = visible
-    _practice_recent_center_h.visible = visible
-    _practice_recent_center_v.visible = visible
-    _practice_recent_center_ring.visible = visible
+    var marker_visible := bool(geometry.get("visible", false))
+    _practice_recent_center_bias.visible = marker_visible
+    _practice_recent_center_h.visible = marker_visible
+    _practice_recent_center_v.visible = marker_visible
+    _practice_recent_center_ring.visible = marker_visible
+
+    var sample_variant: Variant = geometry.get("sample", null)
+    var readout_visible := sample_variant is Vector2
     if _practice_recent_center_readout != null:
-        _practice_recent_center_readout.visible = visible
-    if not visible:
-        if _practice_recent_center_readout != null:
+        _practice_recent_center_readout.visible = readout_visible
+        if readout_visible:
+            var readout := _practice_recent_center_readout_text(sample_variant as Vector2)
+            if bool(geometry.get("clipped", false)):
+                readout += " · OFF MAP"
+            _practice_recent_center_readout.text = readout
+        else:
             _practice_recent_center_readout.text = "RECENT 3 · --"
+
+    if not marker_visible:
         return
     _practice_recent_center_bias.points = geometry["bias"]
     _practice_recent_center_h.points = geometry["horizontal"]
     _practice_recent_center_v.points = geometry["vertical"]
     _practice_recent_center_ring.points = geometry["ring"]
-    if _practice_recent_center_readout != null:
-        var sample_variant: Variant = geometry.get("sample", null)
-        if sample_variant is Vector2:
-            _practice_recent_center_readout.text = _practice_recent_center_readout_text(sample_variant as Vector2)
-        else:
-            _practice_recent_center_readout.visible = false
-            _practice_recent_center_readout.text = "RECENT 3 · --"
 
 func _v179_refresh() -> void:
     super._v179_refresh()

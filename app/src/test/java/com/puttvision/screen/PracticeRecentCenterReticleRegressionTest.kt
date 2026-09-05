@@ -49,12 +49,14 @@ class PracticeRecentCenterReticleRegressionTest {
     }
 
     @Test
-    fun numericReadoutFailsClosedWithTheReticle() {
+    fun malformedTelemetryFailsClosedWhileValidOffMapReadoutStaysTruthful() {
         val source = asset("practice_recent_center_reticle.gd")
-        assertTrue(source.contains("var visible := bool(geometry.get(\"visible\", false))"))
-        assertTrue(source.contains("_practice_recent_center_readout.visible = visible"))
+        assertTrue(source.contains("var marker_visible := bool(geometry.get(\"visible\", false))"))
+        assertTrue(source.contains("var readout_visible := sample_variant is Vector2"))
+        assertTrue(source.contains("_practice_recent_center_readout.visible = readout_visible"))
         assertTrue(source.contains("if not is_finite(sample.x) or not is_finite(sample.y):"))
         assertTrue(source.contains("DATA UNAVAILABLE"))
+        assertTrue(source.contains("readout += \" · OFF MAP\""))
         assertFalse(source.contains("clampf(sample.x"))
         assertFalse(source.contains("clampf(sample.y"))
     }
@@ -88,12 +90,14 @@ class PracticeRecentCenterReticleRegressionTest {
     }
 
     @Test
-    fun malformedAndOffMapCentersFailClosedInsteadOfClamping() {
+    fun malformedCenterFailsClosedAndOffMapCenterIsNotClamped() {
         val source = asset("practice_recent_center_reticle.gd")
         assertTrue(source.contains("not is_finite(sample.x) or not is_finite(sample.y)"))
         assertTrue(source.contains("absf(centroid.x) > V179_LINE_SCALE_CM"))
         assertTrue(source.contains("absf(centroid.y) > V179_PACE_SCALE_CM"))
-        assertTrue(source.contains("return {\"visible\": false, \"clipped\": true}"))
+        assertTrue(source.contains("return {\"visible\": false, \"clipped\": true, \"sample\": centroid}"))
+        assertFalse(source.contains("clampf(centroid.x"))
+        assertFalse(source.contains("clampf(centroid.y"))
     }
 
     @Test
