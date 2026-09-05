@@ -23,6 +23,7 @@ const READ_START_GATE_DEADBAND_M := 0.015
 const READ_START_GATE_BADGE_WIDTH := 120.0
 const READ_CUP_ENTRY_LENGTH := 20.0
 const READ_CUP_ENTRY_WING := 5.0
+const READ_CUP_ENTRY_MIN_SEGMENT_PX := 1.0
 
 func _read_overlay_telemetry_valid(offset_m: float) -> bool:
     # These cues are presentation geometry only. A reconnect can briefly publish malformed advisor
@@ -123,15 +124,27 @@ func _read_start_gate_geometry(offset_m: float) -> Dictionary:
     }
 
 func _read_cup_entry_geometry(offset_m: float) -> Dictionary:
-    # Consume only the final segment of the already-authoritative display path. This completes the
-    # visual read sequence (START -> APEX -> CUP) without inventing a second aim or physics model.
+    # Consume only the tail of the already-authoritative display path. Some render paths can clamp
+    # multiple final samples onto the cup; walking backward to the nearest distinct sample preserves
+    # the same authoritative arrival direction instead of dropping the cue on a zero-length endpoint.
     if not _read_overlay_telemetry_valid(offset_m):
         return {"valid": false}
     var curve := _v183_path(offset_m)
     if curve.size() < 2:
         return {"valid": false}
     var cup: Vector2 = curve[curve.size() - 1]
-    var incoming := (cup - curve[curve.size() - 2]).normalized()
+    if not is_finite(cup.x) or not is_finite(cup.y):
+        return {"valid": false}
+    var incoming := Vector2.ZERO
+    var minimum_segment_squared := READ_CUP_ENTRY_MIN_SEGMENT_PX * READ_CUP_ENTRY_MIN_SEGMENT_PX
+    for i in range(curve.size() - 2, -1, -1):
+        var prior: Vector2 = curve[i]
+        if not is_finite(prior.x) or not is_finite(prior.y):
+            return {"valid": false}
+        var delta := cup - prior
+        if delta.length_squared() >= minimum_segment_squared:
+            incoming = delta.normalized()
+            break
     if incoming.length_squared() < 0.5:
         return {"valid": false}
     var normal := Vector2(-incoming.y, incoming.x)
