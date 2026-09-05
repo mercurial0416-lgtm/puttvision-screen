@@ -15,12 +15,15 @@ const REPLAY_CHAPTER_TEXT_CHAR_WIDTH := 6.4
 const REPLAY_CHAPTER_TEXT_PADDING := 8.0
 const REPLAY_CHAPTER_INACTIVE_ALPHA := 0.52
 const REPLAY_CHAPTER_ACTIVE_ALPHA := 1.0
+const REPLAY_CHAPTER_PROGRESS_HEIGHT := 2.0
+const REPLAY_CHAPTER_PROGRESS_MIN_WIDTH := 8.0
 
 var _replay_playhead: ColorRect
 var _replay_finish_zone: ColorRect
 var _replay_roll_label: Label
 var _replay_blend_label: Label
 var _replay_cup_label: Label
+var _replay_chapter_progress: ColorRect
 
 func _build_hud() -> void:
     super._build_hud()
@@ -47,6 +50,13 @@ func _build_hud() -> void:
     _replay_finish_zone.z_index = 1
     _focus_replay_track.add_child(_replay_finish_zone)
 
+    _replay_chapter_progress = ColorRect.new()
+    _replay_chapter_progress.name = "ReplayChapterProgress"
+    _replay_chapter_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _replay_chapter_progress.color = Color(0.96, 0.99, 1.0, 0.92)
+    _replay_chapter_progress.z_index = 3
+    _focus_replay_track.add_child(_replay_chapter_progress)
+
     _replay_playhead = ColorRect.new()
     _replay_playhead.name = "ReplayTimelinePlayhead"
     _replay_playhead.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -54,7 +64,7 @@ func _build_hud() -> void:
     _replay_playhead.pivot_offset = _replay_playhead.size * 0.5
     _replay_playhead.rotation_degrees = REPLAY_PLAYHEAD_ROTATION_DEG
     _replay_playhead.color = Color(0.96, 0.99, 1.0, REPLAY_PLAYHEAD_ALPHA)
-    _replay_playhead.z_index = 3
+    _replay_playhead.z_index = 4
     _focus_replay_track.add_child(_replay_playhead)
 
     # Commercial replay systems benefit from chapter context, not just a moving playhead. These
@@ -131,6 +141,39 @@ func _replay_active_chapter(progress: float) -> int:
         return 1
     return 2
 
+func _replay_chapter_local_progress(progress: float) -> float:
+    if not is_finite(progress):
+        return -1.0
+    var safe_progress := clampf(progress, 0.0, 1.0)
+    var chapter_start := 0.0
+    var chapter_end := REPLAY_CUP_CHAPTER_START
+    if safe_progress >= REPLAY_CUP_CHAPTER_FULL:
+        chapter_start = REPLAY_CUP_CHAPTER_FULL
+        chapter_end = 1.0
+    elif safe_progress >= REPLAY_CUP_CHAPTER_START:
+        chapter_start = REPLAY_CUP_CHAPTER_START
+        chapter_end = REPLAY_CUP_CHAPTER_FULL
+    var chapter_span := chapter_end - chapter_start
+    if not is_finite(chapter_span) or chapter_span <= 0.0:
+        return -1.0
+    return clampf((safe_progress - chapter_start) / chapter_span, 0.0, 1.0)
+
+func _replay_update_chapter_progress(progress: float, chapters: Dictionary) -> void:
+    if _replay_chapter_progress == null:
+        return
+    var active := _replay_active_chapter(progress)
+    var local_progress := _replay_chapter_local_progress(progress)
+    if active < 0 or local_progress < 0.0:
+        _replay_chapter_progress.visible = false
+        return
+    var keys := ["roll", "blend", "cup"]
+    var segment: Vector2 = chapters.get(keys[active], Vector2.ZERO)
+    _replay_chapter_progress.visible = segment.y >= REPLAY_CHAPTER_PROGRESS_MIN_WIDTH
+    if not _replay_chapter_progress.visible:
+        return
+    _replay_chapter_progress.position = Vector2(segment.x, REPLAY_TIMELINE_TRACK_HEIGHT - REPLAY_CHAPTER_PROGRESS_HEIGHT)
+    _replay_chapter_progress.size = Vector2(segment.y * local_progress, REPLAY_CHAPTER_PROGRESS_HEIGHT)
+
 func _replay_apply_chapter_emphasis(progress: float) -> void:
     var active := _replay_active_chapter(progress)
     var labels: Array[Label] = [_replay_roll_label, _replay_blend_label, _replay_cup_label]
@@ -187,6 +230,7 @@ func _focus_update_replay_timeline() -> void:
     _replay_place_chapter_label(_replay_blend_label, chapters["blend"], "BLEND")
     _replay_place_chapter_label(_replay_cup_label, chapters["cup"], "CUP")
     _replay_apply_chapter_emphasis(progress)
+    _replay_update_chapter_progress(progress, chapters)
 
     if _replay_playhead == null:
         return
