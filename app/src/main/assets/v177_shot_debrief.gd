@@ -82,6 +82,22 @@ func _v177_leave_text(value: Variant, holed: bool = false) -> String:
         return "--"
     return "%.2f m" % max(0.0, leave_m)
 
+func _v177_coach(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_out: bool) -> String:
+    # Keep the established coaching helper contract intact for renderer/self-test compatibility.
+    if holed:
+        return "CENTERED READ  •  PACE CONTROLLED"
+    if lip_out and abs(line_delta_cm) <= 6.0:
+        return "LINE WAS LIVE  •  SOFTEN THE ENTRY PACE"
+    var line_bad: bool = abs(line_delta_cm) >= 9.0
+    var pace_bad: bool = abs(pace_delta_cm) >= 22.0
+    if line_bad and pace_bad:
+        return "RESET START LINE + PACE"
+    if line_bad:
+        return "MATCH THE GOLD READ LINE"
+    if pace_bad:
+        return "KEEP THE LINE  •  RECALIBRATE PACE"
+    return "GOOD WINDOW  •  REPEAT THE STROKE"
+
 func _v177_next_rep(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_out: bool) -> String:
     # Turn the measured miss into one immediately repeatable action. The correction is purely
     # presentational: readLineDeltaCm remains the authoritative actual-vs-advisor delta and pace is
