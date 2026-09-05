@@ -14,7 +14,8 @@ func _process(delta: float) -> void:
         return
 
     # Pressure-ladder copy must remain self-contained at TV distance: the active objective and
-    # progress counter travel with every success state rather than relying on player memory.
+    # progress counter travel with every success state rather than relying on player memory. v192
+    # owns the final production copy, so completion also preserves its next-distance instruction.
     if _v191_copy(1, "LINE") != "PRESSURE LADDER  ·  LINE  ·  1/3  ·  HOLD IT":
         push_error("Pressure ladder LINE progress copy regression")
         get_tree().quit(24)
@@ -23,7 +24,7 @@ func _process(delta: float) -> void:
         push_error("Pressure ladder PACE progress copy regression")
         get_tree().quit(24)
         return
-    if _v191_copy(3, "BOTH") != "PRESSURE LADDER  ·  BOTH  ·  3/3  ·  READY":
+    if _v191_copy(3, "BOTH") != "PRESSURE LADDER  ·  BOTH  ·  3/3  ·  READY  ·  +0.5 m NEXT":
         push_error("Pressure ladder completion copy regression")
         get_tree().quit(24)
         return
