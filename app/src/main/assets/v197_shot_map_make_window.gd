@@ -12,6 +12,7 @@ var _v197_axis_long: Label
 var _v197_axis_short: Label
 var _v197_correction_line: Line2D
 var _v197_correction_tip: Line2D
+var _v197_correction_target_marker: Line2D
 
 const V197_LINE_WINDOW_CM := 9.0
 const V197_PACE_WINDOW_CM := 22.0
@@ -33,6 +34,8 @@ const V197_CORRECTION_MARGIN_CM := 1.0
 const V197_WINDOW_EPSILON_CM := 0.01
 const V197_CORRECTION_CUE_MAX_PX := 18.0
 const V197_DIRECTION_EPSILON := 0.0001
+const V197_CORRECTION_TARGET_RADIUS_PX := 5.0
+const V197_CORRECTION_TARGET_SEGMENTS := 14
 
 func _v197_window_radius_px() -> Vector2:
     return Vector2(
@@ -59,8 +62,6 @@ func _v197_axis_label(text: String, name: String, position: Vector2, size: Vecto
     return label
 
 func _v197_promote_shot_indicators() -> void:
-    # Semantic axis labels and the correction guide are context. The actual shot result must always
-    # win the draw order, especially at cardinal edges where an off-scale arrow occupies the same pixels.
     if _v188_vector != null:
         _v188_vector.z_index = V197_RESULT_Z_INDEX
     if _v188_overflow_tick != null:
@@ -71,17 +72,12 @@ func _v197_promote_shot_indicators() -> void:
         _v188_overflow_label.z_index = V197_RESULT_Z_INDEX
 
 func _v197_set_idle_legend() -> void:
-    # Hidden shot-map state means there is no current result. Clear the prior shot verdict and its
-    # emphasis so a stale FIX/MAKE result cannot flash when the panel is shown before fresh telemetry.
     if _v196_center_legend == null:
         return
     _v196_center_legend.text = V197_IDLE_LEGEND
     _v196_center_legend.add_theme_color_override("font_color", V197_IDLE_LEGEND_COLOR)
 
 func _v197_correction_target(line_delta_cm: float, pace_delta_cm: float) -> Vector2:
-    # Project a miss to a small safety margin inside the same strict success window used by the
-    # debrief. The 1 cm inset avoids coaching a player to sit exactly on a fail boundary. This is a
-    # presentation target only; it never changes aim, read, scoring, or physics.
     return Vector2(
         clampf(line_delta_cm, -V197_LINE_WINDOW_CM + V197_CORRECTION_MARGIN_CM, V197_LINE_WINDOW_CM - V197_CORRECTION_MARGIN_CM),
         clampf(pace_delta_cm, -V197_PACE_WINDOW_CM + V197_CORRECTION_MARGIN_CM, V197_PACE_WINDOW_CM - V197_CORRECTION_MARGIN_CM)
@@ -98,8 +94,6 @@ func _v197_correction_text(line_delta_cm: float, pace_delta_cm: float) -> String
     return "FIX  %s" % "  ·  ".join(parts)
 
 func _v197_correction_screen_delta(line_delta_cm: float, pace_delta_cm: float, target_delta: Vector2) -> Vector2:
-    # Convert the raw coaching correction into SHOT MAP screen-space before either endpoint is
-    # radially clipped. This preserves the correction's semantic left/right and long/short direction.
     return Vector2(
         (target_delta.x - line_delta_cm) / V188_LINE_WINDOW_CM,
         -(target_delta.y - pace_delta_cm) / V188_PACE_WINDOW_CM
@@ -123,10 +117,6 @@ func _v197_correction_visual_target(line_delta_cm: float, pace_delta_cm: float, 
     if truthful_delta.length_squared() <= V197_DIRECTION_EPSILON:
         return mapped_target
 
-    # Off-scale result points are radially clipped to the circle. Connecting that clipped point to
-    # the independently mapped make-window target can reverse one visual component (for example the
-    # label says FIX L while the arrow points right). In that case draw a short, bounded cue in the
-    # actual correction direction. Clamp the cue to the inward chord so it remains inside the map.
     var direction := truthful_delta.normalized()
     var from_center := start - V188_CENTER
     var inward_chord_px := maxf(0.0, -2.0 * from_center.dot(direction))
@@ -143,6 +133,21 @@ func _v197_correction_arrow(start: Vector2, target: Vector2) -> PackedVector2Arr
     var normal := Vector2(-tangent.y, tangent.x)
     var base := target - tangent * 6.0
     return PackedVector2Array([base + normal * 3.2, target, base - normal * 3.2])
+
+func _v197_correction_target_points() -> PackedVector2Array:
+    var out := PackedVector2Array()
+    for i in range(V197_CORRECTION_TARGET_SEGMENTS + 1):
+        var angle := TAU * float(i) / float(V197_CORRECTION_TARGET_SEGMENTS)
+        out.append(Vector2(cos(angle), sin(angle)) * V197_CORRECTION_TARGET_RADIUS_PX)
+    return out
+
+func _v197_hide_correction() -> void:
+    if _v197_correction_line != null:
+        _v197_correction_line.visible = false
+    if _v197_correction_tip != null:
+        _v197_correction_tip.visible = false
+    if _v197_correction_target_marker != null:
+        _v197_correction_target_marker.visible = false
 
 func _build_hud() -> void:
     super._build_hud()
@@ -181,8 +186,15 @@ func _build_hud() -> void:
     _v197_correction_tip.z_index = V197_CORRECTION_Z_INDEX
     _v188_panel.add_child(_v197_correction_tip)
 
-    # Compact semantic edge labels make LEFT/RIGHT and LONG/SHORT readable from TV distance without
-    # changing the underlying deltas, scale, make window, or any authoritative coaching input.
+    _v197_correction_target_marker = Line2D.new()
+    _v197_correction_target_marker.name = "ShotMapCorrectionTarget"
+    _v197_correction_target_marker.width = 2.0
+    _v197_correction_target_marker.default_color = Color(0.58, 1.00, 0.78, 0.96)
+    _v197_correction_target_marker.points = _v197_correction_target_points()
+    _v197_correction_target_marker.visible = false
+    _v197_correction_target_marker.z_index = V197_CORRECTION_Z_INDEX
+    _v188_panel.add_child(_v197_correction_target_marker)
+
     _v197_axis_long = _v197_axis_label("LONG", "ShotMapAxisLong", Vector2(58, 47), Vector2(36, 10))
     _v197_axis_short = _v197_axis_label("SHORT", "ShotMapAxisShort", Vector2(55, 116), Vector2(42, 10))
     _v197_axis_left = _v197_axis_label("LEFT", "ShotMapAxisLeft", Vector2(34, 80), Vector2(34, 10), HORIZONTAL_ALIGNMENT_LEFT)
@@ -198,26 +210,18 @@ func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) ->
     if not visible:
         _v197_make_fill.color = V197_IDLE_FILL
         _v197_make_outline.default_color = V197_IDLE_OUTLINE
-        if _v197_correction_line != null:
-            _v197_correction_line.visible = false
-        if _v197_correction_tip != null:
-            _v197_correction_tip.visible = false
+        _v197_hide_correction()
         _v197_set_idle_legend()
         return
 
     var made := _v197_inside_make_window(line_delta_cm, pace_delta_cm)
-    # The inherited map predates the strict debrief boundary and colors the marker with <=.
-    # Re-apply the authoritative presentation verdict here so marker, box, and coach cannot disagree.
     if _v188_dot != null:
         _v188_dot.color = V197_MARKER_MAKE if made else V197_MARKER_MISS
     _v197_make_fill.color = V197_MAKE_FILL if made else V197_MISS_FILL
     _v197_make_outline.default_color = V197_MAKE_OUTLINE if made else V197_MISS_OUTLINE
 
     if made:
-        if _v197_correction_line != null:
-            _v197_correction_line.visible = false
-        if _v197_correction_tip != null:
-            _v197_correction_tip.visible = false
+        _v197_hide_correction()
         if _v196_center_legend != null:
             _v196_center_legend.text = "IN MAKE WINDOW"
             _v196_center_legend.add_theme_color_override("font_color", Color(0.58, 1.00, 0.76, 0.98))
@@ -226,12 +230,17 @@ func _v188_refresh(line_delta_cm: float, pace_delta_cm: float, visible: bool) ->
     var target_delta := _v197_correction_target(line_delta_cm, pace_delta_cm)
     var start := _v188_point(line_delta_cm, pace_delta_cm)
     var target := _v197_correction_visual_target(line_delta_cm, pace_delta_cm, target_delta, start)
+    var offscale := _v188_normalized_miss(line_delta_cm, pace_delta_cm).length() > 1.0
+    var correction_visible := start.distance_to(target) >= 2.0
     if _v197_correction_line != null:
         _v197_correction_line.points = PackedVector2Array([start, target])
-        _v197_correction_line.visible = start.distance_to(target) >= 2.0
+        _v197_correction_line.visible = correction_visible
     if _v197_correction_tip != null:
         _v197_correction_tip.points = _v197_correction_arrow(start, target)
-        _v197_correction_tip.visible = not _v197_correction_tip.points.is_empty()
+        _v197_correction_tip.visible = correction_visible and not _v197_correction_tip.points.is_empty()
+    if _v197_correction_target_marker != null:
+        _v197_correction_target_marker.position = target
+        _v197_correction_target_marker.visible = correction_visible and not offscale
     if _v196_center_legend != null:
         _v196_center_legend.text = _v197_correction_text(line_delta_cm, pace_delta_cm)
         _v196_center_legend.add_theme_color_override("font_color", V197_CORRECTION_COLOR)
