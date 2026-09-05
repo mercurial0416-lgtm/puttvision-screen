@@ -19,14 +19,23 @@ class ShotMapTargetReticleRegressionTest {
         assertTrue(script.contains("TargetFocusDisc"))
         assertTrue(script.contains("Polygon2D.new()"))
         assertTrue(script.contains("FOCUS_DISC_SEGMENTS := 16"))
-        assertTrue(script.contains("TargetReticleHorizontal"))
-        assertTrue(script.contains("TargetReticleVertical"))
         assertTrue(script.contains("target.add_child(focus_disc)"))
-        assertTrue(script.contains("target.add_child(horizontal)"))
-        assertTrue(script.contains("target.add_child(vertical)"))
         assertFalse(script.contains("func _process("))
         assertFalse(script.contains("Timer.new()"))
         assertFalse(script.contains("Tween"))
+    }
+
+    @Test
+    fun reticleKeepsARealCenterGapInsteadOfConnectingAcrossIt() {
+        val script = asset("shot_map_target_reticle.gd")
+        assertTrue(script.contains("TargetReticleLeft"))
+        assertTrue(script.contains("TargetReticleRight"))
+        assertTrue(script.contains("TargetReticleTop"))
+        assertTrue(script.contains("TargetReticleBottom"))
+        assertTrue(script.contains("func _add_reticle_segment("))
+        assertTrue(script.contains("PackedVector2Array([start, finish])"))
+        assertFalse(script.contains("Vector2(-RETICLE_GAP_PX, 0.0),\n        Vector2(RETICLE_GAP_PX, 0.0)"))
+        assertFalse(script.contains("Vector2(0.0, -RETICLE_GAP_PX),\n        Vector2(0.0, RETICLE_GAP_PX)"))
     }
 
     @Test
