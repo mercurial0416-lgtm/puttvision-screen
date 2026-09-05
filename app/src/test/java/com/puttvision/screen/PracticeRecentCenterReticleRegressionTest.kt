@@ -28,6 +28,27 @@ class PracticeRecentCenterReticleRegressionTest {
     }
 
     @Test
+    fun reticleIsScopedToActiveProspectivePracticeFocus() {
+        val source = asset("practice_recent_center_reticle.gd")
+        val streak = asset("v191_practice_streak.gd")
+        assertTrue(source.contains("func _practice_recent_center_focus_samples() -> Array[Vector2]:"))
+        assertTrue(source.contains("clampi(_v191_focus_start_index, 0, _v179_samples.size())"))
+        assertTrue(source.contains("for index in range(first_eligible, _v179_samples.size()):"))
+        assertTrue(source.contains("_practice_recent_center_geometry(_practice_recent_center_focus_samples())"))
+        assertTrue(streak.contains("_v191_focus_start_index = sample_count"))
+        assertTrue(streak.contains("_v191_focus_start_index -= 1"))
+    }
+
+    @Test
+    fun focusSwitchNeedsThreeComparableRepsBeforeCenterReturns() {
+        val source = asset("practice_recent_center_reticle.gd")
+        assertTrue(source.contains("if samples.size() < PRACTICE_RECENT_CENTER_MIN_SAMPLES:"))
+        assertTrue(source.contains("return {\"visible\": false}"))
+        assertTrue(source.contains("const PRACTICE_RECENT_CENTER_MIN_SAMPLES := 3"))
+        assertFalse(source.contains("clampi(first_eligible -"))
+    }
+
+    @Test
     fun malformedAndOffMapCentersFailClosedInsteadOfClamping() {
         val source = asset("practice_recent_center_reticle.gd")
         assertTrue(source.contains("not is_finite(sample.x) or not is_finite(sample.y)"))
