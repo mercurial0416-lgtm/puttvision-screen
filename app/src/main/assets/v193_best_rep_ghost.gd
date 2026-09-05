@@ -14,12 +14,18 @@ const V193_GHOST_LABEL_COLOR := Color(0.50, 0.78, 0.69, 0.88)
 const V193_OFFSCALE_COLOR := Color(1.00, 0.78, 0.36, 0.90)
 
 func _v193_best_prior_sample() -> Dictionary:
-    if _v179_samples.size() < 2:
+    # The best-rep ghost is coaching for the active LINE/PACE/BOTH objective. Once that objective
+    # changes, samples from the old focus window are no longer comparable and must not be promoted
+    # as the player's "best prior" rep for the new cue. The newest sample remains excluded because
+    # the solid SHOT MAP dot already represents the current rep.
+    var first_eligible := clampi(_v191_focus_start_index, 0, _v179_samples.size())
+    var newest_prior := _v179_samples.size() - 2
+    if newest_prior < first_eligible:
         return {"found": false, "sample": Vector2.ZERO}
-    var best := _v179_samples[0]
+
+    var best: Vector2 = _v179_samples[first_eligible]
     var best_score := INF
-    # Exclude the newest sample: the solid SHOT MAP dot already represents the current rep.
-    for index in range(_v179_samples.size() - 1):
+    for index in range(first_eligible, newest_prior + 1):
         var sample: Vector2 = _v179_samples[index]
         var line_n := sample.x / V193_LINE_SCALE_CM
         var pace_n := sample.y / V193_PACE_SCALE_CM
