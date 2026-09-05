@@ -38,6 +38,13 @@ func _v177_grade(score: int) -> String:
         return "C"
     return "RESET"
 
+func _v177_outcome_title(holed: bool, lip_out: bool) -> String:
+    if holed:
+        return "SHOT DEBRIEF  •  HOLED"
+    if lip_out:
+        return "SHOT DEBRIEF  •  LIP OUT"
+    return "SHOT DEBRIEF"
+
 func _v177_line_text(delta_cm: float) -> String:
     if abs(delta_cm) < 1.5:
         return "ON LINE"
@@ -186,6 +193,7 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     var pace_delta: float = float(s.get("paceDeltaCm", 0.0))
     var score: int = _v177_metric_score(line_delta, pace_delta, holed)
 
+    _v177_title_label.text = _v177_outcome_title(holed, lip_out)
     _v177_grade_label.text = "%s  %02d" % [_v177_grade(score), score]
     _v177_line_value.text = _v177_line_text(line_delta)
     _v177_pace_value.text = _v177_pace_text(pace_delta)
