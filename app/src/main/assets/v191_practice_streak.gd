@@ -40,6 +40,17 @@ func _v191_sync_focus_window(axis: String) -> void:
         # The newest sample selected this target; it was not played while this target was active.
         _v191_focus_start_index = sample_count
 
+# The dispersion buffer is bounded. Once full, every accepted rep evicts index 0 before the new
+# rep lands at the tail. Keep the prospective focus boundary attached to the same logical reps;
+# otherwise a focus started at the full-buffer tail can become permanently unreachable after
+# rollover, hiding both the pressure ladder and BEST PRIOR coaching despite valid new-focus reps.
+func _v179_push_sample(line_cm: float, pace_cm: float) -> bool:
+    var will_evict := _v179_samples.size() >= V179_HISTORY
+    var accepted := super._v179_push_sample(line_cm, pace_cm)
+    if accepted and will_evict and _v191_focus_start_index > 0:
+        _v191_focus_start_index -= 1
+    return accepted
+
 func _v191_has_focus_samples() -> bool:
     return _v179_samples.size() > _v191_focus_start_index
 
