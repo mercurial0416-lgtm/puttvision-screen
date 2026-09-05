@@ -43,6 +43,21 @@ func _run_apex_preview_regression() -> bool:
         probe.free()
         get_tree().quit(31)
         return false
+    if probe._read_start_gate_descriptor(0.42) != "START  RIGHT 42 cm":
+        push_error("Start gate right-label regression")
+        probe.free()
+        get_tree().quit(33)
+        return false
+    if probe._read_start_gate_descriptor(-0.42) != "START  LEFT 42 cm":
+        push_error("Start gate left-label regression")
+        probe.free()
+        get_tree().quit(33)
+        return false
+    if probe._read_start_gate_descriptor(0.0) != "START  CENTER":
+        push_error("Start gate center-label regression")
+        probe.free()
+        get_tree().quit(33)
+        return false
 
     var regression_curve := probe._v183_path(0.42)
     var regression_edges := probe._read_corridor_edges(regression_curve)
@@ -142,9 +157,21 @@ func _run_apex_preview_regression() -> bool:
     gate_center_ring.position = preview_gate_center
     _v183_panel.add_child(gate_center_ring)
 
-    var gate_badge_x := clampf(preview_gate_center.x - 84.0, V183_MAP_ORIGIN.x + 4.0, V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - 78.0)
+    var gate_badge_x := clampf(
+        preview_gate_center.x - probe.READ_START_GATE_BADGE_WIDTH - 10.0,
+        V183_MAP_ORIGIN.x + 4.0,
+        V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - probe.READ_START_GATE_BADGE_WIDTH - 4.0
+    )
     var gate_badge_y := clampf(preview_gate_center.y + 8.0, V183_MAP_ORIGIN.y + 4.0, V183_MAP_ORIGIN.y + V183_MAP_SIZE.y - 20.0)
-    var gate_badge := _v174_text(_v183_panel, Vector2(gate_badge_x, gate_badge_y), Vector2(74, 16), "START GATE", 8, Color(0.68, 0.92, 1.0, 0.96), HORIZONTAL_ALIGNMENT_CENTER)
+    var gate_badge := _v174_text(
+        _v183_panel,
+        Vector2(gate_badge_x, gate_badge_y),
+        Vector2(probe.READ_START_GATE_BADGE_WIDTH, 16),
+        probe._read_start_gate_descriptor(_v165_recommended_offset),
+        8,
+        Color(0.68, 0.92, 1.0, 0.96),
+        HORIZONTAL_ALIGNMENT_CENTER
+    )
     gate_badge.name = "PreviewCommercialReadStartGateBadge"
 
     var apex := probe._read_apex_point(_v165_recommended_offset)
@@ -171,6 +198,7 @@ func _run_apex_preview_regression() -> bool:
 
     probe.free()
     print("COMMERCIAL_READ_START_GATE_OK=1")
+    print("COMMERCIAL_READ_START_GATE_ACTIONABLE_OK=1")
     print("COMMERCIAL_READ_CORRIDOR_OK=1")
     print("COMMERCIAL_READ_APEX_OK=1")
     print("COMMERCIAL_READ_APEX_PREVIEW_OK=1")

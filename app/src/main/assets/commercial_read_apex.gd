@@ -17,6 +17,8 @@ var _read_start_gate_badge: Label
 const READ_CORRIDOR_HALF_WIDTH := 6.5
 const READ_START_GATE_FRACTION := 0.24
 const READ_START_GATE_HALF_WIDTH := 8.5
+const READ_START_GATE_DEADBAND_M := 0.015
+const READ_START_GATE_BADGE_WIDTH := 120.0
 
 func _read_overlay_telemetry_valid(offset_m: float) -> bool:
     # These cues are presentation geometry only. A reconnect can briefly publish malformed advisor
@@ -29,6 +31,16 @@ func _read_apex_descriptor(offset_m: float) -> String:
     if absf(offset_m) < 0.03:
         return "APEX  CENTER"
     return "APEX  %s %.0f cm" % [("RIGHT" if offset_m > 0.0 else "LEFT"), absf(offset_m) * 100.0]
+
+func _read_start_gate_descriptor(offset_m: float) -> String:
+    # Mirror the authoritative recommendation sign, deadband and centimeter unit already used by
+    # GREEN READ / GREEN OVERVIEW. This makes the launch gate independently actionable on a TV
+    # without inventing another read or feeding presentation values back into the advisor.
+    if not _read_overlay_telemetry_valid(offset_m):
+        return "START  --"
+    if absf(offset_m) < READ_START_GATE_DEADBAND_M:
+        return "START  CENTER"
+    return "START  %s %d cm" % [("RIGHT" if offset_m > 0.0 else "LEFT"), int(round(absf(offset_m) * 100.0))]
 
 func _read_apex_point(offset_m: float) -> Vector2:
     if not _read_overlay_telemetry_valid(offset_m):
@@ -146,8 +158,8 @@ func _build_hud() -> void:
     _read_start_gate_badge = _v174_text(
         _v183_panel,
         Vector2.ZERO,
-        Vector2(74, 16),
-        "START GATE",
+        Vector2(READ_START_GATE_BADGE_WIDTH, 16),
+        "START  CENTER",
         8,
         Color(0.68, 0.92, 1.0, 0.96),
         HORIZONTAL_ALIGNMENT_CENTER
@@ -217,8 +229,13 @@ func _refresh_read_start_gate() -> void:
     _read_start_gate.points = PackedVector2Array([geometry["left"], geometry["right"]])
     _read_start_gate_center.points = _v183_circle(3.2, 18)
     _read_start_gate_center.position = center
+    _read_start_gate_badge.text = _read_start_gate_descriptor(_v165_recommended_offset)
 
-    var badge_x := clampf(center.x + (10.0 if _v165_recommended_offset <= 0.0 else -84.0), V183_MAP_ORIGIN.x + 4.0, V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - 78.0)
+    var badge_x := clampf(
+        center.x + (10.0 if _v165_recommended_offset <= 0.0 else -READ_START_GATE_BADGE_WIDTH - 10.0),
+        V183_MAP_ORIGIN.x + 4.0,
+        V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - READ_START_GATE_BADGE_WIDTH - 4.0
+    )
     var badge_y := clampf(center.y + 8.0, V183_MAP_ORIGIN.y + 4.0, V183_MAP_ORIGIN.y + V183_MAP_SIZE.y - 20.0)
     _read_start_gate_badge.position = Vector2(badge_x, badge_y)
 
