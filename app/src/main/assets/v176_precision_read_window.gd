@@ -42,6 +42,12 @@ func _v176_add_caption(parent: Control, text_value: String, pos: Vector2, size_v
     label.text = text_value
     return label
 
+func _v176_metric_is_valid(value: Variant) -> bool:
+    var value_type := typeof(value)
+    if value_type != TYPE_INT and value_type != TYPE_FLOAT:
+        return false
+    return is_finite(float(value))
+
 func _build_hud() -> void:
     super._build_hud()
 
@@ -141,10 +147,9 @@ func _build_hud() -> void:
 
     _v176_update_visuals(0.0, 0.0, 0.0)
 
-func _v176_update_visuals(offset_m: float, side_pct: float, long_pct: float) -> void:
+func _v176_update_aim_curve(offset_m: float) -> void:
     if _v176_curve == null:
         return
-
     var curve := _v176_read_curve(offset_m)
     _v176_curve.points = curve
     _v176_corridor.points = curve
@@ -155,6 +160,12 @@ func _v176_update_visuals(offset_m: float, side_pct: float, long_pct: float) -> 
     if abs(offset_m) >= 0.015:
         aim_dir = ("R" if offset_m > 0.0 else "L") + "  %d cm" % int(round(abs(offset_m) * 100.0))
     _v176_aim_value.text = aim_dir
+
+func _v176_update_visuals(offset_m: float, side_pct: float, long_pct: float) -> void:
+    if _v176_curve == null:
+        return
+
+    _v176_update_aim_curve(offset_m)
 
     var break_dir := "STRAIGHT"
     if abs(side_pct) >= 0.03:
@@ -175,12 +186,26 @@ func _v176_update_visuals(offset_m: float, side_pct: float, long_pct: float) -> 
     ])
     _v176_break_arrow.visible = abs(side_pct) >= 0.08
 
+func _v176_update_unavailable(offset_m: float) -> void:
+    # Keep the authoritative aim compensation visible, but never coerce malformed slope telemetry
+    # into a believable STRAIGHT / LEVEL read. This is a presentation truth state only.
+    if _v176_curve == null:
+        return
+    _v176_update_aim_curve(offset_m)
+    _v176_break_value.text = "--"
+    _v176_grade_value.text = "--"
+    _v176_source_value.text = "SLOPE DATA UNAVAILABLE"
+    _v176_break_arrow.visible = false
+
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
 
-    var side_pct: float = float(s.get("sideSlope", 0.0))
-    var long_pct: float = float(s.get("longSlope", 0.0))
-    _v176_update_visuals(_v165_recommended_offset, side_pct, long_pct)
+    var side_value: Variant = s.get("sideSlope", null)
+    var long_value: Variant = s.get("longSlope", null)
+    if _v176_metric_is_valid(side_value) and _v176_metric_is_valid(long_value):
+        _v176_update_visuals(_v165_recommended_offset, float(side_value), float(long_value))
+    else:
+        _v176_update_unavailable(_v165_recommended_offset)
 
     if _v176_panel != null:
         var running: bool = bool(s.get("running", false))
