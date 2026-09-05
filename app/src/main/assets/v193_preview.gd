@@ -69,6 +69,46 @@ func _process(delta: float) -> void:
         get_tree().quit(24)
         return
 
+    # Full session history must rebase the focus boundary when the rolling buffer evicts old reps.
+    # The first rep under the new focus is current-only, so the ghost stays hidden; after the second
+    # rep, that first comparable rep becomes BEST PRIOR and retired-focus samples remain excluded.
+    _v179_samples = [
+        Vector2(1.0, 1.0),
+        Vector2(2.0, 2.0),
+        Vector2(3.0, 3.0),
+        Vector2(4.0, 4.0),
+        Vector2(5.0, 5.0)
+    ]
+    _v191_focus_start_index = V179_HISTORY
+    if not _v179_push_sample(16.0, 32.0):
+        push_error("Best-prior rollover rejected valid focus sample")
+        get_tree().quit(24)
+        return
+    _v188_refresh(16.0, 32.0, true)
+    if _v191_focus_start_index != V179_HISTORY - 1 or not _v191_has_focus_samples():
+        push_error("Practice focus boundary did not rebase after history eviction")
+        get_tree().quit(24)
+        return
+    if _v193_ghost.visible or _v193_ghost_label.visible:
+        push_error("Best-prior ghost appeared before rollover focus had a prior rep")
+        get_tree().quit(24)
+        return
+
+    if not _v179_push_sample(7.0, 14.0):
+        push_error("Best-prior rollover rejected second focus sample")
+        get_tree().quit(24)
+        return
+    _v188_refresh(7.0, 14.0, true)
+    expected = _v188_point(16.0, 32.0)
+    if _v191_focus_start_index != V179_HISTORY - 2:
+        push_error("Practice focus boundary drifted across repeated history eviction")
+        get_tree().quit(24)
+        return
+    if not _v193_ghost.visible or _v193_ghost.position.distance_to(expected) > 0.2:
+        push_error("Best-prior ghost stayed hidden after rollover focus gained a prior rep")
+        get_tree().quit(24)
+        return
+
     _v191_focus_start_index = 0
     _v179_samples = [
         Vector2(18.0, 40.0),
