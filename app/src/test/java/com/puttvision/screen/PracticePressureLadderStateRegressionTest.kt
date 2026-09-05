@@ -64,10 +64,18 @@ class PracticePressureLadderStateRegressionTest {
     fun productionDrillOverridePreservesActionableResetCoaching() {
         val source = asset("v192_drill_progression.gd")
         assertTrue(source.contains("var correction := _v191_reset_coaching(axis)"))
-        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  -0.5 m EASIER"))
-        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  0/3"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d  ·  -0.5 m EASIER"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d TO EASIER"))
         assertFalse(source.contains("return \"START STREAK  ·  -0.5 m EASIER\""))
         assertFalse(source.contains("return \"START STREAK  ·  BUILD  ·  0/3\""))
+    }
+
+    @Test
+    fun failureProgressUsesTheRealTrailingMissCountInsteadOfStickingAtZero() {
+        val source = asset("v192_drill_progression.gd")
+        assertTrue(source.contains("var failures := mini(_v192_trailing_failures(axis), V192_RESET_FAILURES)"))
+        assertTrue(source.contains("[axis, correction, failures, V192_RESET_FAILURES]"))
+        assertFalse(source.contains("RESET  ·  %s  ·  0/3"))
     }
 
     @Test
