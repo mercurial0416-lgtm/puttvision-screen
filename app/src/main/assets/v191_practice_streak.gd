@@ -90,16 +90,20 @@ func _v191_reset_coaching(axis: String) -> String:
         return "START STREAK"
     return " · ".join(corrections)
 
+# Keep the active objective and progress visible in every pressure state. On a TV the player should
+# not have to remember whether the current ladder is judging LINE, PACE, or BOTH after looking back
+# from the mat. The counter is presentation-only and derives from the existing authoritative samples.
 func _v191_copy(streak: int, axis: String) -> String:
     if axis == "BUILDING":
         return "PRESSURE LADDER  ·  BUILDING"
+    var progress := "%d/%d" % [clampi(streak, 0, V191_ADVANCE_STREAK), V191_ADVANCE_STREAK]
     if streak >= V191_ADVANCE_STREAK:
-        return "PRESSURE LADDER  ·  ADVANCE READY"
+        return "PRESSURE LADDER  ·  %s  ·  %s  ·  READY" % [axis, progress]
     if streak == 2:
-        return "PRESSURE LADDER  ·  ONE MORE"
+        return "PRESSURE LADDER  ·  %s  ·  %s  ·  ONE MORE" % [axis, progress]
     if streak == 1:
-        return "PRESSURE LADDER  ·  HOLD IT"
-    return "PRESSURE LADDER  ·  RESET  ·  %s" % _v191_reset_coaching(axis)
+        return "PRESSURE LADDER  ·  %s  ·  %s  ·  HOLD IT" % [axis, progress]
+    return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s" % [axis, _v191_reset_coaching(axis)]
 
 func _v191_base_target_color(axis: String) -> Color:
     return Color(0.96, 0.86, 0.49, 0.13) if axis == "BOTH" else Color(0.46, 0.84, 0.71, 0.11)

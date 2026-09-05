@@ -18,20 +18,24 @@ func _v192_trailing_failures(axis: String) -> int:
         failures += 1
     return failures
 
+# v192 owns the final ladder copy because it adds distance progression. Keep the active objective
+# attached to that richer copy too, otherwise the v191 TV-clarity contract is silently lost once
+# this subclass is active in the production scene.
 func _v191_copy(streak: int, axis: String) -> String:
     if axis == "BUILDING":
         return "PRESSURE LADDER  ·  BUILDING"
+    var progress := "%d/%d" % [clampi(streak, 0, V191_ADVANCE_STREAK), V191_ADVANCE_STREAK]
     if streak >= V191_ADVANCE_STREAK:
-        return "ADVANCE READY  ·  +0.5 m NEXT"
+        return "PRESSURE LADDER  ·  %s  ·  %s  ·  READY  ·  +0.5 m NEXT" % [axis, progress]
     if streak == 2:
-        return "PRESSURE LADDER  ·  ONE MORE  ·  2/3"
+        return "PRESSURE LADDER  ·  %s  ·  %s  ·  ONE MORE" % [axis, progress]
     if streak == 1:
-        return "PRESSURE LADDER  ·  HOLD IT  ·  1/3"
+        return "PRESSURE LADDER  ·  %s  ·  %s  ·  HOLD IT" % [axis, progress]
 
     var correction := _v191_reset_coaching(axis)
     if _v192_trailing_failures(axis) >= V192_RESET_FAILURES:
-        return "PRESSURE LADDER  ·  RESET  ·  %s  ·  -0.5 m EASIER" % correction
-    return "PRESSURE LADDER  ·  RESET  ·  %s  ·  0/3" % correction
+        return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  -0.5 m EASIER" % [axis, correction]
+    return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  0/3" % [axis, correction]
 
 func _v191_refresh() -> void:
     super._v191_refresh()

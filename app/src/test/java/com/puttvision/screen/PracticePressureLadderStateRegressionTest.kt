@@ -38,7 +38,7 @@ class PracticePressureLadderStateRegressionTest {
         assertTrue(source.contains("\"SHORTEN\" if sample.y > 0.0 else \"ADD\""))
         assertTrue(source.contains("maxi(1, int(ceil(line_excess)))"))
         assertTrue(source.contains("maxi(1, int(ceil(pace_excess)))"))
-        assertTrue(source.contains("PRESSURE LADDER  ·  RESET  ·  %s"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s"))
     }
 
     @Test
@@ -64,10 +64,19 @@ class PracticePressureLadderStateRegressionTest {
     fun productionDrillOverridePreservesActionableResetCoaching() {
         val source = asset("v192_drill_progression.gd")
         assertTrue(source.contains("var correction := _v191_reset_coaching(axis)"))
-        assertTrue(source.contains("PRESSURE LADDER  ·  RESET  ·  %s  ·  -0.5 m EASIER"))
-        assertTrue(source.contains("PRESSURE LADDER  ·  RESET  ·  %s  ·  0/3"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  -0.5 m EASIER"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  0/3"))
         assertFalse(source.contains("return \"START STREAK  ·  -0.5 m EASIER\""))
         assertFalse(source.contains("return \"START STREAK  ·  BUILD  ·  0/3\""))
+    }
+
+    @Test
+    fun successCopyCarriesObjectiveAndExplicitProgress() {
+        val base = asset("v191_practice_streak.gd")
+        val production = asset("v192_drill_progression.gd")
+        assertTrue(base.contains("PRESSURE LADDER  ·  %s  ·  %s  ·  ONE MORE"))
+        assertTrue(base.contains("PRESSURE LADDER  ·  %s  ·  %s  ·  HOLD IT"))
+        assertTrue(production.contains("PRESSURE LADDER  ·  %s  ·  %s  ·  READY  ·  +0.5 m NEXT"))
     }
 
     @Test
