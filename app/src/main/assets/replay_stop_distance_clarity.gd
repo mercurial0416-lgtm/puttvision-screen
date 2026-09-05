@@ -1,4 +1,4 @@
-extends "res://replay_timeline_camera_truth.gd"
+extends "res://replay_production_overlay_bridge.gd"
 
 # Presentation-only wording layer. The inherited replay timeline owns the recorded-trail distance;
 # this layer only makes the on-screen unit semantically explicit. Android physics, GreenTerrain and

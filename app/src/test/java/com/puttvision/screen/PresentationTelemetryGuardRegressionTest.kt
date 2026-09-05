@@ -37,13 +37,18 @@ class PresentationTelemetryGuardRegressionTest {
     fun guardStaysOutsideAuthoritativePhysics() {
         val production = asset("presentation_telemetry_guard.gd")
         val clarity = asset("replay_stop_distance_clarity.gd")
+        val overlayBridge = asset("replay_production_overlay_bridge.gd")
         assertTrue(production.contains("extends \"res://replay_stop_distance_clarity.gd\""))
-        assertTrue(clarity.contains("extends \"res://replay_timeline_camera_truth.gd\""))
+        assertTrue(clarity.contains("extends \"res://replay_production_overlay_bridge.gd\""))
+        assertTrue(overlayBridge.contains("extends \"res://replay_timeline_camera_truth.gd\""))
         assertTrue(!production.contains("GreenTerrain.set"))
         assertTrue(!production.contains("GreenReadAdvisor.set"))
         assertTrue(!production.contains("ballVelocity ="))
         assertTrue(!clarity.contains("GreenTerrain.set"))
         assertTrue(!clarity.contains("GreenReadAdvisor.set"))
         assertTrue(!clarity.contains("ballVelocity ="))
+        assertTrue(!overlayBridge.contains("GreenTerrain.set"))
+        assertTrue(!overlayBridge.contains("GreenReadAdvisor.set"))
+        assertTrue(!overlayBridge.contains("ballVelocity ="))
     }
 }
