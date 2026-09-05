@@ -48,10 +48,11 @@ func _v177_pace_text(delta_cm: float) -> String:
         return "CUP PACE"
     return "%s %d cm" % [("LONG" if delta_cm > 0.0 else "SHORT"), int(round(abs(delta_cm)))]
 
-func _v177_leave_text(value: Variant) -> String:
-    # FINAL LEAVE is a measured presentation value, not a safe default. Godot's float() coercion can
-    # turn malformed bridge strings into 0.0, which falsely looks like a tap-in/holed result. Keep the
-    # rest of the debrief useful while explicitly withholding only the untrusted distance readout.
+func _v177_leave_text(value: Variant, holed: bool = false) -> String:
+    # Holed is an authoritative result state and is more useful than rendering a redundant 0.00 m.
+    # For non-holed shots FINAL LEAVE remains a measured presentation value, not a safe default.
+    if holed:
+        return "HOLED"
     var value_type := typeof(value)
     if value_type != TYPE_INT and value_type != TYPE_FLOAT:
         return "--"
@@ -145,7 +146,7 @@ func _build_hud() -> void:
     _v177_add_zero_marker(_v177_panel, 135.0)
 
     _v174_text(_v177_panel, Vector2(358, 80), Vector2(168, 20), "FINAL LEAVE", 11, Color(0.58, 0.67, 0.64, 0.92), HORIZONTAL_ALIGNMENT_RIGHT)
-    _v177_leave_value = _v174_text(_v177_panel, Vector2(358, 101), Vector2(168, 38), "0.00 m", 23, Color("#b9dda6"), HORIZONTAL_ALIGNMENT_RIGHT)
+    _v177_leave_value = _v174_text(_v177_panel, Vector2(358, 101), Vector2(168, 38), "--", 23, Color("#b9dda6"), HORIZONTAL_ALIGNMENT_RIGHT)
 
     var divider := ColorRect.new()
     divider.position = Vector2(22, 160)
@@ -188,7 +189,7 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     _v177_grade_label.text = "%s  %02d" % [_v177_grade(score), score]
     _v177_line_value.text = _v177_line_text(line_delta)
     _v177_pace_value.text = _v177_pace_text(pace_delta)
-    _v177_leave_value.text = _v177_leave_text(s.get("distanceToCup", null))
+    _v177_leave_value.text = _v177_leave_text(s.get("distanceToCup", null), holed)
     _v177_coach_label.text = _v177_coach(line_delta, pace_delta, holed, lip_out)
 
     var line_bar := _v177_bar_geometry(line_delta, 30.0)

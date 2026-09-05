@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class ShotDebriefFinalLeaveTruthRegressionTest {
+class ShotDebriefHoledResultRegressionTest {
     private fun asset(path: String): String {
         val candidates = listOf(File("src/main/assets/$path"), File("app/src/main/assets/$path"))
         return candidates.firstOrNull { it.isFile }?.readText()
@@ -13,26 +13,26 @@ class ShotDebriefFinalLeaveTruthRegressionTest {
     }
 
     @Test
-    fun malformedFinalLeaveCannotCoerceToAFalseZeroDistance() {
+    fun holedShotsPreferOutcomeSemanticsOverRedundantZeroDistance() {
         val source = asset("v177_shot_debrief.gd")
 
         assertTrue(source.contains("func _v177_leave_text(value: Variant, holed: bool = false) -> String:"))
-        assertTrue(source.contains("value_type != TYPE_INT and value_type != TYPE_FLOAT"))
-        assertTrue(source.contains("if not is_finite(leave_m):"))
-        assertTrue(source.contains("return \"--\""))
+        assertTrue(source.contains("if holed:\n        return \"HOLED\""))
         assertTrue(source.contains("_v177_leave_value.text = _v177_leave_text(s.get(\"distanceToCup\", null), holed)"))
-        assertFalse(source.contains("var leave_m: float = max(0.0, float(s.get(\"distanceToCup\", 0.0)))"))
     }
 
     @Test
-    fun validFinalLeaveKeepsExistingCommercialPrecision() {
+    fun nonHoledLeaveKeepsMeasuredPrecisionAndTruthGuard() {
         val source = asset("v177_shot_debrief.gd")
 
+        assertTrue(source.contains("value_type != TYPE_INT and value_type != TYPE_FLOAT"))
+        assertTrue(source.contains("if not is_finite(leave_m):"))
         assertTrue(source.contains("return \"%.2f m\" % max(0.0, leave_m)"))
+        assertTrue(source.contains("Vector2(168, 38), \"--\", 23"))
     }
 
     @Test
-    fun finalLeaveGuardRemainsPresentationOnly() {
+    fun outcomePresentationDoesNotMutateAuthoritativePhysics() {
         val source = asset("v177_shot_debrief.gd")
 
         assertFalse(source.contains("GreenTerrain.set"))
