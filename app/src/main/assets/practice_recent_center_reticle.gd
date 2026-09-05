@@ -2,9 +2,10 @@ extends "res://presentation_telemetry_guard.gd"
 
 # Presentation-only recent-centroid reticle for SESSION DISPERSION. The existing practice map already
 # shows individual samples and a recent consistency envelope; this layer marks the actual center of
-# the latest three valid reps so players can read current bias at TV distance without mentally
-# averaging dots. Android physics, GreenTerrain, GreenReadAdvisor, aiming, scoring and capture remain
-# authoritative and untouched.
+# the latest three valid reps from the active LINE/PACE/BOTH focus window so players can read current
+# bias at TV distance without mentally averaging dots or mixing reps from an obsolete practice cue.
+# Android physics, GreenTerrain, GreenReadAdvisor, aiming, scoring and capture remain authoritative
+# and untouched.
 
 const PRACTICE_RECENT_CENTER_MIN_SAMPLES := 3
 const PRACTICE_RECENT_CENTER_GROUP_SIZE := 3
@@ -56,6 +57,18 @@ func _practice_recent_center_geometry(samples: Array[Vector2]) -> Dictionary:
         "ring": ring_points
     }
 
+func _practice_recent_center_focus_samples() -> Array[Vector2]:
+    # Pressure-ladder focus is prospective: the rep that selected a new objective was not played
+    # against that objective. Reuse its rollover-safe boundary so the recent-center marker cannot
+    # blend old LINE reps into a new PACE cue (or vice versa). If fewer than three reps have been
+    # played in the current focus, fail closed and leave the marker hidden rather than manufacture a
+    # misleading center from incomparable history.
+    var first_eligible := clampi(_v191_focus_start_index, 0, _v179_samples.size())
+    var focused: Array[Vector2] = []
+    for index in range(first_eligible, _v179_samples.size()):
+        focused.append(_v179_samples[index])
+    return focused
+
 func _practice_recent_center_line(name: String, width: float) -> Line2D:
     var line := Line2D.new()
     line.name = name
@@ -82,7 +95,7 @@ func _build_hud() -> void:
 func _practice_recent_center_refresh() -> void:
     if _practice_recent_center_h == null or _practice_recent_center_v == null or _practice_recent_center_ring == null:
         return
-    var geometry := _practice_recent_center_geometry(_v179_samples)
+    var geometry := _practice_recent_center_geometry(_practice_recent_center_focus_samples())
     var visible := bool(geometry.get("visible", false))
     _practice_recent_center_h.visible = visible
     _practice_recent_center_v.visible = visible
