@@ -131,6 +131,9 @@ func _replay_chapter_geometry(track_width: float) -> Dictionary:
         "cup": Vector2(cup_start, maxf(0.0, track_width - cup_start))
     }
 
+func _replay_raw_timing_valid(remaining: float, duration: float) -> bool:
+    return is_finite(remaining) and is_finite(duration) and duration > 0.0
+
 func _replay_active_chapter(progress: float) -> int:
     if not is_finite(progress):
         return -1
@@ -158,8 +161,11 @@ func _replay_chapter_local_progress(progress: float) -> float:
         return -1.0
     return clampf((safe_progress - chapter_start) / chapter_span, 0.0, 1.0)
 
-func _replay_update_chapter_progress(progress: float, chapters: Dictionary) -> void:
+func _replay_update_chapter_progress(progress: float, chapters: Dictionary, timing_valid: bool = true) -> void:
     if _replay_chapter_progress == null:
+        return
+    if not timing_valid:
+        _replay_chapter_progress.visible = false
         return
     var active := _replay_active_chapter(progress)
     var local_progress := _replay_chapter_local_progress(progress)
@@ -174,8 +180,8 @@ func _replay_update_chapter_progress(progress: float, chapters: Dictionary) -> v
     _replay_chapter_progress.position = Vector2(segment.x, REPLAY_TIMELINE_TRACK_HEIGHT - REPLAY_CHAPTER_PROGRESS_HEIGHT)
     _replay_chapter_progress.size = Vector2(segment.y * local_progress, REPLAY_CHAPTER_PROGRESS_HEIGHT)
 
-func _replay_apply_chapter_emphasis(progress: float) -> void:
-    var active := _replay_active_chapter(progress)
+func _replay_apply_chapter_emphasis(progress: float, timing_valid: bool = true) -> void:
+    var active := _replay_active_chapter(progress) if timing_valid else -1
     var labels: Array[Label] = [_replay_roll_label, _replay_blend_label, _replay_cup_label]
     var inactive_colors := [
         Color(0.70, 0.80, 0.84, REPLAY_CHAPTER_INACTIVE_ALPHA),
@@ -217,6 +223,7 @@ func _focus_update_replay_timeline() -> void:
     super._focus_update_replay_timeline()
     if _focus_replay_track == null:
         return
+    var timing_valid := _replay_raw_timing_valid(_v171_replay_remaining, _v171_replay_duration)
     var progress := _focus_replay_progress(_v171_replay_remaining, _v171_replay_duration)
     var track_width := maxf(0.0, _focus_replay_track.size.x)
 
@@ -229,12 +236,12 @@ func _focus_update_replay_timeline() -> void:
     _replay_place_chapter_label(_replay_roll_label, chapters["roll"], "ROLL")
     _replay_place_chapter_label(_replay_blend_label, chapters["blend"], "BLEND")
     _replay_place_chapter_label(_replay_cup_label, chapters["cup"], "CUP")
-    _replay_apply_chapter_emphasis(progress)
-    _replay_update_chapter_progress(progress, chapters)
+    _replay_apply_chapter_emphasis(progress, timing_valid)
+    _replay_update_chapter_progress(progress, chapters, timing_valid)
 
     if _replay_playhead == null:
         return
-    _replay_playhead.visible = _replay_track_has_playhead_room(track_width)
+    _replay_playhead.visible = timing_valid and _replay_track_has_playhead_room(track_width)
     if not _replay_playhead.visible:
         return
     var x := _replay_playhead_x(progress, track_width)
