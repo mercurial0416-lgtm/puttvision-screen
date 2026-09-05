@@ -12,13 +12,13 @@ class ReplayPlayheadCollapsedTrackRegressionTest {
     }
 
     @Test
-    fun replayPlayheadRequiresRoomForItsRotatedFootprint() {
+    fun replayPlayheadRequiresValidTimingAndRoomForItsRotatedFootprint() {
         val script = asset("replay_playhead_polish.gd")
 
         assertTrue(script.contains("func _replay_playhead_rotated_extent() -> float:"))
         assertTrue(script.contains("func _replay_track_has_playhead_room(track_width: float) -> bool:"))
         assertTrue(script.contains("return track_width >= _replay_playhead_rotated_extent()"))
-        assertTrue(script.contains("_replay_playhead.visible = _replay_track_has_playhead_room(track_width)"))
+        assertTrue(script.contains("_replay_playhead.visible = timing_valid and _replay_track_has_playhead_room(track_width)"))
         assertTrue(script.contains("if not _replay_playhead.visible:"))
     }
 }

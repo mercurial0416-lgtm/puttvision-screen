@@ -37,9 +37,11 @@ class PresentationSpatialTelemetryGuardRegressionTest {
     fun replayTruthOwnsTheVisualHoldForMissingBallCoordinates() {
         val production = asset("presentation_telemetry_guard.gd")
         val clarity = asset("replay_stop_distance_clarity.gd")
+        val overlayBridge = asset("replay_production_overlay_bridge.gd")
         val replayTruth = asset("replay_timeline_camera_truth.gd")
         assertTrue(production.contains("extends \"res://replay_stop_distance_clarity.gd\""))
-        assertTrue(clarity.contains("extends \"res://replay_timeline_camera_truth.gd\""))
+        assertTrue(clarity.contains("extends \"res://replay_production_overlay_bridge.gd\""))
+        assertTrue(overlayBridge.contains("extends \"res://replay_timeline_camera_truth.gd\""))
         assertTrue(replayTruth.contains("if missing_ball_position and had_real_ball_position:"))
         assertTrue(replayTruth.contains("presentation_snapshot[\"ballX\"] = _live_curve_last_ball_pos.x"))
         assertTrue(replayTruth.contains("elif missing_ball_position:"))
@@ -50,6 +52,7 @@ class PresentationSpatialTelemetryGuardRegressionTest {
     fun spatialRepairStaysPresentationOnly() {
         val production = asset("presentation_telemetry_guard.gd")
         val clarity = asset("replay_stop_distance_clarity.gd")
+        val overlayBridge = asset("replay_production_overlay_bridge.gd")
         assertTrue(production.contains("super._apply_snapshot(_presentation_safe_snapshot(s), immediate, delta)"))
         assertTrue(!production.contains("GreenTerrain.set"))
         assertTrue(!production.contains("GreenReadAdvisor.set"))
@@ -57,5 +60,8 @@ class PresentationSpatialTelemetryGuardRegressionTest {
         assertTrue(!clarity.contains("GreenTerrain.set"))
         assertTrue(!clarity.contains("GreenReadAdvisor.set"))
         assertTrue(!clarity.contains("ballVelocity ="))
+        assertTrue(!overlayBridge.contains("GreenTerrain.set"))
+        assertTrue(!overlayBridge.contains("GreenReadAdvisor.set"))
+        assertTrue(!overlayBridge.contains("ballVelocity ="))
     }
 }
