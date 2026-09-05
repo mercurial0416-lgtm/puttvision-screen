@@ -63,7 +63,6 @@ func _practice_recent_center_line(name: String, width: float) -> Line2D:
     line.default_color = Color(0.94, 0.98, 0.96, 0.96)
     line.begin_cap_mode = Line2D.LINE_CAP_ROUND
     line.end_cap_mode = Line2D.LINE_CAP_ROUND
-    line.mouse_filter = Control.MOUSE_FILTER_IGNORE if line is Control else 0
     line.visible = false
     return line
 
