@@ -19,6 +19,9 @@ var _v177_preview_force_visible := false
 const V177_BAR_MAX_PX := 150.0
 const V177_BAR_HALF_PX := V177_BAR_MAX_PX * 0.5
 const V177_BAR_LEFT_PX := 22.0
+const V177_GOOD_COLOR := Color("#76d7b6")
+const V177_WARN_COLOR := Color("#d6b85c")
+const V177_RESET_COLOR := Color("#ef7d6f")
 
 func _v177_metric_score(line_delta_cm: float, pace_delta_cm: float, holed: bool) -> int:
     if holed:
@@ -83,6 +86,16 @@ func _v177_coach(line_delta_cm: float, pace_delta_cm: float, holed: bool, lip_ou
         return "KEEP THE LINE  •  RECALIBRATE PACE"
     return "GOOD WINDOW  •  REPEAT THE STROKE"
 
+func _v177_severity_color(delta_cm: float, good_cm: float, reset_cm: float) -> Color:
+    # Match the coaching thresholds so the bars communicate severity before text is read.
+    # This is presentation-only and runs only while the post-shot debrief is visible.
+    var magnitude := abs(delta_cm)
+    if magnitude < good_cm:
+        return V177_GOOD_COLOR
+    if magnitude < reset_cm:
+        return V177_WARN_COLOR
+    return V177_RESET_COLOR
+
 func _v177_bar_width(delta_cm: float, full_scale_cm: float) -> float:
     return V177_BAR_HALF_PX * clamp(abs(delta_cm) / max(1.0, full_scale_cm), 0.0, 1.0)
 
@@ -131,7 +144,7 @@ func _build_hud() -> void:
     _v177_line_bar = ColorRect.new()
     _v177_line_bar.position = Vector2(V177_BAR_LEFT_PX + V177_BAR_HALF_PX, 82)
     _v177_line_bar.size = Vector2(0, 5)
-    _v177_line_bar.color = Color("#76d7b6")
+    _v177_line_bar.color = V177_GOOD_COLOR
     _v177_line_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(_v177_line_bar)
     _v177_add_zero_marker(_v177_panel, 82.0)
@@ -147,7 +160,7 @@ func _build_hud() -> void:
     _v177_pace_bar = ColorRect.new()
     _v177_pace_bar.position = Vector2(V177_BAR_LEFT_PX + V177_BAR_HALF_PX, 135)
     _v177_pace_bar.size = Vector2(0, 5)
-    _v177_pace_bar.color = Color("#d6b85c")
+    _v177_pace_bar.color = V177_GOOD_COLOR
     _v177_pace_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _v177_panel.add_child(_v177_pace_bar)
     _v177_add_zero_marker(_v177_panel, 135.0)
@@ -203,9 +216,11 @@ func _v177_update_debrief(s: Dictionary, force_visible: bool = false) -> void:
     var line_bar := _v177_bar_geometry(line_delta, 30.0)
     _v177_line_bar.position.x = line_bar.x
     _v177_line_bar.size.x = line_bar.y
+    _v177_line_bar.color = _v177_severity_color(line_delta, 1.5, 9.0)
     var pace_bar := _v177_bar_geometry(pace_delta, 70.0)
     _v177_pace_bar.position.x = pace_bar.x
     _v177_pace_bar.size.x = pace_bar.y
+    _v177_pace_bar.color = _v177_severity_color(pace_delta, 8.0, 22.0)
 
 func _apply_snapshot(s: Dictionary, immediate: bool, delta: float) -> void:
     super._apply_snapshot(s, immediate, delta)
