@@ -5,6 +5,34 @@ extends "res://replay_timeline_camera_truth.gd"
 # advances the premium replay overlays after that authoritative presentation pass without changing
 # replay timing, camera choreography, Android physics, GreenTerrain, GreenReadAdvisor, or scoring.
 
+const REPLAY_HANDOFF_MARKER_WIDTH := 1.5
+const REPLAY_HANDOFF_MARKER_MIN_TRACK_WIDTH := 132.0
+
+var _replay_roll_blend_handoff: ColorRect
+var _replay_blend_cup_handoff: ColorRect
+
+func _build_hud() -> void:
+    super._build_hud()
+    if _focus_replay_track == null:
+        return
+
+    # Thin camera handoff markers make the replay grammar readable at a glance without adding more
+    # text. They are presentation-only, consume the same production camera boundaries, and disappear
+    # on narrow Forward Mobile layouts where two extra vertical marks would become visual noise.
+    _replay_roll_blend_handoff = ColorRect.new()
+    _replay_roll_blend_handoff.name = "ReplayRollBlendHandoff"
+    _replay_roll_blend_handoff.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _replay_roll_blend_handoff.color = Color(0.84, 0.91, 0.94, 0.46)
+    _replay_roll_blend_handoff.z_index = 2
+    _focus_replay_track.add_child(_replay_roll_blend_handoff)
+
+    _replay_blend_cup_handoff = ColorRect.new()
+    _replay_blend_cup_handoff.name = "ReplayBlendCupHandoff"
+    _replay_blend_cup_handoff.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _replay_blend_cup_handoff.color = Color(0.88, 0.96, 0.90, 0.56)
+    _replay_blend_cup_handoff.z_index = 2
+    _focus_replay_track.add_child(_replay_blend_cup_handoff)
+
 func _production_replay_chapters(track_width: float) -> Dictionary:
     if not is_finite(track_width) or track_width <= 0.0:
         return {"roll": Vector2.ZERO, "blend": Vector2.ZERO, "cup": Vector2.ZERO}
@@ -80,6 +108,24 @@ func _production_replay_update_progress(progress: float, chapters: Dictionary, t
     _replay_chapter_progress.position = Vector2(segment.x, REPLAY_TIMELINE_TRACK_HEIGHT - REPLAY_CHAPTER_PROGRESS_HEIGHT)
     _replay_chapter_progress.size = Vector2(segment.y * local_progress, REPLAY_CHAPTER_PROGRESS_HEIGHT)
 
+func _production_replay_update_handoff_markers(track_width: float, chapters: Dictionary) -> void:
+    if _replay_roll_blend_handoff == null or _replay_blend_cup_handoff == null:
+        return
+    var visible := is_finite(track_width) and track_width >= REPLAY_HANDOFF_MARKER_MIN_TRACK_WIDTH
+    _replay_roll_blend_handoff.visible = visible
+    _replay_blend_cup_handoff.visible = visible
+    if not visible:
+        return
+
+    var roll: Vector2 = chapters.get("roll", Vector2.ZERO)
+    var cup: Vector2 = chapters.get("cup", Vector2.ZERO)
+    var roll_blend_x := clampf(roll.x + roll.y, 0.0, track_width)
+    var blend_cup_x := clampf(cup.x, 0.0, track_width)
+    _replay_roll_blend_handoff.position = Vector2(roll_blend_x - REPLAY_HANDOFF_MARKER_WIDTH * 0.5, 0.0)
+    _replay_roll_blend_handoff.size = Vector2(REPLAY_HANDOFF_MARKER_WIDTH, REPLAY_TIMELINE_TRACK_HEIGHT)
+    _replay_blend_cup_handoff.position = Vector2(blend_cup_x - REPLAY_HANDOFF_MARKER_WIDTH * 0.5, 0.0)
+    _replay_blend_cup_handoff.size = Vector2(REPLAY_HANDOFF_MARKER_WIDTH, REPLAY_TIMELINE_TRACK_HEIGHT)
+
 func _focus_update_replay_timeline() -> void:
     super._focus_update_replay_timeline()
     if _focus_replay_track == null:
@@ -100,6 +146,7 @@ func _focus_update_replay_timeline() -> void:
     _replay_place_chapter_label(_replay_cup_label, chapters["cup"], "CUP")
     _production_replay_apply_emphasis(progress, timing_valid)
     _production_replay_update_progress(progress, chapters, timing_valid)
+    _production_replay_update_handoff_markers(track_width, chapters)
 
     if _replay_playhead == null:
         return
