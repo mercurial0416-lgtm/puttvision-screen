@@ -28,6 +28,16 @@ class PracticeRecentCenterReticleRegressionTest {
     }
 
     @Test
+    fun targetToCentroidBiasVectorMakesRecentDriftReadable() {
+        val source = asset("practice_recent_center_reticle.gd")
+        assertTrue(source.contains("var target_center := _v179_plot_position(Vector2.ZERO)"))
+        assertTrue(source.contains("\"bias\": PackedVector2Array([target_center, center])"))
+        assertTrue(source.contains("\"PracticeRecentCenterBias\""))
+        assertTrue(source.contains("_v179_plot.add_child(_practice_recent_center_bias)"))
+        assertTrue(source.contains("_practice_recent_center_bias.points = geometry[\"bias\"]"))
+    }
+
+    @Test
     fun reticleIsScopedToActiveProspectivePracticeFocus() {
         val source = asset("practice_recent_center_reticle.gd")
         val streak = asset("v191_practice_streak.gd")
