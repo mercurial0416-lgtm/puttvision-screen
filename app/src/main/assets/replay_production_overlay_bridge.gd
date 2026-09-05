@@ -108,17 +108,32 @@ func _production_replay_update_progress(progress: float, chapters: Dictionary, t
     _replay_chapter_progress.position = Vector2(segment.x, REPLAY_TIMELINE_TRACK_HEIGHT - REPLAY_CHAPTER_PROGRESS_HEIGHT)
     _replay_chapter_progress.size = Vector2(segment.y * local_progress, REPLAY_CHAPTER_PROGRESS_HEIGHT)
 
-func _production_replay_update_handoff_markers(track_width: float, chapters: Dictionary) -> void:
+func _production_replay_update_handoff_markers(track_width: float, chapters: Dictionary, timing_valid: bool) -> void:
     if _replay_roll_blend_handoff == null or _replay_blend_cup_handoff == null:
         return
-    var visible := is_finite(track_width) and track_width >= REPLAY_HANDOFF_MARKER_MIN_TRACK_WIDTH
+
+    var roll: Vector2 = chapters.get("roll", Vector2.ZERO)
+    var blend: Vector2 = chapters.get("blend", Vector2.ZERO)
+    var cup: Vector2 = chapters.get("cup", Vector2.ZERO)
+    var chapter_geometry_valid := (
+        is_finite(roll.x) and is_finite(roll.y)
+        and is_finite(blend.x) and is_finite(blend.y)
+        and is_finite(cup.x) and is_finite(cup.y)
+        and roll.y > 0.0
+        and blend.y > 0.0
+        and cup.y > 0.0
+    )
+    var visible := (
+        timing_valid
+        and is_finite(track_width)
+        and track_width >= REPLAY_HANDOFF_MARKER_MIN_TRACK_WIDTH
+        and chapter_geometry_valid
+    )
     _replay_roll_blend_handoff.visible = visible
     _replay_blend_cup_handoff.visible = visible
     if not visible:
         return
 
-    var roll: Vector2 = chapters.get("roll", Vector2.ZERO)
-    var cup: Vector2 = chapters.get("cup", Vector2.ZERO)
     var roll_blend_x := clampf(roll.x + roll.y, 0.0, track_width)
     var blend_cup_x := clampf(cup.x, 0.0, track_width)
     _replay_roll_blend_handoff.position = Vector2(roll_blend_x - REPLAY_HANDOFF_MARKER_WIDTH * 0.5, 0.0)
@@ -146,7 +161,7 @@ func _focus_update_replay_timeline() -> void:
     _replay_place_chapter_label(_replay_cup_label, chapters["cup"], "CUP")
     _production_replay_apply_emphasis(progress, timing_valid)
     _production_replay_update_progress(progress, chapters, timing_valid)
-    _production_replay_update_handoff_markers(track_width, chapters)
+    _production_replay_update_handoff_markers(track_width, chapters, timing_valid)
 
     if _replay_playhead == null:
         return
