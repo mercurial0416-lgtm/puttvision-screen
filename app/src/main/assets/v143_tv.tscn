@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource path="res://live_origin_truth_guard.gd" type="Script" id="1_v143"]
 [ext_resource path="res://shot_map_correction_target.gd" type="Script" id="2_target"]
@@ -15,6 +15,7 @@
 ; and this contract reference prevents future root swaps from silently bypassing finite-value safety.
 [ext_resource path="res://presentation_telemetry_guard.gd" type="Script" id="9_telemetry_guard_contract"]
 [ext_resource path="res://debrief_axis_semantics.gd" type="Script" id="10_debrief_axis"]
+[ext_resource path="res://debrief_target_window.gd" type="Script" id="11_debrief_window"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
@@ -39,3 +40,6 @@ script = ExtResource("7_correction_cap")
 
 [node name="DebriefAxisSemantics" type="Node" parent="."]
 script = ExtResource("10_debrief_axis")
+
+[node name="DebriefTargetWindow" type="Node" parent="."]
+script = ExtResource("11_debrief_window")
