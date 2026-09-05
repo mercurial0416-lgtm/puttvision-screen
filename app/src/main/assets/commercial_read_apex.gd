@@ -15,7 +15,6 @@ var _read_start_gate_center: Line2D
 var _read_start_gate_badge: Label
 var _read_cup_entry: Line2D
 var _read_cup_entry_wings: Line2D
-var _read_cup_entry_badge: Label
 
 const READ_CORRIDOR_HALF_WIDTH := 6.5
 const READ_START_GATE_FRACTION := 0.24
@@ -24,7 +23,6 @@ const READ_START_GATE_DEADBAND_M := 0.015
 const READ_START_GATE_BADGE_WIDTH := 120.0
 const READ_CUP_ENTRY_LENGTH := 20.0
 const READ_CUP_ENTRY_WING := 5.0
-const READ_CUP_ENTRY_BADGE_WIDTH := 76.0
 
 func _read_overlay_telemetry_valid(offset_m: float) -> bool:
     # These cues are presentation geometry only. A reconnect can briefly publish malformed advisor
@@ -231,17 +229,6 @@ func _build_hud() -> void:
     _read_cup_entry_wings.default_color = Color(0.72, 1.0, 0.84, 0.94)
     _v183_panel.add_child(_read_cup_entry_wings)
 
-    _read_cup_entry_badge = _v174_text(
-        _v183_panel,
-        Vector2.ZERO,
-        Vector2(READ_CUP_ENTRY_BADGE_WIDTH, 16),
-        "CUP ENTRY",
-        8,
-        Color(0.67, 1.0, 0.80, 0.96),
-        HORIZONTAL_ALIGNMENT_CENTER
-    )
-    _read_cup_entry_badge.name = "CommercialReadCupEntryBadge"
-
 func _refresh_read_corridor() -> void:
     if _read_corridor_fill == null or _v183_panel == null:
         return
@@ -321,13 +308,12 @@ func _refresh_read_apex() -> void:
     _read_apex_leader.points = PackedVector2Array([apex, badge_anchor])
 
 func _refresh_read_cup_entry() -> void:
-    if _read_cup_entry == null or _read_cup_entry_wings == null or _read_cup_entry_badge == null or _v183_panel == null:
+    if _read_cup_entry == null or _read_cup_entry_wings == null or _v183_panel == null:
         return
     var geometry := _read_cup_entry_geometry(_v165_recommended_offset)
     var visible := _v183_panel.visible and bool(geometry.get("valid", false))
     _read_cup_entry.visible = visible
     _read_cup_entry_wings.visible = visible
-    _read_cup_entry_badge.visible = visible
     if not visible:
         _read_cup_entry.points = PackedVector2Array()
         _read_cup_entry_wings.points = PackedVector2Array()
@@ -337,12 +323,6 @@ func _refresh_read_cup_entry() -> void:
     var tail: Vector2 = geometry["tail"]
     _read_cup_entry.points = PackedVector2Array([tail, cup])
     _read_cup_entry_wings.points = PackedVector2Array([geometry["left_wing"], cup, geometry["right_wing"]])
-
-    # Keep the label inside the overview map. Put it just upstream of the arrow so it reads as a
-    # terminal step, while staying clear of the cup marker itself at TV distance.
-    var badge_x := clampf(tail.x - READ_CUP_ENTRY_BADGE_WIDTH * 0.5, V183_MAP_ORIGIN.x + 4.0, V183_MAP_ORIGIN.x + V183_MAP_SIZE.x - READ_CUP_ENTRY_BADGE_WIDTH - 4.0)
-    var badge_y := clampf(tail.y - 18.0, V183_MAP_ORIGIN.y + 4.0, V183_MAP_ORIGIN.y + V183_MAP_SIZE.y - 20.0)
-    _read_cup_entry_badge.position = Vector2(badge_x, badge_y)
 
 func _v183_update(s: Dictionary, force_visible: bool = false) -> void:
     super._v183_update(s, force_visible)
