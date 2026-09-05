@@ -20,10 +20,35 @@ class CommercialReadCupEntryRegressionTest {
 
         assertTrue(geometry.contains("if not _read_overlay_telemetry_valid(offset_m):"))
         assertTrue(geometry.contains("var curve := _v183_path(offset_m)"))
-        assertTrue(geometry.contains("var incoming := (cup - curve[curve.size() - 2]).normalized()"))
+        assertTrue(geometry.contains("for i in range(curve.size() - 2, -1, -1):"))
+        assertTrue(geometry.contains("var delta := cup - prior"))
+        assertTrue(geometry.contains("if delta.length_squared() >= minimum_segment_squared:"))
+        assertTrue(geometry.contains("incoming = delta.normalized()"))
         assertTrue(geometry.contains("return {\"valid\": false}"))
         assertFalse(geometry.contains("GreenTerrain("))
         assertFalse(geometry.contains("GreenReadAdvisor("))
+    }
+
+    @Test
+    fun duplicateCupSamplesCannotEraseOtherwiseValidArrivalDirection() {
+        val source = asset("commercial_read_apex.gd")
+        val geometry = source.substringAfter("func _read_cup_entry_geometry(offset_m: float) -> Dictionary:")
+            .substringBefore("func _build_hud")
+
+        assertTrue(source.contains("const READ_CUP_ENTRY_MIN_SEGMENT_PX := 1.0"))
+        assertTrue(geometry.contains("var incoming := Vector2.ZERO"))
+        assertTrue(geometry.contains("var minimum_segment_squared := READ_CUP_ENTRY_MIN_SEGMENT_PX * READ_CUP_ENTRY_MIN_SEGMENT_PX"))
+        assertFalse(geometry.contains("cup - curve[curve.size() - 2]"))
+    }
+
+    @Test
+    fun malformedTailSampleFailsClosedInsteadOfDrawingBelievableCue() {
+        val source = asset("commercial_read_apex.gd")
+        val geometry = source.substringAfter("func _read_cup_entry_geometry(offset_m: float) -> Dictionary:")
+            .substringBefore("func _build_hud")
+
+        assertTrue(geometry.contains("if not is_finite(cup.x) or not is_finite(cup.y):"))
+        assertTrue(geometry.contains("if not is_finite(prior.x) or not is_finite(prior.y):"))
     }
 
     @Test
