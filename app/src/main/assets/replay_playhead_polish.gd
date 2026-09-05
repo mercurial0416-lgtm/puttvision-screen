@@ -8,10 +8,13 @@ const REPLAY_PLAYHEAD_ALPHA := 0.98
 const REPLAY_FINISH_ZONE_FRACTION := 0.12
 const REPLAY_FINISH_ZONE_ALPHA := 0.18
 const REPLAY_CHAPTER_FONT_SIZE := 10
+const REPLAY_CHAPTER_ACTIVE_FONT_SIZE := 11
 const REPLAY_CHAPTER_LABEL_Y := 27.0
 const REPLAY_CHAPTER_ABBREV_MIN_WIDTH := 16.0
 const REPLAY_CHAPTER_TEXT_CHAR_WIDTH := 6.4
 const REPLAY_CHAPTER_TEXT_PADDING := 8.0
+const REPLAY_CHAPTER_INACTIVE_ALPHA := 0.52
+const REPLAY_CHAPTER_ACTIVE_ALPHA := 1.0
 
 var _replay_playhead: ColorRect
 var _replay_finish_zone: ColorRect
@@ -56,9 +59,9 @@ func _build_hud() -> void:
 
     # Commercial replay systems benefit from chapter context, not just a moving playhead. These
     # labels explain the visual handoff at a glance while adapting cleanly to narrow mobile tracks.
-    _replay_roll_label = _replay_build_chapter_label("ROLL", Color(0.70, 0.80, 0.84, 0.72))
-    _replay_blend_label = _replay_build_chapter_label("BLEND", Color(0.90, 0.78, 0.40, 0.82))
-    _replay_cup_label = _replay_build_chapter_label("CUP", Color(0.70, 0.92, 0.80, 0.82))
+    _replay_roll_label = _replay_build_chapter_label("ROLL", Color(0.70, 0.80, 0.84, REPLAY_CHAPTER_INACTIVE_ALPHA))
+    _replay_blend_label = _replay_build_chapter_label("BLEND", Color(0.90, 0.78, 0.40, REPLAY_CHAPTER_INACTIVE_ALPHA))
+    _replay_cup_label = _replay_build_chapter_label("CUP", Color(0.70, 0.92, 0.80, REPLAY_CHAPTER_INACTIVE_ALPHA))
 
 func _replay_build_chapter_label(text_value: String, tint: Color) -> Label:
     var label := Label.new()
@@ -118,6 +121,37 @@ func _replay_chapter_geometry(track_width: float) -> Dictionary:
         "cup": Vector2(cup_start, maxf(0.0, track_width - cup_start))
     }
 
+func _replay_active_chapter(progress: float) -> int:
+    if not is_finite(progress):
+        return -1
+    var safe_progress := clampf(progress, 0.0, 1.0)
+    if safe_progress < REPLAY_CUP_CHAPTER_START:
+        return 0
+    if safe_progress < REPLAY_CUP_CHAPTER_FULL:
+        return 1
+    return 2
+
+func _replay_apply_chapter_emphasis(progress: float) -> void:
+    var active := _replay_active_chapter(progress)
+    var labels: Array[Label] = [_replay_roll_label, _replay_blend_label, _replay_cup_label]
+    var inactive_colors := [
+        Color(0.70, 0.80, 0.84, REPLAY_CHAPTER_INACTIVE_ALPHA),
+        Color(0.90, 0.78, 0.40, REPLAY_CHAPTER_INACTIVE_ALPHA),
+        Color(0.70, 0.92, 0.80, REPLAY_CHAPTER_INACTIVE_ALPHA)
+    ]
+    var active_colors := [
+        Color(0.91, 0.97, 1.0, REPLAY_CHAPTER_ACTIVE_ALPHA),
+        Color(1.0, 0.88, 0.50, REPLAY_CHAPTER_ACTIVE_ALPHA),
+        Color(0.80, 1.0, 0.88, REPLAY_CHAPTER_ACTIVE_ALPHA)
+    ]
+    for index in range(labels.size()):
+        var label := labels[index]
+        if label == null:
+            continue
+        var is_active := index == active
+        label.add_theme_font_size_override("font_size", REPLAY_CHAPTER_ACTIVE_FONT_SIZE if is_active else REPLAY_CHAPTER_FONT_SIZE)
+        label.add_theme_color_override("font_color", active_colors[index] if is_active else inactive_colors[index])
+
 func _replay_chapter_label_text(full_text: String, segment_width: float) -> String:
     if not is_finite(segment_width) or segment_width < REPLAY_CHAPTER_ABBREV_MIN_WIDTH:
         return ""
@@ -152,6 +186,7 @@ func _focus_update_replay_timeline() -> void:
     _replay_place_chapter_label(_replay_roll_label, chapters["roll"], "ROLL")
     _replay_place_chapter_label(_replay_blend_label, chapters["blend"], "BLEND")
     _replay_place_chapter_label(_replay_cup_label, chapters["cup"], "CUP")
+    _replay_apply_chapter_emphasis(progress)
 
     if _replay_playhead == null:
         return
