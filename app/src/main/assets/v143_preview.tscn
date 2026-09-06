@@ -1,6 +1,6 @@
 [gd_scene load_steps=7 format=3]
 
-[ext_resource path="res://truthful_read_apex_preview.gd" type="Script" id="1_preview"]
+[ext_resource path="res://premium_direction_language_preview.gd" type="Script" id="1_preview"]
 [ext_resource path="res://replay_roll_distance_layout.gd" type="Script" id="2_replay_layout"]
 [ext_resource path="res://cup_entry_read_gate.gd" type="Script" id="3_cup_entry"]
 [ext_resource path="res://premium_green_grid_polish.gd" type="Script" id="4_grid_polish"]
