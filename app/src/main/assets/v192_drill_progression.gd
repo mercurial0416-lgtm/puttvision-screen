@@ -43,7 +43,9 @@ func _v191_copy(streak: int, axis: String) -> String:
     var failures := mini(_v192_trailing_failures(axis), V192_RESET_FAILURES)
     if failures >= V192_RESET_FAILURES:
         return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d  ·  -0.5 m EASIER" % [axis, correction, failures, V192_RESET_FAILURES]
-    return "PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d TO EASIER" % [axis, correction, failures, V192_RESET_FAILURES]
+    # One or two misses are still a recoverable run, not a full reset. Calling them RESET made the
+    # ladder feel punitive and overstated state transitions before the actual ease-distance gate.
+    return "PRESSURE LADDER  ·  %s  ·  RECOVER  ·  %s  ·  %d/%d TO RESET" % [axis, correction, failures, V192_RESET_FAILURES]
 
 func _v191_refresh() -> void:
     super._v191_refresh()
