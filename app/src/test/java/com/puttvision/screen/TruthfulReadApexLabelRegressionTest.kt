@@ -19,9 +19,11 @@ class TruthfulReadApexLabelRegressionTest {
 
         assertTrue(production.contains("var apex := _read_apex_point(offset_m)"))
         assertTrue(production.contains("var delta_px := apex.x - center_x"))
-        assertTrue(production.contains("return \"APEX  RIGHT\" if delta_px > 0.0 else \"APEX  LEFT\""))
+        assertTrue(production.contains("APEX  RIGHT"))
+        assertTrue(production.contains("APEX  LEFT"))
+        assertTrue(production.contains("APEX  CENTER"))
         assertFalse(production.contains("offset_m * 100"))
-        assertTrue(apex.contains("_read_apex_point(offset_m)"))
+        assertTrue(apex.contains("func _read_apex_point(offset_m: float) -> Vector2:"))
     }
 
     @Test
