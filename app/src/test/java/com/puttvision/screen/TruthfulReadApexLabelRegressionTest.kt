@@ -34,6 +34,17 @@ class TruthfulReadApexLabelRegressionTest {
     }
 
     @Test
+    fun startupRaceRetriesBindingUntilInheritedHudHasActuallyBeenBuilt() {
+        val guard = asset("truthful_read_apex_label.gd")
+        val process = guard.substringAfter("func _process(_delta: float) -> void:")
+
+        assertTrue(guard.contains("func _bind_apex_landmark() -> bool:"))
+        assertTrue(process.contains("if _panel == null or _ring == null or _badge == null:"))
+        assertTrue(process.contains("if not _bind_apex_landmark():"))
+        assertFalse(guard.contains("set_process(false)\n    call_deferred(\"_bind_apex_landmark\")"))
+    }
+
+    @Test
     fun guardIsLightweightPresentationOnlyAndWiredToTvAndPreview() {
         val guard = asset("truthful_read_apex_label.gd")
         val tv = asset("v143_tv.tscn")
