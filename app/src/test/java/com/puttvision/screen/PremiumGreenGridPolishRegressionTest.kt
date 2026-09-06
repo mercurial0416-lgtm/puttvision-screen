@@ -37,6 +37,19 @@ class PremiumGreenGridPolishRegressionTest {
     }
 
     @Test
+    fun secondaryReliefGridIsQuietEnoughNotToFightTheMetricRead() {
+        val source = asset("premium_green_grid_polish.gd")
+        val relief = asset("terrain_relief_visibility.gd")
+
+        assertTrue(relief.contains("relief_color = mix(relief_color, flow_color, flow_grid * 0.32)"))
+        assertTrue(source.contains("RELIEF_NODE_NAME := \"TerrainReliefVisibility\""))
+        assertTrue(source.contains("relief_color, flow_color, flow_grid * 0.08"))
+        assertTrue(source.contains("float flow_alpha = flow_grid * 0.035;"))
+        assertTrue(source.contains("float ribbon_alpha = elevation_ribbon * active * 0.18;"))
+        assertTrue(source.contains("ALPHA = min(0.38, ALPHA + flow_alpha);"))
+    }
+
+    @Test
     fun polishIsOneShotPresentationOnlyAndCoveredByTvAndPreview() {
         val source = asset("premium_green_grid_polish.gd")
         val tv = asset("v143_tv.tscn")
@@ -54,12 +67,14 @@ class PremiumGreenGridPolishRegressionTest {
     }
 
     @Test
-    fun shaderPatchingFailsClosedIfInheritedGridContractChanges() {
+    fun shaderPatchingFailsClosedIfInheritedGridContractsChange() {
         val source = asset("premium_green_grid_polish.gd")
 
         assertTrue(source.contains("const POLISH_MARKER := \"// PUTTVISION_PREMIUM_GRID_V1\""))
+        assertTrue(source.contains("const RELIEF_POLISH_MARKER := \"// PUTTVISION_PREMIUM_RELIEF_GRID_V1\""))
         assertTrue(source.contains("var complete := code.contains(POLISH_MARKER)"))
+        assertTrue(source.contains("var complete := code.contains(RELIEF_POLISH_MARKER)"))
         assertTrue(source.contains("if not complete:"))
-        assertTrue(source.contains("return\n\n    material.shader.code = code"))
+        assertTrue(source.contains("if complete:\n        material.shader.code = code"))
     }
 }
