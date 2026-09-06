@@ -37,15 +37,27 @@ namespace PuttVision.Telemetry
         public int bridgeCount;
         public int flagstickContacts;
 
+        // Treat the bridge as an external input boundary even though Android currently sanitizes
+        // its numeric payloads. A future JNI/native transport, corrupted replay, or malformed test
+        // frame must not be allowed to inject NaN/Infinity into transforms, camera tracking or HUD
+        // interpolation where one bad value can poison presentation state for subsequent frames.
         public bool IsUsable =>
             schemaVersion == CurrentSchemaVersion &&
+            IsFinite(elapsedSec) && elapsedSec >= 0f &&
             IsFinite(xM) &&
             IsFinite(yM) &&
             IsFinite(centerZM) &&
+            IsFinite(vxMps) &&
+            IsFinite(vyMps) &&
+            IsFinite(vzMps) &&
             IsFinite(orientationW) &&
             IsFinite(orientationX) &&
             IsFinite(orientationY) &&
-            IsFinite(orientationZ);
+            IsFinite(orientationZ) &&
+            IsFinite(surfaceNormalX) &&
+            IsFinite(surfaceNormalY) &&
+            IsFinite(surfaceNormalZ) &&
+            IsFinite(slipSpeedMps) && slipSpeedMps >= 0f;
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
