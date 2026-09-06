@@ -71,6 +71,16 @@ class PracticePressureLadderStateRegressionTest {
     }
 
     @Test
+    fun freshObjectiveStartsCleanInsteadOfPretendingThePlayerReset() {
+        val source = asset("v192_drill_progression.gd")
+        assertTrue(source.contains("if not _v191_has_focus_samples():"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  0/%d  ·  START"))
+        val freshStart = source.indexOf("if not _v191_has_focus_samples():")
+        val resetCopy = source.indexOf("var correction := _v191_reset_coaching(axis)")
+        assertTrue(freshStart in 0 until resetCopy)
+    }
+
+    @Test
     fun failureProgressUsesTheRealTrailingMissCountInsteadOfStickingAtZero() {
         val source = asset("v192_drill_progression.gd")
         assertTrue(source.contains("var failures := mini(_v192_trailing_failures(axis), V192_RESET_FAILURES)"))

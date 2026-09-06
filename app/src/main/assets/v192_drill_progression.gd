@@ -24,6 +24,10 @@ func _v192_trailing_failures(axis: String) -> int:
 func _v191_copy(streak: int, axis: String) -> String:
     if axis == "BUILDING":
         return "PRESSURE LADDER  ·  BUILDING"
+    # A newly-selected objective has no reps played against it yet. Do not present that clean slate
+    # as a RESET or imply the player is already progressing toward an easier distance.
+    if not _v191_has_focus_samples():
+        return "PRESSURE LADDER  ·  %s  ·  0/%d  ·  START" % [axis, V191_ADVANCE_STREAK]
     var progress := "%d/%d" % [clampi(streak, 0, V191_ADVANCE_STREAK), V191_ADVANCE_STREAK]
     if streak >= V191_ADVANCE_STREAK:
         return "PRESSURE LADDER  ·  %s  ·  %s  ·  READY  ·  +0.5 m NEXT" % [axis, progress]
