@@ -2,33 +2,31 @@ package com.puttvision.screen
 
 import org.json.JSONObject
 import java.lang.reflect.Method
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.Base64
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Optional transport from PuttVision's authoritative native pipeline into an embedded Unity
- * renderer. This file intentionally has no compile-time Unity dependency, so the existing Android
- * app keeps building before a Unity `unityLibrary` export is checked in/generated.
- *
- * The native camera, shot measurement and V135/V136 rigid-ball physics remain authoritative.
- * Unity is a presentation consumer only.
+ * renderer. There is deliberately no compile-time Unity dependency.
  */
 object UnityRendererBridge {
     const val SCHEMA_VERSION = 1
     const val RECEIVER_GAME_OBJECT = "PuttTelemetryReceiver"
     const val SHOT_METHOD = "OnTelemetryJson"
     const val FRAME_METHOD = "OnPhysicsFrameJson"
+    const val SURFACE_METHOD = "OnSurfaceGridJson"
     const val RESET_METHOD = "OnRendererReset"
 
-    /** May be forced off/on by diagnostics. Runtime probing happens only once per process. */
-    @Volatile
-    var enabled: Boolean = false
-
+    @Volatile var enabled: Boolean = false
     private val reflectedMethod = AtomicReference<Method?>(null)
     private val runtimeProbeAttempted = AtomicBoolean(false)
-
-    @Volatile
-    private var senderOverride: ((String, String, String) -> Unit)? = null
+    @Volatile private var senderOverride: ((String, String, String) -> Unit)? = null
 
     fun isUnityRuntimeAvailable(): Boolean = resolveUnitySendMessage() != null
 
@@ -38,14 +36,19 @@ object UnityRendererBridge {
         return enabled
     }
 
-    fun publishShot(
-        metrics: ShotMetrics,
-        settings: GreenSettings,
-        startX: Double = 0.0,
-        startY: Double = 0.0,
-    ): Boolean {
+    fun publishShot(metrics: ShotMetrics, settings: GreenSettings, startX: Double = 0.0, startY: Double = 0.0): Boolean {
         if (!rendererActive()) return false
         return send(SHOT_METHOD, UnityRendererProtocol.shotJson(metrics, settings, startX, startY))
+    }
+
+    /**
+     * Publishes the native terrain truth once per shot. The grid calls GreenTerrain.effectiveHeightAt
+     * directly, therefore custom greens, built-in profiles and global slopes all render from the
+     * exact same height source consumed by native physics.
+     */
+    fun publishSurfaceGrid(settings: GreenSettings, startX: Double = 0.0, startY: Double = 0.0): Boolean {
+        if (!rendererActive()) return false
+        return send(SURFACE_METHOD, UnityRendererProtocol.surfaceGridJson(settings, startX, startY))
     }
 
     fun publishPhysicsFrame(state: SimState?): Boolean {
@@ -58,7 +61,6 @@ object UnityRendererBridge {
         return send(RESET_METHOD, "{}")
     }
 
-    /** Test seam; never install this from product code. */
     internal fun installSenderForTests(sender: ((String, String, String) -> Unit)?) {
         senderOverride = sender
         if (sender != null) enabled = true
@@ -72,25 +74,19 @@ object UnityRendererBridge {
     }
 
     private fun send(methodName: String, payload: String): Boolean {
-        senderOverride?.let { sender ->
-            sender(RECEIVER_GAME_OBJECT, methodName, payload)
+        senderOverride?.let {
+            it(RECEIVER_GAME_OBJECT, methodName, payload)
             return true
         }
-
         val method = resolveUnitySendMessage() ?: return false
-        return runCatching {
-            method.invoke(null, RECEIVER_GAME_OBJECT, methodName, payload)
-        }.isSuccess
+        return runCatching { method.invoke(null, RECEIVER_GAME_OBJECT, methodName, payload) }.isSuccess
     }
 
     private fun resolveUnitySendMessage(): Method? {
         reflectedMethod.get()?.let { return it }
         val resolved = runCatching {
             Class.forName("com.unity3d.player.UnityPlayer").getMethod(
-                "UnitySendMessage",
-                String::class.java,
-                String::class.java,
-                String::class.java,
+                "UnitySendMessage", String::class.java, String::class.java, String::class.java
             )
         }.getOrNull() ?: return null
         reflectedMethod.compareAndSet(null, resolved)
@@ -98,14 +94,11 @@ object UnityRendererBridge {
     }
 }
 
-/** Pure JSON protocol functions kept separate so Android JVM tests do not need a Unity runtime. */
 internal object UnityRendererProtocol {
-    fun shotJson(
-        metrics: ShotMetrics,
-        settings: GreenSettings,
-        startX: Double,
-        startY: Double,
-    ): String {
+    const val SURFACE_WIDTH = 33
+    const val SURFACE_HEIGHT = 65
+
+    fun shotJson(metrics: ShotMetrics, settings: GreenSettings, startX: Double, startY: Double): String {
         var flags = 0
         if (metrics.faceAngleDeg != null) flags = flags or 1
         if (metrics.pathAngleDeg != null) flags = flags or 2
@@ -123,8 +116,6 @@ internal object UnityRendererProtocol {
             put("impactOffsetMm", finiteOrZero(metrics.impactOffsetMm))
             put("confidence", finiteOrZero(metrics.confidence))
             put("validityFlags", flags)
-
-            // Shot-static green context. Dynamic ball pose is delivered separately from SimState.
             put("startXM", finiteOrZero(startX))
             put("startYM", finiteOrZero(startY))
             put("holeDistanceM", finiteOrZero(settings.holeDistanceM))
@@ -141,6 +132,39 @@ internal object UnityRendererProtocol {
         }.toString()
     }
 
+    fun surfaceGridJson(settings: GreenSettings, startX: Double, startY: Double): String {
+        val distance = max(2.0, settings.holeDistanceM)
+        val halfWidth = max(max(2.5, distance * 0.55), abs(startX) + 1.5)
+        val minX = -halfWidth
+        val maxX = halfWidth
+        val minY = min(-1.5, startY - 1.2)
+        val maxY = max(distance + 2.0, startY + 2.0)
+        val bytes = ByteBuffer.allocate(SURFACE_WIDTH * SURFACE_HEIGHT * 4).order(ByteOrder.LITTLE_ENDIAN)
+
+        for (iy in 0 until SURFACE_HEIGHT) {
+            val fy = iy.toDouble() / (SURFACE_HEIGHT - 1).toDouble()
+            val y = minY + (maxY - minY) * fy
+            for (ix in 0 until SURFACE_WIDTH) {
+                val fx = ix.toDouble() / (SURFACE_WIDTH - 1).toDouble()
+                val x = minX + (maxX - minX) * fx
+                val height = GreenTerrain.effectiveHeightAt(settings, x, y)
+                    .takeIf { it.isFinite() } ?: 0.0
+                bytes.putFloat(height.toFloat())
+            }
+        }
+
+        return JSONObject().apply {
+            put("schemaVersion", UnityRendererBridge.SCHEMA_VERSION)
+            put("width", SURFACE_WIDTH)
+            put("height", SURFACE_HEIGHT)
+            put("minXM", minX)
+            put("maxXM", maxX)
+            put("minYM", minY)
+            put("maxYM", maxY)
+            put("heightF32LeBase64", Base64.getEncoder().encodeToString(bytes.array()))
+        }.toString()
+    }
+
     fun physicsFrameJson(state: SimState): String = JSONObject().apply {
         put("schemaVersion", UnityRendererBridge.SCHEMA_VERSION)
         put("elapsedSec", finiteOrZero(state.elapsed))
@@ -150,18 +174,15 @@ internal object UnityRendererProtocol {
         put("vxMps", finiteOrZero(state.vx))
         put("vyMps", finiteOrZero(state.vy))
         put("vzMps", finiteOrZero(state.vz))
-
         put("orientationW", finiteOr(state.orientationW, 1.0))
         put("orientationX", finiteOrZero(state.orientationX))
         put("orientationY", finiteOrZero(state.orientationY))
         put("orientationZ", finiteOrZero(state.orientationZ))
-
         put("surfaceNormalX", finiteOrZero(state.surfaceNormalX))
         put("surfaceNormalY", finiteOrZero(state.surfaceNormalY))
         put("surfaceNormalZ", finiteOr(state.surfaceNormalZ, 1.0))
         put("slipSpeedMps", finiteOrZero(state.v135SlipSpeedMps))
         put("airborne", state.v135Airborne)
-
         put("running", state.running)
         put("holed", state.holed)
         put("lipOut", state.lipOut)
@@ -174,7 +195,5 @@ internal object UnityRendererProtocol {
     }.toString()
 
     private fun finiteOrZero(value: Double?): Double = finiteOr(value, 0.0)
-
-    private fun finiteOr(value: Double?, fallback: Double): Double =
-        value?.takeIf { it.isFinite() } ?: fallback
+    private fun finiteOr(value: Double?, fallback: Double): Double = value?.takeIf { it.isFinite() } ?: fallback
 }
