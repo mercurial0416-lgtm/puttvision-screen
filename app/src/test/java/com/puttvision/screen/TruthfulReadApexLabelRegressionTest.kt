@@ -15,15 +15,12 @@ class TruthfulReadApexLabelRegressionTest {
     @Test
     fun apexBadgeNamesTheActualRenderedPathLandmarkInsteadOfReusingLaunchOffsetCentimetres() {
         val production = asset("truthful_read_apex_root.gd")
-        val preview = asset("truthful_read_apex_preview.gd")
         val apex = asset("commercial_read_apex.gd")
 
-        for (source in listOf(production, preview)) {
-            assertTrue(source.contains("var apex := _read_apex_point(offset_m)"))
-            assertTrue(source.contains("var delta_px := apex.x - center_x"))
-            assertTrue(source.contains("return \"APEX  RIGHT\" if delta_px > 0.0 else \"APEX  LEFT\""))
-            assertFalse(source.contains("offset_m * 100"))
-        }
+        assertTrue(production.contains("var apex := _read_apex_point(offset_m)"))
+        assertTrue(production.contains("var delta_px := apex.x - center_x"))
+        assertTrue(production.contains("return \"APEX  RIGHT\" if delta_px > 0.0 else \"APEX  LEFT\""))
+        assertFalse(production.contains("offset_m * 100"))
         assertTrue(apex.contains("_read_apex_point(offset_m)"))
     }
 
@@ -37,17 +34,16 @@ class TruthfulReadApexLabelRegressionTest {
     }
 
     @Test
-    fun productionAndPreviewRootsExerciseTheSameTruthfulDescriptor() {
+    fun productionRootKeepsExistingTruthGuardChainAndPhysicsIsolation() {
         val tv = asset("v143_tv.tscn")
         val previewScene = asset("v143_preview.tscn")
         val production = asset("truthful_read_apex_root.gd")
-        val preview = asset("truthful_read_apex_preview.gd")
 
         assertTrue(tv.contains("res://truthful_read_apex_root.gd"))
         assertTrue(tv.contains("res://live_origin_truth_guard.gd"))
-        assertTrue(previewScene.contains("res://truthful_read_apex_preview.gd"))
+        assertTrue(previewScene.contains("res://premium_direction_language_preview.gd"))
+        assertFalse(previewScene.contains("truthful_read_apex_preview.gd"))
         assertTrue(production.contains("extends \"res://live_origin_truth_guard.gd\""))
-        assertTrue(preview.contains("extends \"res://premium_direction_language_preview.gd\""))
         assertFalse(production.contains("GreenTerrain("))
         assertFalse(production.contains("GreenReadAdvisor("))
         assertFalse(production.contains("score ="))
