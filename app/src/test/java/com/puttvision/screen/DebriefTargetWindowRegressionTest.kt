@@ -18,8 +18,8 @@ class DebriefTargetWindowRegressionTest {
 
         assertTrue(source.contains("const LINE_GOOD_HALF_PX := BAR_HALF_PX * 1.5 / 30.0"))
         assertTrue(source.contains("const PACE_GOOD_HALF_PX := BAR_HALF_PX * 8.0 / 70.0"))
-        assertTrue(source.contains("_add_target_band(panel, \"LineGoodWindow\", LINE_TRACK_Y, LINE_GOOD_HALF_PX)"))
-        assertTrue(source.contains("_add_target_band(panel, \"PaceGoodWindow\", PACE_TRACK_Y, PACE_GOOD_HALF_PX)"))
+        assertTrue(source.contains("_ensure_target_band(panel, \"LineGoodWindow\", LINE_TRACK_Y, LINE_GOOD_HALF_PX)"))
+        assertTrue(source.contains("_ensure_target_band(panel, \"PaceGoodWindow\", PACE_TRACK_Y, PACE_GOOD_HALF_PX)"))
     }
 
     @Test
