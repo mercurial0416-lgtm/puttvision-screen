@@ -13,7 +13,7 @@ import android.view.Display
 import android.view.WindowManager
 import android.widget.FrameLayout
 
-/** Filament presentation retained only as a safe fallback if the embedded V143 engine cannot launch. */
+/** Filament presentation retained as the final safe fallback if embedded engines cannot launch. */
 class GamePresentation(
     context: Context,
     display: Display,
@@ -36,12 +36,16 @@ class ExternalDisplayController(
     private val dm = context.getSystemService(DisplayManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
     private var presentation: GamePresentation? = null
+    private var unityDisplayId: Int? = null
+    private var unityFailedForDisplayId: Int? = null
     private var godotDisplayId: Int? = null
     private var started = false
 
     private val snapshotPump = object : Runnable {
         override fun run() {
             if (!started) return
+            // Godot remains warm as a rollback renderer. Unity's dynamic 6DOF frames are published
+            // directly at the V126 physics snapshot boundary rather than duplicated by this pump.
             V143GodotRenderBridge.publish(engine)
             handler.postDelayed(this, 16L)
         }
@@ -61,38 +65,86 @@ class ExternalDisplayController(
         started = false
         handler.removeCallbacksAndMessages(null)
         try { dm.unregisterDisplayListener(this) } catch (_: Throwable) { }
-        V143GodotTvActivity.finishCurrent()
-        godotDisplayId = null
+        stopUnity()
+        stopGodot()
         presentation?.dismiss()
         presentation = null
+        unityFailedForDisplayId = null
     }
 
     fun refresh() {
         val displays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
         val display = displays.firstOrNull()
         if (display == null) {
-            V143GodotTvActivity.finishCurrent()
-            godotDisplayId = null
+            stopUnity()
+            stopGodot()
             presentation?.dismiss()
             presentation = null
+            unityFailedForDisplayId = null
             onChanged(false, "외부 TV 미검출 · HDMI/DeX 연결 확인")
             return
         }
 
+        val unityEligible = UnityTvRuntime.isAvailable() && unityFailedForDisplayId != display.displayId
+        if (unityEligible) {
+            if (unityDisplayId == display.displayId) {
+                val state = if (UnityTvRuntime.isReadyOn(display.displayId)) {
+                    "UNITY READY"
+                } else {
+                    "UNITY STARTING"
+                }
+                onChanged(true, "TV 연결됨 · ${display.name} · $state")
+                return
+            }
+
+            stopGodot()
+            presentation?.dismiss()
+            presentation = null
+            launchUnity(display)
+            return
+        }
+
         if (godotDisplayId == display.displayId) {
-            val state = if (V143GodotRuntime.setupComplete) "V143 GODOT READY" else "V143 GODOT STARTING"
+            val state = if (V143GodotRuntime.setupComplete) "GODOT READY" else "GODOT STARTING"
             onChanged(true, "TV 연결됨 · ${display.name} · $state")
             return
         }
 
-        V143GodotTvActivity.finishCurrent()
-        godotDisplayId = null
+        stopUnity()
         presentation?.dismiss()
         presentation = null
         launchGodot(display)
     }
 
-    private fun launchGodot(display: Display) {
+    private fun launchUnity(display: Display) {
+        stopUnity()
+        UnityRendererBridge.enabled = false
+
+        if (!UnityTvRuntime.launch(context, display)) {
+            unityFailedForDisplayId = display.displayId
+            launchGodot(display)
+            return
+        }
+
+        unityDisplayId = display.displayId
+        onChanged(true, "TV 연결됨 · ${display.name} · PUTTVISION UNITY")
+
+        // ActivityManager launch success is not enough; the scene calls UnityTvRuntime.onUnityReady
+        // after it has actually loaded. If that callback never arrives, roll back automatically.
+        handler.postDelayed({
+            if (!started || unityDisplayId != display.displayId) return@postDelayed
+            if (!UnityTvRuntime.isReadyOn(display.displayId)) {
+                val reason = UnityTvRuntime.lastFailure ?: "Unity 초기화 타임아웃"
+                unityFailedForDisplayId = display.displayId
+                stopUnity()
+                launchGodot(display, reason)
+            } else {
+                onChanged(true, "TV 연결됨 · ${display.name} · UNITY READY")
+            }
+        }, 9000L)
+    }
+
+    private fun launchGodot(display: Display, unityReason: String? = null) {
         V143GodotRuntime.setupComplete = false
         V143GodotRuntime.lastFailure = null
         V143GodotRenderBridge.publish(engine)
@@ -106,7 +158,8 @@ class ExternalDisplayController(
             }
             context.startActivity(intent, options.toBundle())
             godotDisplayId = display.displayId
-            onChanged(true, "TV 연결됨 · ${display.name} · V143 GODOT")
+            val prefix = unityReason?.let { "UNITY FALLBACK · $it · " } ?: ""
+            onChanged(true, "TV 연결됨 · ${display.name} · ${prefix}GODOT")
 
             // A launch can succeed at ActivityManager level but fail during native engine setup.
             handler.postDelayed({
@@ -121,14 +174,24 @@ class ExternalDisplayController(
         }
     }
 
-    private fun showFallback(display: Display, reason: String) {
+    private fun stopUnity() {
+        UnityTvRuntime.finishCurrent()
+        unityDisplayId = null
+    }
+
+    private fun stopGodot() {
         V143GodotTvActivity.finishCurrent()
         godotDisplayId = null
+    }
+
+    private fun showFallback(display: Display, reason: String) {
+        stopUnity()
+        stopGodot()
         presentation?.dismiss()
         presentation = GamePresentation(context, display, engine).also {
             try {
                 it.show()
-                onChanged(true, "TV 연결됨 · ${display.name} · V142 FALLBACK · $reason")
+                onChanged(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · $reason")
             } catch (e: Throwable) {
                 presentation = null
                 onChanged(false, "TV 화면 열기 실패 · ${e.message}")
