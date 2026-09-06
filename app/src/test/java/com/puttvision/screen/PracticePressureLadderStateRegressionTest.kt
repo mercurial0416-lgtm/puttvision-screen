@@ -101,6 +101,18 @@ class PracticePressureLadderStateRegressionTest {
     }
 
     @Test
+    fun recoveryWarningHasDistinctVisualHierarchyWithoutMasqueradingAsReset() {
+        val source = asset("v192_drill_progression.gd")
+        assertTrue(source.contains("const V192_RECOVER_COLOR := Color(\"#e9bf72\")"))
+        assertTrue(source.contains("const V192_RESET_COLOR := Color(\"#f0a56d\")"))
+        assertTrue(source.contains("var recovering := _v191_streak == 0 and failures > 0 and failures < V192_RESET_FAILURES"))
+        assertTrue(source.contains("elif recovering:"))
+        assertTrue(source.contains("_v191_streak_label.modulate = V192_RECOVER_COLOR"))
+        assertTrue(source.contains("_v191_streak_label.modulate = V192_RESET_COLOR"))
+        assertFalse(source.contains("_v190_target_zone.color = V192_RECOVER_COLOR"))
+    }
+
+    @Test
     fun successCopyCarriesObjectiveAndExplicitProgress() {
         val base = asset("v191_practice_streak.gd")
         val production = asset("v192_drill_progression.gd")
