@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource path="res://premium_direction_language_preview.gd" type="Script" id="1_preview"]
 [ext_resource path="res://replay_roll_distance_layout.gd" type="Script" id="2_replay_layout"]
@@ -6,6 +6,7 @@
 [ext_resource path="res://premium_green_grid_polish.gd" type="Script" id="4_grid_polish"]
 [ext_resource path="res://replay_cut_preroll_cue.gd" type="Script" id="5_replay_preroll"]
 [ext_resource path="res://course_atmosphere_depth.gd" type="Script" id="6_atmosphere"]
+[ext_resource path="res://truthful_read_apex_label.gd" type="Script" id="7_apex_truth"]
 
 [node name="V143Preview" type="Node3D"]
 script = ExtResource("1_preview")
@@ -24,3 +25,6 @@ script = ExtResource("5_replay_preroll")
 
 [node name="CourseAtmosphereDepth" type="Node" parent="."]
 script = ExtResource("6_atmosphere")
+
+[node name="TruthfulReadApexLabel" type="Node" parent="."]
+script = ExtResource("7_apex_truth")
