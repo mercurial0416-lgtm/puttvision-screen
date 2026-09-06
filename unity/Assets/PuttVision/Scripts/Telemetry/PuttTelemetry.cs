@@ -23,11 +23,27 @@ namespace PuttVision.Telemetry
         public float confidence;
         public int validityFlags;
 
+        // Native shot-static context. Unity renders these values; it does not reinterpret physics.
+        public float startXM;
+        public float startYM;
+        public float holeDistanceM = 5f;
+        public float stimpMeters = 2.8f;
+        public float sideSlopePct;
+        public float longSlopePct;
+        public int terrainProfileId = -1;
+        public bool flagstickIn;
+        public float grainDirectionDeg;
+        public float grainStrength01;
+        public float moisture01 = 0.5f;
+        public float firmness01 = 0.5f;
+        public float trueness01 = 1f;
+
         public bool HasFaceAngle => (validityFlags & FaceAngleValid) != 0;
         public bool HasPathAngle => (validityFlags & PathAngleValid) != 0;
         public bool HasImpactOffset => (validityFlags & ImpactOffsetValid) != 0;
         public bool HasConfidence => (validityFlags & ConfidenceValid) != 0;
 
+        // Used only by the editor/local smoke simulation. Product motion follows PuttPhysicsFrame.
         public bool IsSimulationReady =>
             schemaVersion == CurrentSchemaVersion &&
             !float.IsNaN(ballSpeedMps) &&
