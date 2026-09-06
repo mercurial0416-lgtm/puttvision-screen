@@ -2,6 +2,7 @@ package com.puttvision.screen
 
 import org.json.JSONObject
 import java.lang.reflect.Method
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -19,11 +20,12 @@ object UnityRendererBridge {
     const val FRAME_METHOD = "OnPhysicsFrameJson"
     const val RESET_METHOD = "OnRendererReset"
 
-    /** Off by default until the exported Unity runtime is integrated and explicitly enabled. */
+    /** May be forced off/on by diagnostics. Runtime probing happens only once per process. */
     @Volatile
     var enabled: Boolean = false
 
     private val reflectedMethod = AtomicReference<Method?>(null)
+    private val runtimeProbeAttempted = AtomicBoolean(false)
 
     @Volatile
     private var senderOverride: ((String, String, String) -> Unit)? = null
@@ -32,6 +34,7 @@ object UnityRendererBridge {
 
     fun enableIfRuntimeAvailable(): Boolean {
         enabled = isUnityRuntimeAvailable()
+        runtimeProbeAttempted.set(true)
         return enabled
     }
 
@@ -41,23 +44,31 @@ object UnityRendererBridge {
         startX: Double = 0.0,
         startY: Double = 0.0,
     ): Boolean {
-        if (!enabled) return false
+        if (!rendererActive()) return false
         return send(SHOT_METHOD, UnityRendererProtocol.shotJson(metrics, settings, startX, startY))
     }
 
     fun publishPhysicsFrame(state: SimState?): Boolean {
-        if (!enabled || state == null) return false
+        if (state == null || !rendererActive()) return false
         return send(FRAME_METHOD, UnityRendererProtocol.physicsFrameJson(state))
     }
 
     fun publishReset(): Boolean {
-        if (!enabled) return false
+        if (!rendererActive()) return false
         return send(RESET_METHOD, "{}")
     }
 
     /** Test seam; never install this from product code. */
     internal fun installSenderForTests(sender: ((String, String, String) -> Unit)?) {
         senderOverride = sender
+        if (sender != null) enabled = true
+    }
+
+    private fun rendererActive(): Boolean {
+        if (enabled || senderOverride != null) return true
+        if (!runtimeProbeAttempted.compareAndSet(false, true)) return false
+        enabled = isUnityRuntimeAvailable()
+        return enabled
     }
 
     private fun send(methodName: String, payload: String): Boolean {
