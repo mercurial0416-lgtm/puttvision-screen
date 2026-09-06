@@ -4,6 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.kapt")
 }
 
+val unityLibraryPresent = rootProject.findProject(":unityLibrary") != null
 val licensePublicKey = (System.getenv("PV_LICENSE_PUBLIC_KEY_B64") ?: "")
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
@@ -23,6 +24,7 @@ android {
         // in the same semantic family so debug/dev APKs never expose an unrelated legacy version.
         versionName = System.getenv("PV_VERSION_NAME") ?: "0.7.0-dev"
         buildConfigField("String", "LICENSE_PUBLIC_KEY_B64", "\"$licensePublicKey\"")
+        buildConfigField("boolean", "UNITY_RENDERER_AVAILABLE", unityLibraryPresent.toString())
 
         // V131: Filament/Filamat ship universal native AARs. PuttVision's supported
         // physical Android target is ARM64; filtering unused ABIs also keeps the embedded
@@ -37,8 +39,8 @@ android {
         ignoreAssetsPattern = "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 
-    // Filament and Godot both ship libc++_shared. They target the same ARM64 process; package a
-    // single copy rather than failing the merge task on the duplicate native runtime.
+    // Filament, Godot and Unity all use the Android C++ runtime. Package one compatible ARM64 copy
+    // rather than failing the merge task on duplicate libc++_shared.so entries.
     packaging {
         jniLibs {
             pickFirsts += setOf("**/libc++_shared.so")
@@ -127,6 +129,12 @@ dependencies {
     // Pin back to the previous 4.7 stable AAR while a three-stage empty-scene/real-scene/full
     // diagnostic keeps the failure domain explicit on physical Android 16 devices.
     implementation("org.godotengine:godot:4.7.0.stable")
+
+    // Unity is generated, not committed. Existing CI/dev builds remain unchanged until a Unity 6.3
+    // export creates unity-export/unityLibrary; at that point this dependency activates automatically.
+    if (unityLibraryPresent) {
+        implementation(project(":unityLibrary"))
+    }
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     testImplementation("junit:junit:4.13.2")

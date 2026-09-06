@@ -9,11 +9,14 @@ package com.puttvision.screen
  * inconsistently.
  *
  * Every physics tick is therefore deep-copied before it becomes visible to TV/phone renderers.
+ * The same immutable-by-convention snapshot is also offered to the optional Unity presentation
+ * bridge. With no Unity runtime packaged, that bridge performs one capability probe and remains a
+ * no-op, preserving the existing renderer path.
  */
 object V126PhysicsFrameBridge {
     fun snapshot(source: SimState?): SimState? {
         source ?: return null
-        return SimState(
+        val snapshot = SimState(
             x = source.x,
             y = source.y,
             vx = source.vx,
@@ -58,5 +61,7 @@ object V126PhysicsFrameBridge {
             bridgeCount = source.bridgeCount,
             flagstickContacts = source.flagstickContacts
         )
+        UnityRendererBridge.publishPhysicsFrame(snapshot)
+        return snapshot
     }
 }

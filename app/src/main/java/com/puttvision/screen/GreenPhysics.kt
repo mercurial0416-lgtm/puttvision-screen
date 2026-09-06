@@ -7,12 +7,9 @@ import kotlin.math.cos
 data class GreenSettings(
     var stimpMeters: Double = 2.8,
     var holeDistanceM: Double = 5.0,
-    var sideSlopePct: Double = 0.0,   // + = right side is lower, ball breaks right
-    var longSlopePct: Double = 0.0,   // + = downhill toward the hole
-    var terrainProfileId: Int = -1,   // -1 = uniform plane, 0..23 = practice terrain profile
-
-    // V136 surface/obstacle realism. Neutral defaults preserve existing Stimp calibration while
-    // allowing real-green anisotropy and imperfections to be enabled without a second physics path.
+    var sideSlopePct: Double = 0.0,
+    var longSlopePct: Double = 0.0,
+    var terrainProfileId: Int = -1,
     var flagstickIn: Boolean = false,
     var grainDirectionDeg: Double = 0.0,
     var grainStrength01: Double = 0.0,
@@ -35,9 +32,6 @@ data class SimState(
     var cupContacts: Int = 0,
     var lipOut: Boolean = false,
     var lastCupContactSec: Double = -10.0,
-
-    // V134 compatibility. V135 no longer scripts these phases; they describe the true 3D contact
-    // state produced by the rigid-ball solver so UI/replay code can keep the same public contract.
     var cupPhase: V134CupPhase = V134CupPhase.NONE,
     var cupPhaseElapsedSec: Double = 0.0,
     var cupVerticalOffsetM: Double = 0.0,
@@ -49,10 +43,6 @@ data class SimState(
     var cupRimDurationSec: Double = 0.0,
     var cupRimReleaseSpeedMps: Double = 0.0,
     var cupDropDurationSec: Double = 0.0,
-
-    // V135 physical state: center-of-mass height, 3D velocity, angular velocity and orientation.
-    // These are kept directly on SimState so replay, renderer and diagnostics can observe the exact
-    // physics frame instead of reconstructing motion from an animation.
     var ballCenterZM: Double = Double.NaN,
     var vz: Double = 0.0,
     var omegaXRadS: Double = 0.0,
@@ -73,8 +63,6 @@ data class SimState(
     var cupWallContacts: Int = 0,
     var cupBottomContacts: Int = 0,
     var bridgeCount: Int = 0,
-
-    // V136 obstacle telemetry.
     var flagstickContacts: Int = 0
 )
 
@@ -90,16 +78,6 @@ data class SimResult(
     val flagstickContacts: Int = 0
 )
 
-/**
- * Stable facade retained for all existing callers.
- *
- * V135 delegates every ordinary physical step to [V135RigidBallPhysics], which runs fixed
- * microsteps at up to 480 Hz and owns translational, rotational and cup-contact dynamics. V136
- * layers anisotropic surface conditions and swept flagstick contact around that core. For a cup
- * without the flagstick, the analytically uncatchable region above the published regulation-cup
- * capture limit is still forced through [V135CupEscapeModel] so numerical contact damping cannot
- * create a physically impossible high-speed hole-out.
- */
 class GreenPhysics {
     fun launch(
         metrics: ShotMetrics,
@@ -109,6 +87,8 @@ class GreenPhysics {
     ): SimState {
         val a = Math.toRadians(metrics.launchAngleDeg)
         val speed = metrics.ballSpeedMps.coerceIn(0.05, 5.0)
+        UnityRendererBridge.publishShot(metrics, settings, startX, startY)
+        UnityRendererBridge.publishSurfaceGrid(settings, startX, startY)
         return SimState(
             x = startX,
             y = startY,
@@ -127,8 +107,6 @@ class GreenPhysics {
     ): SimResult? {
         if (!state.running) return result(state, settings)
 
-        // The 1.626 m/s bare-cup capture limit does not apply when a physical flagstick can absorb
-        // or redirect the ball, so only use the guaranteed-escape integrator with the stick out.
         if (cupEnabled && !settings.flagstickIn && state.v135CaptureForbidden && state.v135Airborne) {
             V135CupEscapeModel.stepEscape(state, settings, dtRaw)
             return if (!state.running) result(state, settings) else null
@@ -139,9 +117,6 @@ class GreenPhysics {
         val beforeZ = state.ballCenterZM
         val physicalSettings = V136PhysicalRealism.effectiveSettings(settings, state)
         val finished = V135RigidBallPhysics.step(state, physicalSettings, dtRaw, cupEnabled)
-
-        // Sub-grid green trueness is intentionally applied after the deterministic 6DOF core so
-        // macro terrain normals and Stimp calibration remain authoritative and reproducible.
         V136PhysicalRealism.applyTrueness(state, settings, dtRaw)
 
         if (cupEnabled && settings.flagstickIn && state.running) {
@@ -154,9 +129,6 @@ class GreenPhysics {
             )
         }
 
-        // Detect entry into the rigorously uncatchable part of bare-cup rim phase space before later
-        // frames can dissipate it into a false positive. With the stick in, the stick itself remains
-        // free to change the outcome, so this mechanical bound is intentionally bypassed.
         if (
             cupEnabled && !settings.flagstickIn && state.v135Airborne && !state.holed &&
             V135CupEscapeModel.isUncatchable(state)
