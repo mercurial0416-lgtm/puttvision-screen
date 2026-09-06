@@ -1,4 +1,4 @@
-extends "res://address_relief_camera.gd"
+extends "res://long_putt_address_framing.gd"
 
 # Presentation-only depth finish for the stationary TV green. Android V135-V137, GreenTerrain,
 # GreenReadAdvisor, solver paths and shot coordinates remain authoritative. This layer only increases
