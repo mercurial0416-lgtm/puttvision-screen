@@ -121,23 +121,56 @@ func _v174_grade(long_slope: float) -> String:
     # negative rises toward the cup (uphill). Keep the human-readable HUD aligned with physics.
     return "DOWNHILL" if long_slope > 0.0 else "UPHILL"
 
+func _v174_snapshot_float(s: Dictionary, key: String) -> Dictionary:
+    # The broadcast card must never coerce malformed bridge telemetry into a plausible zero. Doing so
+    # can falsely announce STRAIGHT / LEVEL or a default pace even though the source value is unusable.
+    var raw: Variant = s.get(key, null)
+    var raw_type := typeof(raw)
+    if raw_type != TYPE_INT and raw_type != TYPE_FLOAT:
+        return {"valid": false, "value": 0.0}
+    var value := float(raw)
+    if not is_finite(value):
+        return {"valid": false, "value": 0.0}
+    return {"valid": true, "value": value}
+
 func _update_hud(s: Dictionary, running: bool, holed: bool, lip_out: bool, speed: float) -> void:
-    var remaining: float = max(0.0, float(s.get("distanceToCup", target_distance)))
-    var side: float = float(s.get("sideSlope", 0.0))
-    var long_slope: float = float(s.get("longSlope", 0.0))
+    var remaining_sample := _v174_snapshot_float(s, "distanceToCup")
+    var stimp_sample := _v174_snapshot_float(s, "stimp")
+    var side_sample := _v174_snapshot_float(s, "sideSlope")
+    var long_sample := _v174_snapshot_float(s, "longSlope")
     var zone: String = str(s.get("surfaceZone", "GREEN")).to_upper()
 
     distance_label.text = "%.1f m" % target_distance
-    _v174_remaining_label.text = "%.2f m" % remaining
-    stimp_label.text = "%.1f m" % float(s.get("stimp", 2.8))
-    speed_label.text = "%.2f m/s" % speed if running else "READY"
+    if bool(remaining_sample.get("valid", false)):
+        _v174_remaining_label.text = "%.2f m" % max(0.0, float(remaining_sample.get("value", 0.0)))
+    else:
+        _v174_remaining_label.text = "-- m"
+    if bool(stimp_sample.get("valid", false)):
+        stimp_label.text = "%.1f m" % float(stimp_sample.get("value", 0.0))
+    else:
+        stimp_label.text = "-- m"
+    speed_label.text = "%.2f m/s" % speed if running and is_finite(speed) else ("-- m/s" if running else "READY")
     _v174_surface_label.text = "SURFACE  %s" % zone
 
-    var break_dir := _v174_direction(side)
-    var grade_dir := _v174_grade(long_slope)
-    _v174_break_value.text = "BREAK  %s" % break_dir
-    _v174_grade_value.text = "GRADE  %s" % grade_dir
-    slope_label.text = "L/R %+.2f%%    F/B %+.2f%%" % [side, long_slope]
+    var side_valid := bool(side_sample.get("valid", false))
+    var long_valid := bool(long_sample.get("valid", false))
+    if side_valid:
+        var side := float(side_sample.get("value", 0.0))
+        _v174_break_value.text = "BREAK  %s" % _v174_direction(side)
+    else:
+        _v174_break_value.text = "BREAK  --"
+    if long_valid:
+        var long_slope := float(long_sample.get("value", 0.0))
+        _v174_grade_value.text = "GRADE  %s" % _v174_grade(long_slope)
+    else:
+        _v174_grade_value.text = "GRADE  --"
+    if side_valid and long_valid:
+        slope_label.text = "L/R %+.2f%%    F/B %+.2f%%" % [
+            float(side_sample.get("value", 0.0)),
+            float(long_sample.get("value", 0.0))
+        ]
+    else:
+        slope_label.text = "SLOPE DATA UNAVAILABLE"
 
     if running:
         _v174_state_label.text = "BALL ROLLING"
