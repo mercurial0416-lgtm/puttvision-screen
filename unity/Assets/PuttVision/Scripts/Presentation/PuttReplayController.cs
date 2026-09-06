@@ -23,10 +23,11 @@ namespace PuttVision.Presentation
         private float _countdown = -1f;
         private float _replayClock;
         private int _replayIndex;
+        private int _frameStart;
         private bool _replaying;
 
         public bool IsReplaying => _replaying;
-        public int RecordedFrameCount => _frames.Count;
+        public int RecordedFrameCount => _frames.Count - _frameStart;
 
         private void Awake()
         {
@@ -61,25 +62,25 @@ namespace PuttVision.Presentation
                 _countdown -= Time.unscaledDeltaTime;
                 if (_countdown <= 0f) StartReplay();
             }
-            if (!_replaying || _frames.Count == 0 || ballVisual == null) return;
+            if (!_replaying || RecordedFrameCount == 0 || ballVisual == null) return;
 
             _replayClock += Time.unscaledDeltaTime * replaySpeed;
-            var endElapsed = _frames[_frames.Count - 1].elapsedSec;
-            while (_replayIndex + 1 < _frames.Count && _frames[_replayIndex + 1].elapsedSec <= _replayClock)
+            var endElapsed = FrameAt(RecordedFrameCount - 1).elapsedSec;
+            while (_replayIndex + 1 < RecordedFrameCount && FrameAt(_replayIndex + 1).elapsedSec <= _replayClock)
                 _replayIndex++;
-            Apply(_frames[_replayIndex]);
+            Apply(FrameAt(_replayIndex));
             if (_replayClock >= endElapsed) StopReplay(true);
         }
 
         public void StartReplay()
         {
-            if (_frames.Count < 2 || ballVisual == null) return;
+            if (RecordedFrameCount < 2 || ballVisual == null) return;
             _countdown = -1f;
             _replaying = true;
             if (_livePresenter != null) _livePresenter.enabled = false;
             _replayIndex = 0;
-            _replayClock = _frames[0].elapsedSec;
-            Apply(_frames[0]);
+            _replayClock = FrameAt(0).elapsedSec;
+            Apply(FrameAt(0));
             ReplayStarted?.Invoke();
         }
 
@@ -88,7 +89,7 @@ namespace PuttVision.Presentation
             if (!_replaying) return;
             _replaying = false;
             _countdown = -1f;
-            if (restoreFinalFrame && _frames.Count > 0) Apply(_frames[_frames.Count - 1]);
+            if (restoreFinalFrame && RecordedFrameCount > 0) Apply(FrameAt(RecordedFrameCount - 1));
             if (_livePresenter != null) _livePresenter.enabled = true;
             ReplayEnded?.Invoke();
         }
@@ -96,24 +97,50 @@ namespace PuttVision.Presentation
         private void OnShot(PuttTelemetry _)
         {
             if (_replaying) StopReplay(false);
-            _frames.Clear();
+            ClearFrames();
             _countdown = -1f;
         }
 
         private void OnFrame(PuttPhysicsFrame frame)
         {
             if (frame == null || !frame.IsUsable || _replaying) return;
-            if (_frames.Count == maxRecordedFrames) _frames.RemoveAt(0);
-            _frames.Add(frame);
-            if (autoReplay && !frame.running && _frames.Count > 1 && _countdown < 0f)
+            AppendFrame(frame);
+            if (autoReplay && !frame.running && RecordedFrameCount > 1 && _countdown < 0f)
                 _countdown = autoReplayDelaySec;
         }
 
         private void OnReset()
         {
             if (_replaying) StopReplay(false);
-            _frames.Clear();
+            ClearFrames();
             _countdown = -1f;
+        }
+
+        private void AppendFrame(PuttPhysicsFrame frame)
+        {
+            _frames.Add(frame);
+            var capacity = Mathf.Max(1, maxRecordedFrames);
+            if (RecordedFrameCount > capacity)
+                _frameStart++;
+
+            // Avoid List.RemoveAt(0) on every HFR frame once the replay buffer fills.
+            // Compact stale prefixes only occasionally so trimming is amortized O(1).
+            if (_frameStart >= capacity && _frameStart >= 1024)
+            {
+                _frames.RemoveRange(0, _frameStart);
+                _frameStart = 0;
+            }
+        }
+
+        private PuttPhysicsFrame FrameAt(int logicalIndex)
+        {
+            return _frames[_frameStart + logicalIndex];
+        }
+
+        private void ClearFrames()
+        {
+            _frames.Clear();
+            _frameStart = 0;
         }
 
         private void Apply(PuttPhysicsFrame frame)
