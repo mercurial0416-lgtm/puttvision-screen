@@ -14,7 +14,7 @@ class LongPuttAddressFramingRegressionTest {
 
     @Test
     fun longPuttsOpenTheStationaryAddressCompositionProgressively() {
-        val source = asset("long_putt_address_framing.gd")
+        val source = asset("relief_depth_finish.gd")
         assertTrue(source.contains("LONG_FRAME_START_M := 6.0"))
         assertTrue(source.contains("LONG_FRAME_FULL_M := 14.0"))
         assertTrue(source.contains("smoothstep(LONG_FRAME_START_M, LONG_FRAME_FULL_M, distance_m)"))
@@ -25,15 +25,16 @@ class LongPuttAddressFramingRegressionTest {
 
     @Test
     fun shortAndInvalidDistancesPreserveTheExistingAddressPlan() {
-        val source = asset("long_putt_address_framing.gd")
+        val source = asset("relief_depth_finish.gd")
         assertTrue(source.contains("if not is_finite(distance_m) or distance_m <= LONG_FRAME_START_M:"))
-        assertTrue(source.contains("if signal <= 0.0:\n        return plan"))
+        assertTrue(source.contains("if signal <= 0.0:\n        return"))
         assertTrue(source.contains("var plan := super._address_relief_camera_plan(ball_world, distance_to_cup)"))
+        assertTrue(source.contains("_apply_long_putt_address_frame(ball_world, distance_to_cup, plan)"))
     }
 
     @Test
     fun longerLookRemainsBoundedAndNeverTurnsIntoAimOrPhysicsState() {
-        val source = asset("long_putt_address_framing.gd")
+        val source = asset("relief_depth_finish.gd")
         assertTrue(source.contains("current_fraction + LONG_FRAME_LOOK_EXTRA * signal"))
         assertTrue(source.contains("current_fraction, 0.72"))
         assertTrue(source.contains("plan[\"look_fraction\"] = desired_fraction"))
@@ -46,10 +47,9 @@ class LongPuttAddressFramingRegressionTest {
     }
 
     @Test
-    fun productionReliefStackInheritsTheLongPuttFramingLayer() {
+    fun productionInheritanceShapeStaysStableInsteadOfAddingAnotherCameraSuperclass() {
         val relief = asset("relief_depth_finish.gd")
-        val layer = asset("long_putt_address_framing.gd")
-        assertTrue(relief.contains("extends \"res://long_putt_address_framing.gd\""))
-        assertTrue(layer.contains("extends \"res://address_relief_camera.gd\""))
+        assertTrue(relief.contains("extends \"res://address_relief_camera.gd\""))
+        assertFalse(relief.contains("extends \"res://long_putt_address_framing.gd\""))
     }
 }
