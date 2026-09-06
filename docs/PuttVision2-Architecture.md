@@ -1,48 +1,75 @@
 # PuttVision 2 Architecture
 
-PuttVision 2 separates sensing/analysis from rendering instead of forcing one engine to own the entire product.
+PuttVision 2 separates measurement/physics truth from presentation instead of forcing a game engine to own the entire product.
 
-## Design goal
+## Final authority split
 
-- **Android native owns truth**: camera selection, high-speed capture, calibration, computer vision, shot measurement, settings, persistence, and app lifecycle.
-- **Unity owns presentation**: 3D green, ball/cup/flag presentation, shot replay, slope visualization, lighting, post-processing, TV output, and deterministic putting simulation.
-- The legacy renderer stays available until the Unity path reaches parity. Migration is additive first, destructive last.
+- **Android native owns truth**: camera selection, HFR capture, calibration, computer vision, shot validation/fusion, settings, persistence, app lifecycle, `GreenSurface`, `GreenTerrain`, and the V135/V136 six-DOF putting physics.
+- **Unity owns presentation**: 3D green/cup/flag/ball rendering, lighting, materials, post-processing, TV camera direction, HUD, shot trail, replay and presentation effects.
+- **Unity does not re-simulate product shots.** Production ball motion follows the authoritative `SimState` snapshots published by native physics.
+- The small Unity-side local simulator remains only as an editor/smoke fallback so the scene can be tested before Android is attached.
+- Existing Filament/Godot renderers remain available until Unity passes parity and device validation. Migration is additive first, destructive last.
+
+## Why native physics stays authoritative
+
+The existing native solver is already purpose-built for this product. `GreenPhysics` delegates to `V135RigidBallPhysics`, which runs microsteps up to 480 Hz and tracks translational motion, angular velocity/orientation, skid-to-roll transition, regulation-cup edge/wall/bottom contact, lip-outs, bridging and flagstick contact. V136 adds surface realism such as grain, moisture, firmness and trueness.
+
+Replacing that with Unity PhysX or a second Unity putting model would create two physical truths and make regression testing worse. Unity therefore consumes native results instead of recreating them.
 
 ## Runtime data flow
 
 ```text
 Galaxy camera
-  -> Camera2 high-speed capture (when the device/format supports it)
-  -> native vision / calibration pipeline
-  -> PuttTelemetry (one immutable shot result)
-  -> UnityTelemetryBridge
-  -> Unity PuttTelemetryReceiver
-  -> PuttBallController / replay / HUD
-  -> external display / TV
+  -> Android HFR capture
+  -> native vision / calibration
+  -> ShotMetrics validation + fusion
+  -> GreenPhysics / V135RigidBallPhysics / V136 realism
+        |                         |
+        | shot-static context     | authoritative presentation snapshots
+        v                         v
+  PuttTelemetry JSON       PuttPhysicsFrame JSON
+        \                         /
+         -> UnityRendererBridge ->
+            Unity PuttTelemetryReceiver / PuttPhysicsFrameReceiver
+              -> PuttGreenMeshPresenter
+              -> PuttAuthoritativeBallPresenter
+              -> HUD / replay / camera / effects
+              -> external display / TV
 ```
 
-Do **not** stream raw camera frames through the Unity bridge. Camera frames stay native. Unity receives compact shot results and, later, low-rate status/calibration state only.
+Raw camera frames never cross into Unity. Unity receives compact product state only.
+
+## Surface parity
+
+For the 24 built-in practice profiles, Unity ports the exact `GreenSurface.heightAt(...)` formulas and applies the same global side/long slope term used by `GreenTerrain.effectiveHeightAt(...)`:
+
+```text
+visualHeight = GreenSurface.heightAt(profile, x, y, holeDistance)
+             - 0.01 * sideSlopePct * x
+             - 0.01 * longSlopePct * y
+```
+
+This is presentation only; native remains authoritative. User-authored/custom greens must not be approximated with the built-in formula. Their production Unity path will consume sampled native surface geometry/height data.
 
 ## Coordinate and unit contract
 
-The telemetry contract is deliberately small and versioned.
+- Native position basis: `+X` player-right, `+Y` target-forward, `+Z` up.
+- Unity position basis: `+X` player-right, `+Z` target-forward, `+Y` up.
+- Native position `(x, y, z)` maps to Unity `(x, z, y)`.
+- Native quaternion orientation is **not** converted by swapping components. The correct Unity rotation is the basis transform `B * Rnative * B`, where `B` maps `(x,y,z)` to `(x,z,y)`.
+- Distance: metres (`m`).
+- Speed: metres per second (`m/s`).
+- Impact offset: millimetres (`mm`).
+- Angles: degrees (`deg`).
+- `launchDirectionDeg`: `0` straight, positive player-right.
+- `faceAngleDeg`: `0` square, positive open/player-right.
+- `pathAngleDeg`: `0` target line, positive player-right.
+- `impactOffsetMm`: `0` face centre, positive toe-side.
+- `confidence`: `[0, 1]`.
 
-- Distance: metres (`m`)
-- Speed: metres per second (`m/s`)
-- Impact offset: millimetres (`mm`)
-- Angles: degrees (`deg`)
-- Unity world: `+Z` is straight toward the target, `+X` is player-right, `+Y` is up
-- `launchDirectionDeg`: `0` = straight, positive = player-right
-- `faceAngleDeg`: `0` = square, positive = open/player-right
-- `pathAngleDeg`: `0` = target line, positive = player-right
-- `impactOffsetMm`: `0` = face centre, positive = toe-side
-- `confidence`: `[0, 1]`
+Every payload is versioned with `schemaVersion`.
 
-A consumer must check `schemaVersion` before trusting a payload.
-
-### validityFlags
-
-Optional measurements are represented by a bit field so JSON stays cheap and Unity `JsonUtility` remains sufficient.
+### Shot validity flags
 
 | Bit | Value | Measurement |
 | --- | ---: | --- |
@@ -51,77 +78,98 @@ Optional measurements are represented by a bit field so JSON stays cheap and Uni
 | 2 | 4 | impact offset valid |
 | 3 | 8 | confidence valid |
 
-Ball speed and launch direction are required for a shot to enter simulation.
+## Android/Unity transport
 
-## Integration rule
+The Android bridge is compile-safe before Unity is exported: it has no compile-time `UnityPlayer` dependency and resolves `UnityPlayer.UnitySendMessage(...)` by reflection only when the Unity runtime exists. Without Unity packaged, it performs one capability probe and stays a no-op.
 
-Unity is exported as an Android **library**, then hosted by the native application. The native application must remain capable of launching without Unity during migration.
+The first transport uses two message surfaces on the stable GameObject name `PuttTelemetryReceiver`:
 
-The initial bridge uses `UnityPlayer.UnitySendMessage(...)` only at the shot-result boundary. If later profiling shows the message bridge is insufficient for high-rate status traffic, replace only the transport; keep `PuttTelemetry` stable.
+- `OnTelemetryJson`: one shot-static payload with measurements and green settings.
+- `OnPhysicsFrameJson`: newest authoritative `SimState` presentation snapshot.
+
+The Unity receiver intentionally drops stale queued physics frames and consumes only the newest pose. If profiling later shows JSON/`UnitySendMessage` is too expensive at the selected render cadence, replace the transport with JNI/native shared memory or a binary ring buffer **without changing the authority split**.
 
 ## Migration gates
 
-### Gate 0 — scaffold (this branch)
+### Gate 0 — compile-safe scaffold
 
-- Freeze telemetry schema v1.
-- Add Unity-side receiver and deterministic simulation core.
-- Add Android-side contract/bridge reference implementation.
-- Touch no legacy runtime path.
+- Pin Unity 6.3 LTS and URP 17.3.
+- Version shot/frame protocol.
+- Keep existing Android build independent of `unityLibrary`.
+- Add one-click prototype scene creation.
 
-### Gate 1 — renderer parity
+### Gate 1 — native-authoritative renderer parity
 
-- Build a URP green scene.
-- Match current shot start/end coordinates and camera framing.
-- Add cup interaction, ball spin, shadows, slope/debug overlays, and replay.
-- Add recorded-shot replay so rendering can be tested without a camera.
+- Publish validated shot context from native `GreenPhysics.launch`.
+- Publish thread-safe V126 physics snapshots to Unity when the runtime exists.
+- Present native X/Y/Z and quaternion orientation exactly in Unity.
+- Generate built-in green geometry from the native-compatible height field.
+- Build a real cup opening/liner rather than a painted cup marker.
+- Add recorded-shot/frame replay so rendering is testable without camera hardware.
 
-### Gate 2 — Android host
+### Gate 2 — production art and broadcast presentation
 
-- Export Unity project as `unityLibrary`.
-- Host it from the existing Android app behind a feature flag.
-- Keep Camera2/vision lifecycle outside Unity.
-- Forward shot telemetry only after native validation.
+- Replace prototype materials with authored PBR grass/ball/cup/flag assets.
+- Add turf normal/detail maps, anisotropic grass response, contact shadowing, reflection probes and tuned URP post-processing.
+- Add camera choreography, telemetry HUD, shot trail, slope visualization and result/replay states.
+- Add sampled custom-green surface transport.
 
-### Gate 3 — hardware validation
+### Gate 3 — Android host/export
 
-- Verify supported high-speed camera modes on the target Galaxy device.
-- Verify shot measurements against known test strokes.
-- Verify external display lifecycle and 60 fps render target.
-- Profile thermals, frame pacing, memory, and capture/render contention.
+- Export Unity as Android `unityLibrary`.
+- Host it from the existing app without moving camera or physics lifecycle into Unity.
+- Wire external display lifecycle and renderer fallback/rollback policy.
 
-### Gate 4 — cutover
+### Gate 4 — hardware validation
 
-Only after the Unity path passes the same recorded-shot suite and hardware tests as the existing renderer:
+- Verify HFR capture and Unity rendering can coexist on the target Galaxy device without capture starvation.
+- Verify native-vs-Unity final pose and rotation parity from recorded shots.
+- Verify cup/lip-out/bridge/flagstick visual parity.
+- Verify external-display 60 fps frame pacing, memory and thermals.
 
-1. Make Unity renderer the default.
-2. Keep a rollback feature flag for one release cycle.
-3. Remove the legacy renderer only after field validation.
+### Gate 5 — cutover
+
+Only after Unity passes recorded-shot regression and physical-device validation:
+
+1. Make Unity the default TV renderer.
+2. Keep a rollback renderer for one release cycle.
+3. Remove legacy renderer dependencies only after field validation.
 
 ## Performance budgets
 
-Initial budgets; tune from device profiling rather than guesses.
+- External-display renderer target: stable 60 fps.
+- Zero camera-frame copies into Unity managed memory.
+- No Unity physics in the product motion path.
+- No unbounded physics-frame queue; newest frame wins.
+- No JSON allocation in the existing Android path when Unity is absent.
+- Surface mesh rebuild only when shot/static green context changes, not every frame.
+- Dynamic frame payload excludes the full trail; Unity reconstructs presentation trail from received poses.
 
-- Renderer target: stable 60 fps on the external display.
-- No camera-frame copies into managed Unity memory.
-- No blocking work on Android main/UI thread.
-- Shot-result bridge payload should remain tiny (hundreds of bytes, not frames/images).
-- Simulation uses fixed-step updates and recorded telemetry for deterministic regression testing.
-
-## Repository layout introduced by this migration
+## Repository layout
 
 ```text
-docs/
-  PuttVision2-Architecture.md
-native-bridge/
-  android/
-    PuttTelemetry.kt
-    UnityTelemetryBridge.kt
+app/src/main/java/com/puttvision/screen/
+  GreenPhysics.kt                  # native physical authority, publishes shot context
+  V126PhysicsFrameBridge.kt        # thread-safe snapshot boundary + optional Unity publish
+  UnityRendererBridge.kt           # optional transport/protocol
+
 unity/
-  README.md
-  Assets/PuttVision/Scripts/
-    Bootstrap/
-    Simulation/
-    Telemetry/
+  Packages/
+  ProjectSettings/
+  Assets/PuttVision/
+    Editor/PuttVisionSceneBuilder.cs
+    Scripts/
+      Bootstrap/
+      Simulation/
+        PuttAuthoritativeBallPresenter.cs
+        PuttGreenSurfaceMath.cs
+        PuttGreenMeshPresenter.cs
+        ...editor/local fallback...
+      Telemetry/
+        PuttTelemetry.cs
+        PuttPhysicsFrame.cs
+        PuttTelemetryReceiver.cs
+        PuttPhysicsFrameReceiver.cs
 ```
 
-The `native-bridge` Kotlin files are a reference module until the actual Android host repository/module is located and wired. They intentionally do not modify the current screen renderer build.
+The current prototype primitives are smoke-test assets, not the visual-quality target.
