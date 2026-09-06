@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource path="res://live_origin_truth_guard.gd" type="Script" id="1_v143"]
 [ext_resource path="res://shot_map_target_reticle.gd" type="Script" id="2_target_reticle"]
@@ -16,6 +16,7 @@
 [ext_resource path="res://presentation_telemetry_guard.gd" type="Script" id="9_telemetry_guard_contract"]
 [ext_resource path="res://debrief_axis_semantics.gd" type="Script" id="10_debrief_axis"]
 [ext_resource path="res://debrief_target_window.gd" type="Script" id="11_debrief_window"]
+[ext_resource path="res://premium_green_grid_polish.gd" type="Script" id="12_grid_polish"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
@@ -43,3 +44,6 @@ script = ExtResource("10_debrief_axis")
 
 [node name="DebriefTargetWindow" type="Node" parent="."]
 script = ExtResource("11_debrief_window")
+
+[node name="PremiumGreenGridPolish" type="Node" parent="."]
+script = ExtResource("12_grid_polish")
