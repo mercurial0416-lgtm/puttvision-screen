@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource path="res://live_origin_truth_guard.gd" type="Script" id="1_v143"]
 [ext_resource path="res://shot_map_target_reticle.gd" type="Script" id="2_target_reticle"]
@@ -14,6 +14,7 @@
 [ext_resource path="res://premium_green_grid_polish.gd" type="Script" id="12_grid_polish"]
 [ext_resource path="res://replay_cut_preroll_cue.gd" type="Script" id="13_replay_preroll"]
 [ext_resource path="res://course_atmosphere_depth.gd" type="Script" id="14_atmosphere"]
+[ext_resource path="res://truthful_read_apex_label.gd" type="Script" id="15_apex_truth"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
@@ -50,3 +51,6 @@ script = ExtResource("13_replay_preroll")
 
 [node name="CourseAtmosphereDepth" type="Node" parent="."]
 script = ExtResource("14_atmosphere")
+
+[node name="TruthfulReadApexLabel" type="Node" parent="."]
+script = ExtResource("15_apex_truth")
