@@ -98,6 +98,11 @@ internal object UnityRendererProtocol {
     const val SURFACE_WIDTH = 33
     const val SURFACE_HEIGHT = 65
 
+    // Physics frames are emitted continuously while a putt is running. Reuse the builder on the
+    // producer thread so the bridge only has to allocate the final String required by
+    // UnitySendMessage instead of also allocating a JSONObject/map graph every frame.
+    private val physicsJsonBuilder = ThreadLocal.withInitial { StringBuilder(384) }
+
     fun shotJson(metrics: ShotMetrics, settings: GreenSettings, startX: Double, startY: Double): String {
         var flags = 0
         if (metrics.faceAngleDeg != null) flags = flags or 1
@@ -165,34 +170,65 @@ internal object UnityRendererProtocol {
         }.toString()
     }
 
-    fun physicsFrameJson(state: SimState): String = JSONObject().apply {
-        put("schemaVersion", UnityRendererBridge.SCHEMA_VERSION)
-        put("elapsedSec", finiteOrZero(state.elapsed))
-        put("xM", finiteOrZero(state.x))
-        put("yM", finiteOrZero(state.y))
-        put("centerZM", finiteOrZero(state.ballCenterZM))
-        put("vxMps", finiteOrZero(state.vx))
-        put("vyMps", finiteOrZero(state.vy))
-        put("vzMps", finiteOrZero(state.vz))
-        put("orientationW", finiteOr(state.orientationW, 1.0))
-        put("orientationX", finiteOrZero(state.orientationX))
-        put("orientationY", finiteOrZero(state.orientationY))
-        put("orientationZ", finiteOrZero(state.orientationZ))
-        put("surfaceNormalX", finiteOrZero(state.surfaceNormalX))
-        put("surfaceNormalY", finiteOrZero(state.surfaceNormalY))
-        put("surfaceNormalZ", finiteOr(state.surfaceNormalZ, 1.0))
-        put("slipSpeedMps", finiteOrZero(state.v135SlipSpeedMps))
-        put("airborne", state.v135Airborne)
-        put("running", state.running)
-        put("holed", state.holed)
-        put("lipOut", state.lipOut)
-        put("cupPhase", state.cupPhase.name)
-        put("cupContacts", state.cupContacts)
-        put("cupWallContacts", state.cupWallContacts)
-        put("cupBottomContacts", state.cupBottomContacts)
-        put("bridgeCount", state.bridgeCount)
-        put("flagstickContacts", state.flagstickContacts)
-    }.toString()
+    fun physicsFrameJson(state: SimState): String {
+        val out = physicsJsonBuilder.get()
+        out.setLength(0)
+        out.append('{')
+        appendNumber(out, "schemaVersion", UnityRendererBridge.SCHEMA_VERSION.toDouble())
+        appendNumber(out, "elapsedSec", finiteOrZero(state.elapsed))
+        appendNumber(out, "xM", finiteOrZero(state.x))
+        appendNumber(out, "yM", finiteOrZero(state.y))
+        appendNumber(out, "centerZM", finiteOrZero(state.ballCenterZM))
+        appendNumber(out, "vxMps", finiteOrZero(state.vx))
+        appendNumber(out, "vyMps", finiteOrZero(state.vy))
+        appendNumber(out, "vzMps", finiteOrZero(state.vz))
+        appendNumber(out, "orientationW", finiteOr(state.orientationW, 1.0))
+        appendNumber(out, "orientationX", finiteOrZero(state.orientationX))
+        appendNumber(out, "orientationY", finiteOrZero(state.orientationY))
+        appendNumber(out, "orientationZ", finiteOrZero(state.orientationZ))
+        appendNumber(out, "surfaceNormalX", finiteOrZero(state.surfaceNormalX))
+        appendNumber(out, "surfaceNormalY", finiteOrZero(state.surfaceNormalY))
+        appendNumber(out, "surfaceNormalZ", finiteOr(state.surfaceNormalZ, 1.0))
+        appendNumber(out, "slipSpeedMps", finiteOrZero(state.v135SlipSpeedMps))
+        appendBoolean(out, "airborne", state.v135Airborne)
+        appendBoolean(out, "running", state.running)
+        appendBoolean(out, "holed", state.holed)
+        appendBoolean(out, "lipOut", state.lipOut)
+        appendString(out, "cupPhase", state.cupPhase.name)
+        appendInt(out, "cupContacts", state.cupContacts)
+        appendInt(out, "cupWallContacts", state.cupWallContacts)
+        appendInt(out, "cupBottomContacts", state.cupBottomContacts)
+        appendInt(out, "bridgeCount", state.bridgeCount)
+        appendInt(out, "flagstickContacts", state.flagstickContacts, last = true)
+        out.append('}')
+        return out.toString()
+    }
+
+    private fun appendName(out: StringBuilder, name: String) {
+        if (out.length > 1 && out[out.length - 1] != '{') out.append(',')
+        out.append('"').append(name).append("\":")
+    }
+
+    private fun appendNumber(out: StringBuilder, name: String, value: Double) {
+        appendName(out, name)
+        out.append(value)
+    }
+
+    private fun appendBoolean(out: StringBuilder, name: String, value: Boolean) {
+        appendName(out, name)
+        out.append(value)
+    }
+
+    private fun appendString(out: StringBuilder, name: String, value: String) {
+        appendName(out, name)
+        out.append('"').append(value).append('"')
+    }
+
+    private fun appendInt(out: StringBuilder, name: String, value: Int, last: Boolean = false) {
+        appendName(out, name)
+        out.append(value)
+        if (last) Unit
+    }
 
     private fun finiteOrZero(value: Double?): Double = finiteOr(value, 0.0)
     private fun finiteOr(value: Double?, fallback: Double): Double = value?.takeIf { it.isFinite() } ?: fallback
