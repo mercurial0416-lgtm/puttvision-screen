@@ -63,15 +63,22 @@ object UnityTvRuntime {
     fun isReadyOn(displayId: Int): Boolean =
         setupComplete && requestedDisplayId == displayId
 
+    /**
+     * Unity activities can finish and report readiness asynchronously. Bind the callback to the
+     * display id carried by the launch Intent so a late callback from a disconnected/old HDMI task
+     * cannot mark a newer display launch ready.
+     */
     @JvmStatic
-    fun onUnityReady() {
+    fun onUnityReady(displayId: Int) {
+        if (requestedDisplayId != displayId) return
         setupComplete = true
         lastFailure = null
         UnityRendererBridge.enableIfRuntimeAvailable()
     }
 
     @JvmStatic
-    fun onUnityFailure(message: String?) {
+    fun onUnityFailure(displayId: Int, message: String?) {
+        if (requestedDisplayId != displayId) return
         setupComplete = false
         lastFailure = message?.takeIf { it.isNotBlank() } ?: "Unity renderer failure"
     }
