@@ -52,12 +52,12 @@ func _process(delta: float) -> void:
             push_error("Make-window package missing")
             get_tree().quit(15)
             return
-        if _v185_pace_label == null or _v185_pace_marker == null:
-            push_error("Pace-intent package missing")
+        if _v185_pace_label == null or _v185_pace_marker != null or _v185_pace_track != null or _v185_pace_fill != null:
+            push_error("Authoritative pace status package regression")
             get_tree().quit(16)
             return
-        if _v186_entry_ring == null or _v186_entry_label == null:
-            push_error("Cup-entry package missing")
+        if _v186_entry_ring != null or _v186_entry_label != null:
+            push_error("Heuristic cup-entry package returned")
             get_tree().quit(17)
             return
         if _v187_gate == null or _v187_center_tick == null or _v187_aim_marker == null or _v187_gate_label == null:
@@ -70,11 +70,17 @@ func _process(delta: float) -> void:
             return
 
         _v165_recommended_offset = 0.42
+        _v166_solver_ready = true
         _v183_update({"distanceToCup": 5.4, "sideSlope": 1.65, "longSlope": -0.72, "running": false}, true)
         if not _v183_panel.visible or not _v187_gate.visible or _v187_gate.points.size() != 2:
             push_error("Start-line gate live binding regression")
             get_tree().quit(18)
             return
+        if _v185_pace_label.text != "PACE  PHYSICS READ":
+            push_error("Pace status is not tied to solver readiness")
+            get_tree().quit(16)
+            return
+        print("AUTHORITATIVE_PACE_ENTRY_HUD_OK=1")
         if _v187_gate_half_px < 4.9 or _v187_gate_half_px > 16.1 or not _v187_gate_label.text.begins_with("GATE"):
             push_error("Start-line gate tolerance regression")
             get_tree().quit(18)
