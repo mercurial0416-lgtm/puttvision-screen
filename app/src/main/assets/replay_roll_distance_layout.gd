@@ -123,11 +123,11 @@ func _inject_replay_clock(source_text: String, clock_text: String) -> String:
     ]
 
 func _present_stage_text(stage: Label, root: Node) -> void:
-    var source_text := stage.text
-    # If our own previous presentation text is still on screen, nothing upstream changed and there is
-    # no reason to allocate/replace strings again. The timeline remains free to publish a new value.
-    if source_text == _last_presented_text:
-        return
+    var observed_text := stage.text
+    # The previous presented string is ours, not fresh upstream telemetry. Rebuild it from the cached
+    # clean source so the independent replay countdown can continue ticking even while camera-stage or
+    # roll-distance wording remains unchanged. This also prevents re-injecting another clock token.
+    var source_text := _last_source_text if observed_text == _last_presented_text else observed_text
 
     var presented_text := source_text
     var previewing := _cached_preview_stage != null and stage == _cached_preview_stage
@@ -142,7 +142,12 @@ func _present_stage_text(stage: Label, root: Node) -> void:
     var clock_text := PREVIEW_SAMPLE_TIME if previewing else _replay_clock_readout(root)
     presented_text = _inject_replay_clock(presented_text, clock_text)
 
+    # Avoid redundant Label writes, but only after recalculating the clock. An earlier shortcut returned
+    # before reading the clock whenever our own prior text was still visible, freezing the countdown on
+    # otherwise-static replay stages.
+    if source_text == _last_source_text and presented_text == _last_presented_text:
+        return
     _last_source_text = source_text
     _last_presented_text = presented_text
-    if presented_text != source_text:
+    if presented_text != observed_text:
         stage.text = presented_text
