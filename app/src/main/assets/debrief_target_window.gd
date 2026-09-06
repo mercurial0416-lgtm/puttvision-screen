@@ -14,6 +14,7 @@ const LINE_GOOD_HALF_PX := BAR_HALF_PX * 1.5 / 30.0
 const PACE_GOOD_HALF_PX := BAR_HALF_PX * 8.0 / 70.0
 const BAND_COLOR := Color(0.46, 0.84, 0.71, 0.10)
 const EDGE_COLOR := Color(0.58, 0.91, 0.78, 0.54)
+const IDEAL_COLOR := Color(0.78, 0.98, 0.89, 0.76)
 
 var _installed := false
 
@@ -21,38 +22,55 @@ func _ready() -> void:
     process_priority = 141
     set_process(true)
 
-func _add_target_band(panel: Control, name_value: String, y: float, half_width: float) -> void:
-    var band := ColorRect.new()
-    band.name = name_value
-    band.position = Vector2(BAR_CENTER_X - half_width, y - 4.0)
-    band.size = Vector2(half_width * 2.0, BAND_HEIGHT)
-    band.color = BAND_COLOR
-    band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    panel.add_child(band)
+func _add_rect_if_missing(panel: Control, name_value: String, position_value: Vector2, size_value: Vector2, color_value: Color) -> void:
+    if panel.get_node_or_null(name_value) != null:
+        return
+    var rect := ColorRect.new()
+    rect.name = name_value
+    rect.position = position_value
+    rect.size = size_value
+    rect.color = color_value
+    rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    panel.add_child(rect)
 
-    var left_edge := ColorRect.new()
-    left_edge.name = "%sLeftEdge" % name_value
-    left_edge.position = Vector2(BAR_CENTER_X - half_width, y - 4.0)
-    left_edge.size = Vector2(1.0, BAND_HEIGHT)
-    left_edge.color = EDGE_COLOR
-    left_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    panel.add_child(left_edge)
-
-    var right_edge := ColorRect.new()
-    right_edge.name = "%sRightEdge" % name_value
-    right_edge.position = Vector2(BAR_CENTER_X + half_width, y - 4.0)
-    right_edge.size = Vector2(1.0, BAND_HEIGHT)
-    right_edge.color = EDGE_COLOR
-    right_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    panel.add_child(right_edge)
+func _ensure_target_band(panel: Control, name_value: String, y: float, half_width: float) -> void:
+    _add_rect_if_missing(
+        panel,
+        name_value,
+        Vector2(BAR_CENTER_X - half_width, y - 4.0),
+        Vector2(half_width * 2.0, BAND_HEIGHT),
+        BAND_COLOR
+    )
+    _add_rect_if_missing(
+        panel,
+        "%sLeftEdge" % name_value,
+        Vector2(BAR_CENTER_X - half_width, y - 4.0),
+        Vector2(1.0, BAND_HEIGHT),
+        EDGE_COLOR
+    )
+    _add_rect_if_missing(
+        panel,
+        "%sRightEdge" % name_value,
+        Vector2(BAR_CENTER_X + half_width, y - 4.0),
+        Vector2(1.0, BAND_HEIGHT),
+        EDGE_COLOR
+    )
+    # A restrained center tick differentiates the ideal result from the wider acceptable window.
+    # It is static presentation geometry, so it adds no per-frame Forward Mobile cost after install.
+    _add_rect_if_missing(
+        panel,
+        "%sIdeal" % name_value,
+        Vector2(BAR_CENTER_X - 0.5, y - 5.0),
+        Vector2(1.0, BAND_HEIGHT + 2.0),
+        IDEAL_COLOR
+    )
 
 func _install_target_windows(panel: Control) -> void:
-    if panel.get_node_or_null("LineGoodWindow") != null:
-        _installed = true
-        set_process(false)
-        return
-    _add_target_band(panel, "LineGoodWindow", LINE_TRACK_Y, LINE_GOOD_HALF_PX)
-    _add_target_band(panel, "PaceGoodWindow", PACE_TRACK_Y, PACE_GOOD_HALF_PX)
+    # Repair each component independently. A partially populated scene can happen after hot reload or
+    # another presentation helper racing this installer; treating one existing node as "done" used to
+    # leave the other GOOD WINDOW (or its edges) missing for the rest of the session.
+    _ensure_target_band(panel, "LineGoodWindow", LINE_TRACK_Y, LINE_GOOD_HALF_PX)
+    _ensure_target_band(panel, "PaceGoodWindow", PACE_TRACK_Y, PACE_GOOD_HALF_PX)
     _installed = true
     set_process(false)
 
