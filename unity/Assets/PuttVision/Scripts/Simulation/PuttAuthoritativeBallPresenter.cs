@@ -78,7 +78,7 @@ namespace PuttVision.Simulation
         /// This is intentionally NOT a component swap. Swapping native Y/Z changes handedness;
         /// the correct Unity rotation is B * Rnative * B, where B maps (x,y,z) -> (x,z,y).
         /// </summary>
-        internal static Quaternion NativeQuaternionToUnity(PuttPhysicsFrame frame)
+        public static Quaternion NativeQuaternionToUnity(PuttPhysicsFrame frame)
         {
             var w = frame.orientationW;
             var x = frame.orientationX;
@@ -86,7 +86,7 @@ namespace PuttVision.Simulation
             var z = frame.orientationZ;
 
             var magnitude = Mathf.Sqrt(w * w + x * x + y * y + z * z);
-            if (!float.IsFinite(magnitude) || magnitude < 1e-6f)
+            if (float.IsNaN(magnitude) || float.IsInfinity(magnitude) || magnitude < 1e-6f)
                 return Quaternion.identity;
 
             w /= magnitude;
