@@ -108,6 +108,26 @@ func _replay_clock_readout(root: Node) -> String:
         return ""
     return "T-%.1fs" % remaining
 
+func _is_plain_seconds_token(token: String) -> bool:
+    # Older replay status text already included a bare camera timer such as `1.2s`. The dedicated
+    # T-minus readout added later is clearer, but keeping both produced `T-1.2s · 1.2s` in production.
+    # Recognize only an isolated numeric seconds token so stage names and measured roll distance are safe.
+    var trimmed := token.strip_edges()
+    if trimmed.begins_with("T-") or not trimmed.ends_with("s"):
+        return false
+    var numeric := trimmed.trim_suffix("s")
+    return numeric.is_valid_float()
+
+func _strip_legacy_plain_clock(source_text: String) -> String:
+    var parts := source_text.split(STATUS_SEPARATOR, false)
+    if parts.size() <= 1:
+        return source_text
+    var clean := PackedStringArray()
+    for part in parts:
+        if not _is_plain_seconds_token(part):
+            clean.append(part.strip_edges())
+    return STATUS_SEPARATOR.join(clean)
+
 func _inject_replay_clock(source_text: String, clock_text: String) -> String:
     if clock_text.is_empty():
         return source_text
@@ -129,6 +149,7 @@ func _present_stage_text(stage: Label, root: Node) -> void:
     # clean source so the independent replay countdown can continue ticking even while camera-stage or
     # roll-distance wording remains unchanged. This also prevents re-injecting another clock token.
     var source_text := _last_source_text if observed_text == _last_presented_text else observed_text
+    source_text = _strip_legacy_plain_clock(source_text)
 
     var presented_text := source_text
     var previewing := _cached_preview_stage != null and stage == _cached_preview_stage
