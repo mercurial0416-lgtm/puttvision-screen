@@ -5,7 +5,9 @@ extends Node
 # hierarchy after the grid material exists. No polling, mesh rebuild, scoring, aim, or ball-state writes.
 
 const GRID_NODE_NAME := "V164FriendsGreenGrid"
+const RELIEF_NODE_NAME := "TerrainReliefVisibility"
 const POLISH_MARKER := "// PUTTVISION_PREMIUM_GRID_V1"
+const RELIEF_POLISH_MARKER := "// PUTTVISION_PREMIUM_RELIEF_GRID_V1"
 
 func _ready() -> void:
     call_deferred("_install_premium_grid")
@@ -14,6 +16,46 @@ func _replace_once(source: String, before: String, after: String) -> String:
     if not source.contains(before):
         return source
     return source.replace(before, after)
+
+func _install_relief_polish(root: Node) -> void:
+    var relief := root.find_child(RELIEF_NODE_NAME, true, false) as MeshInstance3D
+    if relief == null:
+        return
+    var material := relief.material_override as ShaderMaterial
+    if material == null or material.shader == null:
+        return
+    var code := material.shader.code
+    if code.contains(RELIEF_POLISH_MARKER):
+        return
+
+    # The relief shell already supplies hillshade/contours, while the primary metric material supplies
+    # scale and downhill motion. De-emphasize the relief shell's second moving grid so the two overlays
+    # stop forming a bright double-wireframe on bowls and crowns.
+    code = _replace_once(code,
+        "float flow_active = smoothstep(0.16, 0.72, slope_pct);",
+        RELIEF_POLISH_MARKER + "\n    float flow_active = smoothstep(0.16, 0.72, slope_pct);")
+    code = _replace_once(code,
+        "float ribbon_strength = elevation_ribbon * active * 0.42;",
+        "float ribbon_strength = elevation_ribbon * active * 0.30;")
+    code = _replace_once(code,
+        "relief_color = mix(relief_color, flow_color, flow_grid * 0.32);",
+        "relief_color = mix(relief_color, flow_color, flow_grid * 0.08);")
+    code = _replace_once(code,
+        "float ribbon_alpha = elevation_ribbon * active * 0.28;",
+        "float ribbon_alpha = elevation_ribbon * active * 0.18;")
+    code = _replace_once(code,
+        "float flow_alpha = flow_grid * 0.16;",
+        "float flow_alpha = flow_grid * 0.035;")
+    code = _replace_once(code,
+        "ALPHA = min(0.46, ALPHA + flow_alpha);",
+        "ALPHA = min(0.38, ALPHA + flow_alpha);")
+
+    var complete := code.contains(RELIEF_POLISH_MARKER) \
+        and code.contains("flow_grid * 0.08") \
+        and code.contains("flow_grid * 0.035") \
+        and code.contains("elevation_ribbon * active * 0.18")
+    if complete:
+        material.shader.code = code
 
 func _install_premium_grid() -> void:
     var root := get_tree().current_scene
@@ -28,6 +70,8 @@ func _install_premium_grid() -> void:
 
     var code := material.shader.code
     if code.contains(POLISH_MARKER):
+        _install_relief_polish(root)
+        set_process(false)
         return
 
     # Quieter mineral-green palette: the metric scaffold recedes into the turf while live slope flow
@@ -103,4 +147,5 @@ func _install_premium_grid() -> void:
         return
 
     material.shader.code = code
+    _install_relief_polish(root)
     set_process(false)
