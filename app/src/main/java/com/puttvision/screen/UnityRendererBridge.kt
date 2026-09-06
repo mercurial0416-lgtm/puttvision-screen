@@ -105,10 +105,10 @@ internal object UnityRendererProtocol {
 
     fun shotJson(metrics: ShotMetrics, settings: GreenSettings, startX: Double, startY: Double): String {
         var flags = 0
-        if (metrics.faceAngleDeg != null) flags = flags or 1
-        if (metrics.pathAngleDeg != null) flags = flags or 2
-        if (metrics.impactOffsetMm != null) flags = flags or 4
-        if (metrics.confidence != null) flags = flags or 8
+        if (metrics.faceAngleDeg.isFiniteMeasurement()) flags = flags or 1
+        if (metrics.pathAngleDeg.isFiniteMeasurement()) flags = flags or 2
+        if (metrics.impactOffsetMm.isFiniteMeasurement()) flags = flags or 4
+        if (metrics.confidence.isFiniteMeasurement()) flags = flags or 8
 
         return JSONObject().apply {
             put("schemaVersion", UnityRendererBridge.SCHEMA_VERSION)
@@ -230,6 +230,7 @@ internal object UnityRendererProtocol {
         if (last) Unit
     }
 
+    private fun Double?.isFiniteMeasurement(): Boolean = this != null && isFinite()
     private fun finiteOrZero(value: Double?): Double = finiteOr(value, 0.0)
     private fun finiteOr(value: Double?, fallback: Double): Double = value?.takeIf { it.isFinite() } ?: fallback
 }
