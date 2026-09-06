@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource path="res://live_origin_truth_guard.gd" type="Script" id="1_v143"]
 [ext_resource path="res://shot_map_target_reticle.gd" type="Script" id="2_target_reticle"]
@@ -7,17 +7,13 @@
 [ext_resource path="res://live_break_summary_layout.gd" type="Script" id="5_live_break_layout"]
 [ext_resource path="res://session_dispersion_edge_truth.gd" type="Script" id="6_dispersion_edge"]
 [ext_resource path="res://session_correction_cap_truth.gd" type="Script" id="7_correction_cap"]
-; Keep the established replay entry point explicit in the production scene contract while the
-; root guard subclasses it. Existing presentation-chain regressions can therefore verify that the
-; authoritative replay/read stack remains present instead of being silently replaced.
 [ext_resource path="res://replay_timeline_camera_truth.gd" type="Script" id="8_replay_entry_contract"]
-; Keep the existing telemetry sanitization layer explicit too. The live-origin guard subclasses it,
-; and this contract reference prevents future root swaps from silently bypassing finite-value safety.
 [ext_resource path="res://presentation_telemetry_guard.gd" type="Script" id="9_telemetry_guard_contract"]
 [ext_resource path="res://debrief_axis_semantics.gd" type="Script" id="10_debrief_axis"]
 [ext_resource path="res://debrief_target_window.gd" type="Script" id="11_debrief_window"]
 [ext_resource path="res://premium_green_grid_polish.gd" type="Script" id="12_grid_polish"]
 [ext_resource path="res://replay_cut_preroll_cue.gd" type="Script" id="13_replay_preroll"]
+[ext_resource path="res://course_atmosphere_depth.gd" type="Script" id="14_atmosphere"]
 
 [node name="V143PuttVisionTV" type="Node3D"]
 script = ExtResource("1_v143")
@@ -51,3 +47,6 @@ script = ExtResource("12_grid_polish")
 
 [node name="ReplayCutPrerollCue" type="Node" parent="."]
 script = ExtResource("13_replay_preroll")
+
+[node name="CourseAtmosphereDepth" type="Node" parent="."]
+script = ExtResource("14_atmosphere")
