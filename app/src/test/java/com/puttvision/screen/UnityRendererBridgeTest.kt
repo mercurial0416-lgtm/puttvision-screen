@@ -55,6 +55,29 @@ class UnityRendererBridgeTest {
     }
 
     @Test
+    fun shotProtocolDoesNotMarkNonFiniteOptionalMetricsValid() {
+        val metrics = ShotMetrics(
+            ballSpeedMps = 1.5,
+            launchAngleDeg = 0.2,
+            headSpeedMps = 0.8,
+            faceAngleDeg = Double.NaN,
+            pathAngleDeg = Double.POSITIVE_INFINITY,
+            faceToPathDeg = 0.0,
+            smash = 1.8,
+            impactOffsetMm = 1.25,
+            measuredAtNs = 9L,
+            confidence = Double.NEGATIVE_INFINITY,
+        )
+
+        val json = JSONObject(UnityRendererProtocol.shotJson(metrics, GreenSettings(), 0.0, 0.0))
+        assertEquals(4, json.getInt("validityFlags"))
+        assertEquals(0.0, json.getDouble("faceAngleDeg"), 0.0)
+        assertEquals(0.0, json.getDouble("pathAngleDeg"), 0.0)
+        assertEquals(1.25, json.getDouble("impactOffsetMm"), 0.0)
+        assertEquals(0.0, json.getDouble("confidence"), 0.0)
+    }
+
+    @Test
     fun surfaceGridCarriesFiniteNativeTerrainTruthAtBoundedSize() {
         val settings = GreenSettings(
             holeDistanceM = 5.0,
