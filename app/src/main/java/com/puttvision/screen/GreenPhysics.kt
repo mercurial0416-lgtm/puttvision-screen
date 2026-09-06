@@ -109,6 +109,7 @@ class GreenPhysics {
     ): SimState {
         val a = Math.toRadians(metrics.launchAngleDeg)
         val speed = metrics.ballSpeedMps.coerceIn(0.05, 5.0)
+        UnityRendererBridge.publishShot(metrics, settings, startX, startY)
         return SimState(
             x = startX,
             y = startY,
