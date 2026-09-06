@@ -6,3 +6,13 @@ local.properties
 *.jks
 *.keystore
 ci/*.jks.b64
+
+# Unity generated state (keep Assets, Packages and ProjectSettings in Git)
+unity/[Ll]ibrary/
+unity/[Tt]emp/
+unity/[Oo]bj/
+unity/[Ll]ogs/
+unity/[Uu]ser[Ss]ettings/
+unity/[Mm]emoryCaptures/
+unity/[Rr]ecordings/
+unity/[Bb]uilds/
