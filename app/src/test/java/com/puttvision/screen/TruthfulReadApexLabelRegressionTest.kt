@@ -13,14 +13,17 @@ class TruthfulReadApexLabelRegressionTest {
     }
 
     @Test
-    fun apexBadgeNamesTheRenderedPathLandmarkInsteadOfReusingLaunchOffsetCentimetres() {
-        val guard = asset("truthful_read_apex_label.gd")
+    fun apexBadgeNamesTheActualRenderedPathLandmarkInsteadOfReusingLaunchOffsetCentimetres() {
+        val production = asset("truthful_read_apex_root.gd")
+        val preview = asset("truthful_read_apex_preview.gd")
         val apex = asset("commercial_read_apex.gd")
 
-        assertTrue(guard.contains("var apex_x := _ring.position.x"))
-        assertTrue(guard.contains("return \"APEX  RIGHT\" if delta > 0.0 else \"APEX  LEFT\""))
-        assertTrue(guard.contains("APEX_CENTER_DEADBAND_PX"))
-        assertFalse(guard.contains("offset_m * 100"))
+        for (source in listOf(production, preview)) {
+            assertTrue(source.contains("var apex := _read_apex_point(offset_m)"))
+            assertTrue(source.contains("var delta_px := apex.x - center_x"))
+            assertTrue(source.contains("return \"APEX  RIGHT\" if delta_px > 0.0 else \"APEX  LEFT\""))
+            assertFalse(source.contains("offset_m * 100"))
+        }
         assertTrue(apex.contains("_read_apex_point(offset_m)"))
     }
 
@@ -34,28 +37,19 @@ class TruthfulReadApexLabelRegressionTest {
     }
 
     @Test
-    fun startupRaceRetriesBindingUntilInheritedHudHasActuallyBeenBuilt() {
-        val guard = asset("truthful_read_apex_label.gd")
-        val process = guard.substringAfter("func _process(_delta: float) -> void:")
-
-        assertTrue(guard.contains("func _bind_apex_landmark() -> bool:"))
-        assertTrue(process.contains("if _panel == null or _ring == null or _badge == null:"))
-        assertTrue(process.contains("if not _bind_apex_landmark():"))
-        assertFalse(guard.contains("set_process(false)\n    call_deferred(\"_bind_apex_landmark\")"))
-    }
-
-    @Test
-    fun guardIsLightweightPresentationOnlyAndWiredToTvAndPreview() {
-        val guard = asset("truthful_read_apex_label.gd")
+    fun productionAndPreviewRootsExerciseTheSameTruthfulDescriptor() {
         val tv = asset("v143_tv.tscn")
-        val preview = asset("v143_preview.tscn")
+        val previewScene = asset("v143_preview.tscn")
+        val production = asset("truthful_read_apex_root.gd")
+        val preview = asset("truthful_read_apex_preview.gd")
 
-        assertTrue(guard.contains("process_priority = 180"))
-        assertTrue(guard.contains("find_child(\"GreenReadOverview\", true, false)"))
-        assertFalse(guard.contains("GreenTerrain("))
-        assertFalse(guard.contains("GreenReadAdvisor("))
-        assertFalse(guard.contains("score ="))
-        assertTrue(tv.contains("res://truthful_read_apex_label.gd"))
-        assertTrue(preview.contains("res://truthful_read_apex_label.gd"))
+        assertTrue(tv.contains("res://truthful_read_apex_root.gd"))
+        assertTrue(tv.contains("res://live_origin_truth_guard.gd"))
+        assertTrue(previewScene.contains("res://truthful_read_apex_preview.gd"))
+        assertTrue(production.contains("extends \"res://live_origin_truth_guard.gd\""))
+        assertTrue(preview.contains("extends \"res://premium_direction_language_preview.gd\""))
+        assertFalse(production.contains("GreenTerrain("))
+        assertFalse(production.contains("GreenReadAdvisor("))
+        assertFalse(production.contains("score ="))
     }
 }
