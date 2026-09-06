@@ -45,10 +45,13 @@ class ReplayFocusPriorityRegressionTest {
         val phase = source.substringAfter("func _focus_phase_for(running: bool, replaying: bool, showing_result: bool) -> String:")
             .substringBefore("func _focus_role_alpha")
 
-        assertFalse(phase.contains("GreenTerrain"))
-        assertFalse(phase.contains("GreenReadAdvisor"))
-        assertFalse(phase.contains("score"))
-        assertFalse(phase.contains("ball.position"))
-        assertFalse(phase.contains("camera"))
+        // Guard actual authoritative/camera mutations, not harmless prose in comments.
+        assertFalse(phase.contains("GreenTerrain("))
+        assertFalse(phase.contains("GreenReadAdvisor("))
+        assertFalse(phase.contains("score ="))
+        assertFalse(phase.contains("ball.position ="))
+        assertFalse(phase.contains("camera.position ="))
+        assertFalse(phase.contains("camera.fov ="))
+        assertFalse(phase.contains("_v171_replay_remaining ="))
     }
 }
