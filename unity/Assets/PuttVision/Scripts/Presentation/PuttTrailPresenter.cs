@@ -35,7 +35,6 @@ namespace PuttVision.Presentation
                     material.color = new Color(0.82f, 0.94f, 1f, 0.82f);
                 _line.material = material;
             }
-
             _line.positionCount = 0;
         }
 
@@ -57,34 +56,36 @@ namespace PuttVision.Presentation
 
         private void OnFrame(PuttPhysicsFrame frame)
         {
-            if (frame == null || !frame.IsUsable || _line == null)
-                return;
-
+            if (frame == null || !frame.IsUsable || _line == null) return;
             var point = new Vector3(frame.xM, Mathf.Max(0.004f, frame.centerZM * 0.22f), frame.yM);
             if (_points.Count > 0 && Vector3.Distance(_points[_points.Count - 1], point) < minimumPointSpacingM)
                 return;
 
-            if (_points.Count == maxPoints)
+            if (_points.Count >= maxPoints)
+            {
                 _points.RemoveAt(0);
-            _points.Add(point);
+                _points.Add(point);
+                _line.positionCount = _points.Count;
+                for (var i = 0; i < _points.Count; i++) _line.SetPosition(i, _points[i]);
+                return;
+            }
 
+            _points.Add(point);
             _line.positionCount = _points.Count;
-            _line.SetPositions(_points.ToArray());
+            _line.SetPosition(_points.Count - 1, point);
         }
 
         private void Clear()
         {
             _points.Clear();
-            if (_line != null)
-                _line.positionCount = 0;
+            if (_line != null) _line.positionCount = 0;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
         {
-            if (FindFirstObjectByType<PuttTrailPresenter>() != null)
-                return;
-            new GameObject("PuttTrailPresenter").AddComponent<PuttTrailPresenter>();
+            if (FindFirstObjectByType<PuttTrailPresenter>() == null)
+                new GameObject("PuttTrailPresenter").AddComponent<PuttTrailPresenter>();
         }
     }
 }
