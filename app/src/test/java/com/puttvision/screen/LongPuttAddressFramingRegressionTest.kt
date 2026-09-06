@@ -18,16 +18,16 @@ class LongPuttAddressFramingRegressionTest {
         assertTrue(source.contains("LONG_FRAME_START_M := 6.0"))
         assertTrue(source.contains("LONG_FRAME_FULL_M := 14.0"))
         assertTrue(source.contains("smoothstep(LONG_FRAME_START_M, LONG_FRAME_FULL_M, distance_m)"))
-        assertTrue(source.contains("LONG_FRAME_TRAIL_EXTRA_M * signal"))
-        assertTrue(source.contains("LONG_FRAME_HEIGHT_EXTRA_M * signal"))
-        assertTrue(source.contains("LONG_FRAME_FOV_EXTRA_DEG * signal"))
+        assertTrue(source.contains("LONG_FRAME_TRAIL_EXTRA_M * frame_signal"))
+        assertTrue(source.contains("LONG_FRAME_HEIGHT_EXTRA_M * frame_signal"))
+        assertTrue(source.contains("LONG_FRAME_FOV_EXTRA_DEG * frame_signal"))
     }
 
     @Test
     fun shortAndInvalidDistancesPreserveTheExistingAddressPlan() {
         val source = asset("relief_depth_finish.gd")
         assertTrue(source.contains("if not is_finite(distance_m) or distance_m <= LONG_FRAME_START_M:"))
-        assertTrue(source.contains("if signal <= 0.0:\n        return"))
+        assertTrue(source.contains("if frame_signal <= 0.0:\n        return"))
         assertTrue(source.contains("var plan := super._address_relief_camera_plan(ball_world, distance_to_cup)"))
         assertTrue(source.contains("_apply_long_putt_address_frame(ball_world, distance_to_cup, plan)"))
     }
@@ -35,9 +35,10 @@ class LongPuttAddressFramingRegressionTest {
     @Test
     fun longerLookRemainsBoundedAndNeverTurnsIntoAimOrPhysicsState() {
         val source = asset("relief_depth_finish.gd")
-        assertTrue(source.contains("current_fraction + LONG_FRAME_LOOK_EXTRA * signal"))
+        assertTrue(source.contains("current_fraction + LONG_FRAME_LOOK_EXTRA * frame_signal"))
         assertTrue(source.contains("current_fraction, 0.72"))
         assertTrue(source.contains("plan[\"look_fraction\"] = desired_fraction"))
+        assertFalse(source.contains("var signal :="))
         assertFalse(source.contains("GreenTerrain" + ".set"))
         assertFalse(source.contains("GreenReadAdvisor" + ".set"))
         assertFalse(source.contains("recommendedAim"))
