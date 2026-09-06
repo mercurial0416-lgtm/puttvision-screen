@@ -180,12 +180,16 @@ func _update_hud(s: Dictionary, running: bool, holed: bool, lip_out: bool, speed
     else:
         slope_label.text = "SLOPE DATA UNAVAILABLE"
 
-    if running:
-        _v174_state_label.text = "BALL ROLLING"
-        _v174_state_label.add_theme_color_override("font_color", Color("#dff0b6"))
-    elif _v171_replay_remaining > 0.0:
+    # Replay is an explicit presentation mode. A final live snapshot can retain running=true for a
+    # frame after replay starts; the broadcast state pill must match the cinematic replay focus instead
+    # of contradicting it with BALL ROLLING.
+    var replaying := _v171_replay_remaining > 0.0
+    if replaying:
         _v174_state_label.text = "SHOT REPLAY"
         _v174_state_label.add_theme_color_override("font_color", Color("#f4dda0"))
+    elif running:
+        _v174_state_label.text = "BALL ROLLING"
+        _v174_state_label.add_theme_color_override("font_color", Color("#dff0b6"))
     else:
         _v174_state_label.text = "READY TO PUTT"
         _v174_state_label.add_theme_color_override("font_color", Color("#f0f2ec"))
