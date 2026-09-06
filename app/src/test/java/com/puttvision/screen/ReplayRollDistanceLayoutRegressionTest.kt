@@ -20,7 +20,6 @@ class ReplayRollDistanceLayoutRegressionTest {
         assertTrue(helper.contains("var _cached_track: Control = null"))
         assertTrue(helper.contains("if not is_instance_valid(_cached_stage) or not is_instance_valid(_cached_track):"))
         assertTrue(helper.contains("func _bind_nodes(root: Node) -> void:"))
-        assertTrue(helper.contains("if source_text == _last_presented_text:"))
     }
 
     @Test
@@ -56,6 +55,29 @@ class ReplayRollDistanceLayoutRegressionTest {
         assertTrue(helper.contains("var distance_separator := source_text.rfind(STATUS_SEPARATOR)"))
         assertTrue(helper.contains("var clock_text := PREVIEW_SAMPLE_TIME if previewing else _replay_clock_readout(root)"))
         assertTrue(helper.contains("presented_text = _inject_replay_clock(presented_text, clock_text)"))
+    }
+
+    @Test
+    fun replayClockRecomputesWhenStageTextIsStaticInsteadOfFreezingOnOwnOutput() {
+        val helper = asset("replay_roll_distance_layout.gd")
+        val presenter = helper.substringAfter("func _present_stage_text(stage: Label, root: Node) -> void:")
+
+        assertTrue(presenter.contains("var observed_text := stage.text"))
+        assertTrue(presenter.contains("var source_text := _last_source_text if observed_text == _last_presented_text else observed_text"))
+        assertTrue(presenter.contains("var clock_text := PREVIEW_SAMPLE_TIME if previewing else _replay_clock_readout(root)"))
+        assertTrue(presenter.contains("if source_text == _last_source_text and presented_text == _last_presented_text:"))
+        assertTrue(presenter.indexOf("_replay_clock_readout(root)") < presenter.indexOf("if source_text == _last_source_text and presented_text == _last_presented_text:"))
+        assertFalse(presenter.contains("if source_text == _last_presented_text:"))
+    }
+
+    @Test
+    fun replayClockDoesNotReinjectClockIntoItsOwnPreviousPresentation() {
+        val helper = asset("replay_roll_distance_layout.gd")
+        val presenter = helper.substringAfter("func _present_stage_text(stage: Label, root: Node) -> void:")
+
+        assertTrue(presenter.contains("observed_text == _last_presented_text"))
+        assertTrue(presenter.contains("_last_source_text if observed_text == _last_presented_text else observed_text"))
+        assertTrue(presenter.contains("if presented_text != observed_text:"))
     }
 
     @Test
