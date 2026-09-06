@@ -26,6 +26,16 @@ namespace PuttVision.Tests
         }
 
         [Test]
+        public void PhysicsFrameRejectsNonFiniteOrNegativePresentationInputs()
+        {
+            Assert.That(new PuttPhysicsFrame().IsUsable, Is.True);
+            Assert.That(new PuttPhysicsFrame { vxMps = float.NaN }.IsUsable, Is.False);
+            Assert.That(new PuttPhysicsFrame { surfaceNormalZ = float.PositiveInfinity }.IsUsable, Is.False);
+            Assert.That(new PuttPhysicsFrame { elapsedSec = -0.01f }.IsUsable, Is.False);
+            Assert.That(new PuttPhysicsFrame { slipSpeedMps = -0.01f }.IsUsable, Is.False);
+        }
+
+        [Test]
         public void UniformGreenUsesSameGlobalSlopeHeightConventionAsNative()
         {
             var shot = new PuttTelemetry { terrainProfileId = -1, holeDistanceM = 5f, sideSlopePct = 2f, longSlopePct = -1f };
