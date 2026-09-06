@@ -68,6 +68,33 @@ class ReplayRollDistanceLayoutRegressionTest {
     }
 
     @Test
+    fun replayStatusRemovesLegacyBareSecondsBeforeInjectingCanonicalCountdown() {
+        val helper = asset("replay_roll_distance_layout.gd")
+        val presenter = helper.substringAfter("func _present_stage_text(stage: Label, root: Node) -> void:")
+
+        assertTrue(helper.contains("func _is_plain_seconds_token(token: String) -> bool:"))
+        assertTrue(helper.contains("if trimmed.begins_with(\"T-\") or not trimmed.ends_with(\"s\"):"))
+        assertTrue(helper.contains("return numeric.is_valid_float()"))
+        assertTrue(helper.contains("func _strip_legacy_plain_clock(source_text: String) -> String:"))
+        assertTrue(helper.contains("if not _is_plain_seconds_token(part):"))
+        assertTrue(presenter.contains("source_text = _strip_legacy_plain_clock(source_text)"))
+        assertTrue(presenter.indexOf("_strip_legacy_plain_clock(source_text)") < presenter.indexOf("_inject_replay_clock(presented_text, clock_text)"))
+    }
+
+    @Test
+    fun replayStatusDeduplicationCannotStripCanonicalCountdownOrMeasuredDistance() {
+        val helper = asset("replay_roll_distance_layout.gd")
+        val classifier = helper.substringAfter("func _is_plain_seconds_token(token: String) -> bool:")
+            .substringBefore("func _strip_legacy_plain_clock")
+
+        assertTrue(classifier.contains("trimmed.begins_with(\"T-\")"))
+        assertTrue(classifier.contains("trimmed.ends_with(\"s\")"))
+        assertTrue(classifier.contains("trimmed.trim_suffix(\"s\")"))
+        assertFalse(classifier.contains("TO STOP"))
+        assertFalse(classifier.contains("REST"))
+    }
+
+    @Test
     fun replayClockRecomputesWhenStageTextIsStaticInsteadOfFreezingOnOwnOutput() {
         val helper = asset("replay_roll_distance_layout.gd")
         val presenter = helper.substringAfter("func _present_stage_text(stage: Label, root: Node) -> void:")
