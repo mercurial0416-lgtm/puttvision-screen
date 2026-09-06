@@ -142,10 +142,13 @@ func _focus_build_replay_timeline() -> void:
     _focus_replay_track.add_child(_focus_replay_chapter_end_marker)
 
 func _focus_phase_for(running: bool, replaying: bool, showing_result: bool) -> String:
-    if running:
-        return PHASE_ROLL
+    # Replay is an explicit presentation mode and must own HUD hierarchy even if the final live-shot
+    # snapshot still carries running=true for a frame. Letting ROLL win here suppresses the replay
+    # timeline/letterbox and leaves the screen visually busy exactly when the camera cut should lead.
     if replaying:
         return PHASE_REPLAY
+    if running:
+        return PHASE_ROLL
     if showing_result:
         return PHASE_RESULT
     return PHASE_READY
