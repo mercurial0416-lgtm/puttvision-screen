@@ -14,8 +14,12 @@ const PRACTICE_RECENT_CENTER_RING_RADIUS := 3.5
 const PRACTICE_RECENT_CENTER_RING_SEGMENTS := 12
 const PRACTICE_RECENT_CENTER_LINE_DEADBAND_CM := 2.5
 const PRACTICE_RECENT_CENTER_PACE_DEADBAND_CM := 8.0
+const PRACTICE_RECENT_CENTER_ARROW_MIN_LENGTH_PX := 10.0
+const PRACTICE_RECENT_CENTER_ARROW_LENGTH_PX := 7.0
+const PRACTICE_RECENT_CENTER_ARROW_HALF_WIDTH_PX := 3.5
 
 var _practice_recent_center_bias: Line2D
+var _practice_recent_center_arrow: Line2D
 var _practice_recent_center_h: Line2D
 var _practice_recent_center_v: Line2D
 var _practice_recent_center_ring: Line2D
@@ -48,11 +52,28 @@ func _practice_recent_center_geometry(samples: Array[Vector2]) -> Dictionary:
         var angle := TAU * float(step) / float(PRACTICE_RECENT_CENTER_RING_SEGMENTS)
         ring_points.append(center + Vector2(cos(angle), sin(angle)) * PRACTICE_RECENT_CENTER_RING_RADIUS)
 
+    # A restrained chevron makes the centroid line read as a direction-of-bias cue from couch/TV
+    # distance instead of another history trace. Fail closed inside the dead zone: normalizing a near
+    # zero vector would manufacture visual direction when the recent group is effectively centered.
+    var arrow_points := PackedVector2Array()
+    var bias_delta := center - target_center
+    if bias_delta.length() >= PRACTICE_RECENT_CENTER_ARROW_MIN_LENGTH_PX:
+        var direction := bias_delta.normalized()
+        var normal := Vector2(-direction.y, direction.x)
+        var tip := center - direction * (PRACTICE_RECENT_CENTER_RING_RADIUS + 1.0)
+        var base := tip - direction * PRACTICE_RECENT_CENTER_ARROW_LENGTH_PX
+        arrow_points = PackedVector2Array([
+            base + normal * PRACTICE_RECENT_CENTER_ARROW_HALF_WIDTH_PX,
+            tip,
+            base - normal * PRACTICE_RECENT_CENTER_ARROW_HALF_WIDTH_PX
+        ])
+
     return {
         "visible": true,
         "sample": centroid,
         "center": center,
         "bias": PackedVector2Array([target_center, center]),
+        "arrow": arrow_points,
         "horizontal": PackedVector2Array([
             center + Vector2(-PRACTICE_RECENT_CENTER_HALF_SPAN, 0.0),
             center + Vector2(PRACTICE_RECENT_CENTER_HALF_SPAN, 0.0)
@@ -124,10 +145,16 @@ func _build_hud() -> void:
         1.2,
         Color(0.78, 0.94, 0.88, 0.44)
     )
+    _practice_recent_center_arrow = _practice_recent_center_line(
+        "PracticeRecentCenterArrow",
+        1.5,
+        Color(0.82, 0.97, 0.91, 0.78)
+    )
     _practice_recent_center_h = _practice_recent_center_line("PracticeRecentCenterH", 1.7)
     _practice_recent_center_v = _practice_recent_center_line("PracticeRecentCenterV", 1.7)
     _practice_recent_center_ring = _practice_recent_center_line("PracticeRecentCenterRing", 1.4)
     _v179_plot.add_child(_practice_recent_center_bias)
+    _v179_plot.add_child(_practice_recent_center_arrow)
     _v179_plot.add_child(_practice_recent_center_h)
     _v179_plot.add_child(_practice_recent_center_v)
     _v179_plot.add_child(_practice_recent_center_ring)
@@ -151,7 +178,7 @@ func _build_hud() -> void:
     _practice_recent_center_refresh()
 
 func _practice_recent_center_refresh() -> void:
-    if _practice_recent_center_bias == null or _practice_recent_center_h == null or _practice_recent_center_v == null or _practice_recent_center_ring == null:
+    if _practice_recent_center_bias == null or _practice_recent_center_arrow == null or _practice_recent_center_h == null or _practice_recent_center_v == null or _practice_recent_center_ring == null:
         return
     var geometry := _practice_recent_center_geometry(_practice_recent_center_focus_samples())
     var marker_visible := bool(geometry.get("visible", false))
@@ -159,6 +186,14 @@ func _practice_recent_center_refresh() -> void:
     _practice_recent_center_h.visible = marker_visible
     _practice_recent_center_v.visible = marker_visible
     _practice_recent_center_ring.visible = marker_visible
+
+    var arrow_variant: Variant = geometry.get("arrow", PackedVector2Array())
+    var arrow_visible := marker_visible and arrow_variant is PackedVector2Array and (arrow_variant as PackedVector2Array).size() == 3
+    _practice_recent_center_arrow.visible = arrow_visible
+    if arrow_visible:
+        _practice_recent_center_arrow.points = arrow_variant as PackedVector2Array
+    else:
+        _practice_recent_center_arrow.points = PackedVector2Array()
 
     var sample_variant: Variant = geometry.get("sample", null)
     var readout_visible := sample_variant is Vector2
