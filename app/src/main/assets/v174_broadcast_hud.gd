@@ -138,6 +138,9 @@ func _update_hud(s: Dictionary, running: bool, holed: bool, lip_out: bool, speed
     var stimp_sample := _v174_snapshot_float(s, "stimp")
     var side_sample := _v174_snapshot_float(s, "sideSlope")
     var long_sample := _v174_snapshot_float(s, "longSlope")
+    # The inherited renderer passes a coerced speed argument. Validate the raw snapshot again here so
+    # a missing/string/NaN speed cannot become a believable 0.00 m/s on the broadcast card.
+    var speed_sample := _v174_snapshot_float(s, "speed")
     var zone: String = str(s.get("surfaceZone", "GREEN")).to_upper()
 
     distance_label.text = "%.1f m" % target_distance
@@ -149,7 +152,12 @@ func _update_hud(s: Dictionary, running: bool, holed: bool, lip_out: bool, speed
         stimp_label.text = "%.1f m" % float(stimp_sample.get("value", 0.0))
     else:
         stimp_label.text = "-- m"
-    speed_label.text = "%.2f m/s" % speed if running and is_finite(speed) else ("-- m/s" if running else "READY")
+    if running and bool(speed_sample.get("valid", false)):
+        speed_label.text = "%.2f m/s" % max(0.0, float(speed_sample.get("value", speed)))
+    elif running:
+        speed_label.text = "-- m/s"
+    else:
+        speed_label.text = "READY"
     _v174_surface_label.text = "SURFACE  %s" % zone
 
     var side_valid := bool(side_sample.get("valid", false))

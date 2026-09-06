@@ -45,11 +45,25 @@ class BroadcastHudTelemetryTruthRegressionTest {
 
         assertTrue(update.contains("_v174_snapshot_float(s, \"distanceToCup\")"))
         assertTrue(update.contains("_v174_snapshot_float(s, \"stimp\")"))
+        assertTrue(update.contains("_v174_snapshot_float(s, \"speed\")"))
         assertTrue(update.contains("_v174_remaining_label.text = \"-- m\""))
         assertTrue(update.contains("stimp_label.text = \"-- m\""))
-        assertTrue(update.contains("running and is_finite(speed)"))
-        assertTrue(update.contains("\"-- m/s\" if running else \"READY\""))
+        assertTrue(update.contains("if running and bool(speed_sample.get(\"valid\", false)):"))
+        assertTrue(update.contains("speed_label.text = \"-- m/s\""))
+        assertFalse(update.contains("running and is_finite(speed)"))
         assertFalse(update.contains("float(s.get(\"stimp\", 2.8))"))
+    }
+
+    @Test
+    fun liveSpeedUsesRawSnapshotTruthInsteadOfInheritedCoercedArgument() {
+        val source = asset("v174_broadcast_hud.gd")
+        val update = source.substringAfter("func _update_hud")
+
+        val rawSample = update.indexOf("var speed_sample := _v174_snapshot_float(s, \"speed\")")
+        val formatting = update.indexOf("speed_label.text = \"%.2f m/s\"")
+        assertTrue(rawSample >= 0)
+        assertTrue(formatting > rawSample)
+        assertTrue(update.contains("float(speed_sample.get(\"value\", speed))"))
     }
 
     @Test
