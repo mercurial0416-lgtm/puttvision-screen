@@ -121,6 +121,20 @@ class UnityRendererBridgeTest {
     }
 
     @Test
+    fun bridgeRejectsCorruptPhysicsFramesInsteadOfSanitizingThemToZero() {
+        val sent = mutableListOf<Triple<String, String, String>>()
+        UnityRendererBridge.installSenderForTests { gameObject, method, payload ->
+            sent += Triple(gameObject, method, payload)
+        }
+
+        assertFalse(UnityRendererBridge.publishPhysicsFrame(SimState(x = Double.NaN)))
+        assertFalse(UnityRendererBridge.publishPhysicsFrame(SimState(vy = Double.POSITIVE_INFINITY)))
+        assertFalse(UnityRendererBridge.publishPhysicsFrame(SimState(elapsed = -0.01)))
+        assertFalse(UnityRendererBridge.publishPhysicsFrame(SimState(v135SlipSpeedMps = -0.01)))
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test
     fun physicsProtocolPublishesAuthoritativeSixDofStateWithoutTrailCopies() {
         val state = SimState(
             x = -0.32,

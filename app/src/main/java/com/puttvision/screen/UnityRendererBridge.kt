@@ -52,7 +52,7 @@ object UnityRendererBridge {
     }
 
     fun publishPhysicsFrame(state: SimState?): Boolean {
-        if (state == null || !rendererActive()) return false
+        if (state == null || !UnityRendererProtocol.isPhysicsFrameUsable(state) || !rendererActive()) return false
         return send(FRAME_METHOD, UnityRendererProtocol.physicsFrameJson(state))
     }
 
@@ -169,6 +169,16 @@ internal object UnityRendererProtocol {
             put("heightF32LeBase64", Base64.getEncoder().encodeToString(bytes.array()))
         }.toString()
     }
+
+    fun isPhysicsFrameUsable(state: SimState): Boolean =
+        state.elapsed.isFinite() && state.elapsed >= 0.0 &&
+            state.x.isFinite() && state.y.isFinite() && state.ballCenterZM.isFinite() &&
+            state.vx.isFinite() && state.vy.isFinite() && state.vz.isFinite() &&
+            state.orientationW.isFinite() && state.orientationX.isFinite() &&
+            state.orientationY.isFinite() && state.orientationZ.isFinite() &&
+            state.surfaceNormalX.isFinite() && state.surfaceNormalY.isFinite() &&
+            state.surfaceNormalZ.isFinite() &&
+            state.v135SlipSpeedMps.isFinite() && state.v135SlipSpeedMps >= 0.0
 
     fun physicsFrameJson(state: SimState): String {
         val out = physicsJsonBuilder.get()
