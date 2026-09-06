@@ -65,7 +65,7 @@ class PracticePressureLadderStateRegressionTest {
         val source = asset("v192_drill_progression.gd")
         assertTrue(source.contains("var correction := _v191_reset_coaching(axis)"))
         assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d  ·  -0.5 m EASIER"))
-        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RESET  ·  %s  ·  %d/%d TO EASIER"))
+        assertTrue(source.contains("PRESSURE LADDER  ·  %s  ·  RECOVER  ·  %s  ·  %d/%d TO RESET"))
         assertFalse(source.contains("return \"START STREAK  ·  -0.5 m EASIER\""))
         assertFalse(source.contains("return \"START STREAK  ·  BUILD  ·  0/3\""))
     }
@@ -86,6 +86,18 @@ class PracticePressureLadderStateRegressionTest {
         assertTrue(source.contains("var failures := mini(_v192_trailing_failures(axis), V192_RESET_FAILURES)"))
         assertTrue(source.contains("[axis, correction, failures, V192_RESET_FAILURES]"))
         assertFalse(source.contains("RESET  ·  %s  ·  0/3"))
+    }
+
+    @Test
+    fun recoverableMissesDoNotPretendTheResetGateAlreadyFired() {
+        val source = asset("v192_drill_progression.gd")
+        val threshold = source.indexOf("if failures >= V192_RESET_FAILURES:")
+        val reset = source.indexOf("RESET  ·  %s  ·  %d/%d  ·  -0.5 m EASIER")
+        val recover = source.indexOf("RECOVER  ·  %s  ·  %d/%d TO RESET")
+        assertTrue(threshold >= 0)
+        assertTrue(reset > threshold)
+        assertTrue(recover > reset)
+        assertFalse(source.contains("RESET  ·  %s  ·  %d/%d TO EASIER"))
     }
 
     @Test
