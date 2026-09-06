@@ -26,8 +26,6 @@ func _terrain_relief_material() -> ShaderMaterial:
     if material == null or material.shader == null:
         return material
 
-    # The base shell now carries stronger macro relief. Add only a bounded TV depth finish on top so
-    # shallow crowns/bowls keep readable form without turning the green into a painted contour map.
     var code := material.shader.code
     code = code.replace("mix(0.89, 1.11, primary_hillshade * 0.5 + 0.5)", "mix(0.86, 1.14, primary_hillshade * 0.5 + 0.5)")
     code = code.replace("vec3(0.022, 0.008, -0.018) * cross_hillshade", "vec3(0.030, 0.011, -0.022) * cross_hillshade")
@@ -102,9 +100,9 @@ func _long_putt_frame_signal(distance_m: float) -> float:
     return smoothstep(LONG_FRAME_START_M, LONG_FRAME_FULL_M, distance_m)
 
 func _apply_long_putt_address_frame(ball_world: Vector3, distance_to_cup: float, plan: Dictionary) -> void:
-    var signal := _long_putt_frame_signal(distance_to_cup)
-    plan["long_frame_signal"] = signal
-    if signal <= 0.0:
+    var frame_signal := _long_putt_frame_signal(distance_to_cup)
+    plan["long_frame_signal"] = frame_signal
+    if frame_signal <= 0.0:
         return
 
     var cup_world := target_root.global_position if target_root != null else ball_world + Vector3(0.0, 0.0, -maxf(0.5, distance_to_cup))
@@ -117,18 +115,18 @@ func _apply_long_putt_address_frame(ball_world: Vector3, distance_to_cup: float,
 
     var forward := flat_delta / flat_length
     var position: Vector3 = plan.get("position", ball_world)
-    position.x -= forward.x * LONG_FRAME_TRAIL_EXTRA_M * signal
-    position.z -= forward.y * LONG_FRAME_TRAIL_EXTRA_M * signal
-    position.y += LONG_FRAME_HEIGHT_EXTRA_M * signal
+    position.x -= forward.x * LONG_FRAME_TRAIL_EXTRA_M * frame_signal
+    position.z -= forward.y * LONG_FRAME_TRAIL_EXTRA_M * frame_signal
+    position.y += LONG_FRAME_HEIGHT_EXTRA_M * frame_signal
     plan["position"] = position
 
     var current_fraction := clampf(float(plan.get("look_fraction", ADDRESS_LOOK_FRACTION)), 0.0, 1.0)
-    var desired_fraction := clampf(current_fraction + LONG_FRAME_LOOK_EXTRA * signal, current_fraction, 0.72)
+    var desired_fraction := clampf(current_fraction + LONG_FRAME_LOOK_EXTRA * frame_signal, current_fraction, 0.72)
     var desired_xz := ball_xz.lerp(cup_xz, desired_fraction)
     var desired_h := _address_visual_height(_v166_sample(desired_xz.x, -desired_xz.y).x) + ADDRESS_LOOK_LIFT
     plan["look"] = Vector3(desired_xz.x, desired_h, desired_xz.y)
     plan["look_fraction"] = desired_fraction
-    plan["fov"] = float(plan.get("fov", camera.fov)) + LONG_FRAME_FOV_EXTRA_DEG * signal
+    plan["fov"] = float(plan.get("fov", camera.fov)) + LONG_FRAME_FOV_EXTRA_DEG * frame_signal
 
 func _address_relief_camera_plan(ball_world: Vector3, distance_to_cup: float) -> Dictionary:
     var plan := super._address_relief_camera_plan(ball_world, distance_to_cup)
