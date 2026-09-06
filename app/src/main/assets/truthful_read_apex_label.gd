@@ -16,22 +16,21 @@ var _last_ring_x := INF
 var _last_text := ""
 
 func _ready() -> void:
+    # Child _ready callbacks can run before the inherited root finishes building its HUD. Keep a tiny
+    # startup retry until the nodes exist; after binding there are no scene-tree walks at all.
     process_priority = 180
-    set_process(false)
-    call_deferred("_bind_apex_landmark")
+    set_process(true)
 
-func _bind_apex_landmark() -> void:
+func _bind_apex_landmark() -> bool:
     var root := get_tree().current_scene
     if root == null:
-        return
+        return false
     _panel = root.find_child("GreenReadOverview", true, false) as Control
     if _panel == null:
-        return
+        return false
     _ring = _panel.get_node_or_null("CommercialReadApexRing") as Line2D
     _badge = _panel.get_node_or_null("CommercialReadApexBadge") as Label
-    if _ring == null or _badge == null:
-        return
-    set_process(true)
+    return _ring != null and _badge != null
 
 func _truthful_apex_text(apex_x: float) -> String:
     if not is_finite(apex_x):
@@ -42,7 +41,10 @@ func _truthful_apex_text(apex_x: float) -> String:
     return "APEX  RIGHT" if delta > 0.0 else "APEX  LEFT"
 
 func _process(_delta: float) -> void:
-    if _panel == null or _ring == null or _badge == null or not _panel.visible or not _ring.visible:
+    if _panel == null or _ring == null or _badge == null:
+        if not _bind_apex_landmark():
+            return
+    if not _panel.visible or not _ring.visible:
         return
     var apex_x := _ring.position.x
     var text := _truthful_apex_text(apex_x)
