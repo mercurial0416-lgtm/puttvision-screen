@@ -20,7 +20,6 @@ class ReplayRollDistanceLayoutRegressionTest {
         assertTrue(helper.contains("var _cached_track: Control = null"))
         assertTrue(helper.contains("if not is_instance_valid(_cached_stage) or not is_instance_valid(_cached_track):"))
         assertTrue(helper.contains("func _bind_nodes(root: Node) -> void:"))
-        assertTrue(helper.contains("if source_text == _last_presented_text:"))
     }
 
     @Test
@@ -40,7 +39,7 @@ class ReplayRollDistanceLayoutRegressionTest {
         assertTrue(helper.contains("root.get(\"_v171_replay_remaining\")"))
         assertTrue(helper.contains("if value_type != TYPE_INT and value_type != TYPE_FLOAT:"))
         assertTrue(helper.contains("if not is_finite(remaining) or remaining <= 0.0:"))
-        assertTrue(helper.contains("return \"%.1fs\" % remaining"))
+        assertTrue(helper.contains("return \"T-%.1fs\" % remaining"))
         assertTrue(helper.contains("func _inject_replay_clock(source_text: String, clock_text: String) -> String:"))
         assertFalse(helper.contains("_v171_replay_remaining ="))
         assertFalse(helper.contains("_v171_replay_duration ="))
@@ -52,10 +51,43 @@ class ReplayRollDistanceLayoutRegressionTest {
     fun replayClockKeepsDistanceAsTerminalCueAndExercisesPreview() {
         val helper = asset("replay_roll_distance_layout.gd")
 
-        assertTrue(helper.contains("const PREVIEW_SAMPLE_TIME := \"1.2s\""))
+        assertTrue(helper.contains("const PREVIEW_SAMPLE_TIME := \"T-1.2s\""))
         assertTrue(helper.contains("var distance_separator := source_text.rfind(STATUS_SEPARATOR)"))
         assertTrue(helper.contains("var clock_text := PREVIEW_SAMPLE_TIME if previewing else _replay_clock_readout(root)"))
         assertTrue(helper.contains("presented_text = _inject_replay_clock(presented_text, clock_text)"))
+    }
+
+    @Test
+    fun replayClockUsesDistinctCountdownSemanticsBesideCameraChapterTiming() {
+        val helper = asset("replay_roll_distance_layout.gd")
+
+        assertTrue(helper.contains("T-minus"))
+        assertTrue(helper.contains("return \"T-%.1fs\" % remaining"))
+        assertTrue(helper.contains("const PREVIEW_SAMPLE_TIME := \"T-1.2s\""))
+        assertFalse(helper.contains("const PREVIEW_SAMPLE_TIME := \"1.2s\""))
+    }
+
+    @Test
+    fun replayClockRecomputesWhenStageTextIsStaticInsteadOfFreezingOnOwnOutput() {
+        val helper = asset("replay_roll_distance_layout.gd")
+        val presenter = helper.substringAfter("func _present_stage_text(stage: Label, root: Node) -> void:")
+
+        assertTrue(presenter.contains("var observed_text := stage.text"))
+        assertTrue(presenter.contains("var source_text := _last_source_text if observed_text == _last_presented_text else observed_text"))
+        assertTrue(presenter.contains("var clock_text := PREVIEW_SAMPLE_TIME if previewing else _replay_clock_readout(root)"))
+        assertTrue(presenter.contains("if source_text == _last_source_text and presented_text == _last_presented_text:"))
+        assertTrue(presenter.indexOf("_replay_clock_readout(root)") < presenter.indexOf("if source_text == _last_source_text and presented_text == _last_presented_text:"))
+        assertFalse(presenter.contains("if source_text == _last_presented_text:"))
+    }
+
+    @Test
+    fun replayClockDoesNotReinjectClockIntoItsOwnPreviousPresentation() {
+        val helper = asset("replay_roll_distance_layout.gd")
+        val presenter = helper.substringAfter("func _present_stage_text(stage: Label, root: Node) -> void:")
+
+        assertTrue(presenter.contains("observed_text == _last_presented_text"))
+        assertTrue(presenter.contains("_last_source_text if observed_text == _last_presented_text else observed_text"))
+        assertTrue(presenter.contains("if presented_text != observed_text:"))
     }
 
     @Test

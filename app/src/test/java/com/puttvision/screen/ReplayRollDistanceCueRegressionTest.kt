@@ -20,7 +20,7 @@ class ReplayRollDistanceCueRegressionTest {
         assertTrue(timeline.contains("_focus_replay_roll_distance(progress)"))
         assertTrue(layout.contains("CLEAR_REMAINING_SUFFIX := \" TO STOP\""))
         assertTrue(layout.contains("presented_text = presented_text.replace(LEGACY_REMAINING_SUFFIX, CLEAR_REMAINING_SUFFIX)"))
-        assertTrue(layout.contains("if presented_text != source_text:"))
+        assertTrue(layout.contains("if presented_text != observed_text:"))
         assertTrue(layout.contains("stage.text = presented_text"))
     }
 
@@ -59,6 +59,7 @@ class ReplayRollDistanceCueRegressionTest {
         val previewScene = asset("v143_preview.tscn")
         assertTrue(layout.contains("const STATUS_WIDTH := 248.0"))
         assertTrue(layout.contains("PREVIEW_SAMPLE_DISTANCE := \"0.9m TO STOP\""))
+        assertTrue(layout.contains("PREVIEW_SAMPLE_TIME := \"T-1.2s\""))
         assertFalse(layout.contains("set_process(false)"))
         assertTrue(tvScene.contains("res://replay_roll_distance_layout.gd"))
         assertTrue(previewScene.contains("res://replay_roll_distance_layout.gd"))
