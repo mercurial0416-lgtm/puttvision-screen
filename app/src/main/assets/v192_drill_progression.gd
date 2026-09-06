@@ -5,6 +5,8 @@ extends "res://v191_practice_streak.gd"
 # aiming, scoring, shot capture, or the active putting distance.
 
 const V192_RESET_FAILURES := 3
+const V192_RECOVER_COLOR := Color("#e9bf72")
+const V192_RESET_COLOR := Color("#f0a56d")
 
 func _v192_trailing_failures(axis: String) -> int:
     if axis == "BUILDING" or not _v191_has_focus_samples():
@@ -54,8 +56,15 @@ func _v191_refresh() -> void:
     var metric := _v189_focus_metric()
     var spec := _v190_target_spec(metric)
     var axis := str(spec.get("axis", "BUILDING"))
-    var reset_ready := _v191_streak == 0 and _v192_trailing_failures(axis) >= V192_RESET_FAILURES
+    var failures := mini(_v192_trailing_failures(axis), V192_RESET_FAILURES)
+    var reset_ready := _v191_streak == 0 and failures >= V192_RESET_FAILURES
+    var recovering := _v191_streak == 0 and failures > 0 and failures < V192_RESET_FAILURES
     if reset_ready:
-        _v191_streak_label.modulate = Color("#f0a56d")
+        _v191_streak_label.modulate = V192_RESET_COLOR
         for segment in _v191_segments:
             segment.color = Color(0.94, 0.55, 0.34, 0.20)
+    elif recovering:
+        # RECOVER is an actionable warning state, not ordinary neutral copy. A warmer but clearly
+        # softer tint than RESET makes one/two misses legible from the mat without inventing a new
+        # gameplay state or touching the authoritative target/physics data.
+        _v191_streak_label.modulate = V192_RECOVER_COLOR
