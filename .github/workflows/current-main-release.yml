@@ -45,9 +45,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
-          LAST=${TAG#pv-}
-          [[ "$LAST" =~ ^[0-9]+$ ]]
+          LAST=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/pv-" \
+            --jq '.[].ref | sub("^refs/tags/pv-"; "") | select(test("^[0-9]+$")) | tonumber' \
+            | sort -n | tail -1)
+          test -n "$LAST"
           VERSION_CODE=$((LAST + 1))
           VERSION_NAME="0.7.$((VERSION_CODE - 100000))"
           echo "PV_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
