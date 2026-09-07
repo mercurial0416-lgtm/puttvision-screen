@@ -54,8 +54,8 @@ jobs:
           echo "PV_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
           echo "PV_TAG=pv-$VERSION_CODE" >> "$GITHUB_ENV"
 
-      - name: Consumer regression test
-        run: gradle testConsumerDebugUnitTest
+      - name: Release regression tests
+        run: gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest
 
       - name: Restore release signing bundle
         shell: bash
