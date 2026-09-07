@@ -162,4 +162,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
         run: |
-          gh issue comment 138 --body "Current main release: **${JOB_STATUS}** · PuttVision ${PV_VERSION_NAME:-unknown} · run ${GITHUB_RUN_ID}"
+          set -euo pipefail
+          BODY="Current main release: **${JOB_STATUS}** · PuttVision ${PV_VERSION_NAME:-unknown} · run ${GITHUB_RUN_ID}"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/138/comments" -f body="$BODY" >/dev/null
