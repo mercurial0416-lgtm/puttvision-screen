@@ -190,6 +190,7 @@ jobs:
           jq -e '.ok == true and .action == "external-finalize"' finalize.json >/dev/null
           PV_MANIFEST_URL=$(jq -r .manifestUrl finalize.json)
           [[ "$PV_MANIFEST_URL" == https://* ]]
+          echo "PV_MANIFEST_URL=$PV_MANIFEST_URL" >> "$GITHUB_ENV"
           for i in 1 2 3 4 5 6 7 8; do
             LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL?cb=${GITHUB_RUN_ID}-${i}")
             if echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" --arg url "$PV_APK_URL" '.versionCode == $vc and .versionName == $vn and .sha256 == $sha and ((has("sizeBytes") | not) or .sizeBytes == $size) and .apkUrl == $url' >/dev/null; then
@@ -201,12 +202,44 @@ jobs:
               test -s "$UPDATER_APK"
               test "$(sha256sum "$UPDATER_APK" | cut -d' ' -f1)" = "$LIVE_APK_SHA"
               test "$(stat -c%s "$UPDATER_APK")" = "$PV_APK_SIZE"
-              exit 0
+              break
+            fi
+            if [[ "$i" == 8 ]]; then
+              echo "Updater manifest did not converge to the new release" >&2
+              exit 1
             fi
             sleep 2
           done
-          echo "Updater manifest did not converge to the new release" >&2
-          exit 1
+
+      - name: Verify latest release and updater contract
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")
+          test "$(echo "$LATEST" | jq -r .tag_name)" = "$PV_TAG"
+          test "$(echo "$LATEST" | jq -r .name)" = "PuttVision $PV_VERSION_NAME"
+          test "$(echo "$LATEST" | jq -r .draft)" = "false"
+          test "$(echo "$LATEST" | jq -r .prerelease)" = "false"
+          echo "$LATEST" | jq -e '([.assets[].name] | index("puttvision-consumer.apk") != null) and ([.assets[].name] | index("puttvision.apk") != null)' >/dev/null
+
+          LIVE_MANIFEST="$RUNNER_TEMP/final-update-manifest.json"
+          curl --fail-with-body -sS --retry 5 --retry-all-errors \
+            -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+            "$PV_MANIFEST_URL?verify=${PV_VERSION_CODE}-final-${GITHUB_RUN_ID}" \
+            -o "$LIVE_MANIFEST"
+          jq -e \
+            --argjson vc "$PV_VERSION_CODE" \
+            --arg vn "$PV_VERSION_NAME" \
+            --arg sha "$PV_RELEASE_SHA" \
+            --arg url "$PV_APK_URL" \
+            '.versionCode == $vc and .versionName == $vn and .sha256 == $sha and .apkUrl == $url' \
+            "$LIVE_MANIFEST" >/dev/null
+
+          PREVIOUS_VERSION_CODE=$((PV_VERSION_CODE - 1))
+          jq -e --argjson installed "$PREVIOUS_VERSION_CODE" '.versionCode > $installed' "$LIVE_MANIFEST" >/dev/null
+          echo "Latest release/updater contract verified: $PV_VERSION_NAME ($PV_VERSION_CODE)"
 
       - name: Report semantic release result
         if: always()
