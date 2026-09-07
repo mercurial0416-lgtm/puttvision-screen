@@ -41,11 +41,7 @@ object UnityRendererBridge {
         return send(SHOT_METHOD, UnityRendererProtocol.shotJson(metrics, settings, startX, startY))
     }
 
-    /**
-     * Publishes the native terrain truth once per shot. The grid calls GreenTerrain.effectiveHeightAt
-     * directly, therefore custom greens, built-in profiles and global slopes all render from the
-     * exact same height source consumed by native physics.
-     */
+    /** Publishes the same native terrain truth consumed by physics. */
     fun publishSurfaceGrid(settings: GreenSettings, startX: Double = 0.0, startY: Double = 0.0): Boolean {
         if (!rendererActive()) return false
         return send(SURFACE_METHOD, UnityRendererProtocol.surfaceGridJson(settings, startX, startY))
@@ -99,8 +95,7 @@ internal object UnityRendererProtocol {
     const val SURFACE_HEIGHT = 65
 
     // Physics frames are emitted continuously while a putt is running. Reuse the builder on the
-    // producer thread so the bridge only has to allocate the final String required by
-    // UnitySendMessage instead of also allocating a JSONObject/map graph every frame.
+    // producer thread so the bridge only allocates the final String required by UnitySendMessage.
     private val physicsJsonBuilder = ThreadLocal.withInitial { StringBuilder(384) }
 
     fun shotJson(metrics: ShotMetrics, settings: GreenSettings, startX: Double, startY: Double): String {
@@ -152,8 +147,7 @@ internal object UnityRendererProtocol {
             for (ix in 0 until SURFACE_WIDTH) {
                 val fx = ix.toDouble() / (SURFACE_WIDTH - 1).toDouble()
                 val x = minX + (maxX - minX) * fx
-                val height = GreenTerrain.effectiveHeightAt(settings, x, y)
-                    .takeIf { it.isFinite() } ?: 0.0
+                val height = GreenTerrain.effectiveHeightAt(settings, x, y).takeIf { it.isFinite() } ?: 0.0
                 bytes.putFloat(height.toFloat())
             }
         }
@@ -240,7 +234,9 @@ internal object UnityRendererProtocol {
         if (last) Unit
     }
 
-    private fun Double?.isFiniteMeasurement(): Boolean = this != null && isFinite()
-    private fun finiteOrZero(value: Double?): Double = finiteOr(value, 0.0)
-    private fun finiteOr(value: Double?, fallback: Double): Double = value?.takeIf { it.isFinite() } ?: fallback
+    // These helpers sit on the 60 Hz physics-frame hot path. Keep them primitive: using Double?
+    // boxes each value and creates avoidable short-lived objects/GC pressure on Android TV phones.
+    private fun Double.isFiniteMeasurement(): Boolean = isFinite()
+    private fun finiteOrZero(value: Double): Double = finiteOr(value, 0.0)
+    private fun finiteOr(value: Double, fallback: Double): Double = if (value.isFinite()) value else fallback
 }
