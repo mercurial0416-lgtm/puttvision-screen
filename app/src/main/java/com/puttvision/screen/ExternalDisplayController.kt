@@ -157,6 +157,10 @@ class ExternalDisplayController(
     }
 
     private fun launchGodot(display: Display, unityReason: String? = null) {
+        // A display handoff can reach here while an older Godot TV Activity is still alive on a
+        // removed HDMI/DeX display. Tear it down before launching the replacement so we never keep
+        // duplicate native renderers or let the old Activity retain ownership of the render bridge.
+        stopGodot()
         V143GodotRuntime.setupComplete = false
         V143GodotRuntime.lastFailure = null
         V143GodotRenderBridge.publish(engine)
