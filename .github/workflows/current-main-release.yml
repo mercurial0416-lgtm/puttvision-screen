@@ -138,6 +138,22 @@ jobs:
           echo "PV_APK_URL=$APK_URL" >> "$GITHUB_ENV"
           curl --fail-with-body -sSIL "$APK_URL" >/dev/null
 
+      - name: Verify published APK integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONSUMER_URL="$PV_APK_URL"
+          DEVELOPER_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$PV_TAG/puttvision.apk"
+          PUBLISHED_CONSUMER="$RUNNER_TEMP/published-puttvision-consumer.apk"
+          PUBLISHED_DEVELOPER="$RUNNER_TEMP/published-puttvision.apk"
+          curl --fail-with-body -sSL --retry 3 --retry-all-errors "$CONSUMER_URL" -o "$PUBLISHED_CONSUMER"
+          curl --fail-with-body -sSL --retry 3 --retry-all-errors "$DEVELOPER_URL" -o "$PUBLISHED_DEVELOPER"
+          EXPECTED_DEVELOPER_SHA=$(cut -d' ' -f1 puttvision.apk.sha256)
+          test "$(sha256sum "$PUBLISHED_CONSUMER" | cut -d' ' -f1)" = "$PV_RELEASE_SHA"
+          test "$(sha256sum "$PUBLISHED_DEVELOPER" | cut -d' ' -f1)" = "$EXPECTED_DEVELOPER_SHA"
+          test "$(stat -c%s "$PUBLISHED_CONSUMER")" = "$PV_APK_SIZE"
+          test "$(stat -c%s "$PUBLISHED_DEVELOPER")" = "$(stat -c%s puttvision.apk)"
+
       - name: Publish and verify public updater manifest
         shell: bash
         env:
