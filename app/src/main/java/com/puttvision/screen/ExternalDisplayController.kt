@@ -39,6 +39,8 @@ class ExternalDisplayController(
     private var unityDisplayId: Int? = null
     private var unityFailedForDisplayId: Int? = null
     private var godotDisplayId: Int? = null
+    private var unityLaunchGeneration = 0
+    private var godotLaunchGeneration = 0
     private var started = false
 
     private val snapshotPump = object : Runnable {
@@ -132,12 +134,17 @@ class ExternalDisplayController(
         }
 
         unityDisplayId = display.displayId
+        val launchGeneration = ++unityLaunchGeneration
         onChanged(true, "TV 연결됨 · ${display.name} · PUTTVISION UNITY")
 
         // ActivityManager launch success is not enough; the scene calls UnityTvRuntime.onUnityReady
         // after it has actually loaded. If that callback never arrives, roll back automatically.
+        // A generation guard also prevents an old timeout from killing a freshly reconnected session
+        // when Android reuses the same displayId after HDMI/DeX disconnect + reconnect.
         handler.postDelayed({
-            if (!started || unityDisplayId != display.displayId) return@postDelayed
+            if (!started || unityLaunchGeneration != launchGeneration || unityDisplayId != display.displayId) {
+                return@postDelayed
+            }
             if (!UnityTvRuntime.isReadyOn(display.displayId)) {
                 val reason = UnityTvRuntime.lastFailure ?: "Unity 초기화 타임아웃"
                 unityFailedForDisplayId = display.displayId
@@ -153,6 +160,7 @@ class ExternalDisplayController(
         V143GodotRuntime.setupComplete = false
         V143GodotRuntime.lastFailure = null
         V143GodotRenderBridge.publish(engine)
+        val launchGeneration = ++godotLaunchGeneration
         try {
             val options = ActivityOptions.makeBasic().setLaunchDisplayId(display.displayId)
             val intent = Intent(context, V143GodotTvActivity::class.java).apply {
@@ -167,8 +175,11 @@ class ExternalDisplayController(
             onChanged(true, "TV 연결됨 · ${display.name} · ${prefix}GODOT")
 
             // A launch can succeed at ActivityManager level but fail during native engine setup.
+            // Ignore stale watchdogs from an older launch even if Android reused the displayId.
             handler.postDelayed({
-                if (!started || godotDisplayId != display.displayId) return@postDelayed
+                if (!started || godotLaunchGeneration != launchGeneration || godotDisplayId != display.displayId) {
+                    return@postDelayed
+                }
                 if (!V143GodotTvActivity.isActiveOn(display.displayId) || !V143GodotRuntime.setupComplete) {
                     showFallback(display, "Godot 초기화 실패")
                 }
@@ -180,11 +191,13 @@ class ExternalDisplayController(
     }
 
     private fun stopUnity() {
+        ++unityLaunchGeneration
         UnityTvRuntime.finishCurrent()
         unityDisplayId = null
     }
 
     private fun stopGodot() {
+        ++godotLaunchGeneration
         V143GodotTvActivity.finishCurrent()
         godotDisplayId = null
     }
