@@ -242,6 +242,21 @@ class ExternalDisplayController(
     }
 
     override fun onDisplayAdded(displayId: Int) = refresh()
-    override fun onDisplayRemoved(displayId: Int) = refresh()
+
+    override fun onDisplayRemoved(displayId: Int) {
+        // Samsung/DeX can queue remove+add before this callback is handled and reuse the same
+        // displayId. Reset state from the explicit removal event first; otherwise refresh() can see
+        // the replacement display with the old id and incorrectly keep a stale renderer/fallback.
+        if (unityDisplayId == displayId) stopUnity()
+        if (godotDisplayId == displayId) stopGodot()
+        if (presentation?.display?.displayId == displayId) {
+            presentation?.dismiss()
+            presentation = null
+        }
+        if (unityFailedForDisplayId == displayId) unityFailedForDisplayId = null
+        if (godotFailedForDisplayId == displayId) godotFailedForDisplayId = null
+        refresh()
+    }
+
     override fun onDisplayChanged(displayId: Int) = refresh()
 }
