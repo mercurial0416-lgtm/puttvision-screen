@@ -39,6 +39,7 @@ class ExternalDisplayController(
     private var unityDisplayId: Int? = null
     private var unityFailedForDisplayId: Int? = null
     private var godotDisplayId: Int? = null
+    private var godotFailedForDisplayId: Int? = null
     private var unityLaunchGeneration = 0
     private var godotLaunchGeneration = 0
     private var started = false
@@ -72,6 +73,7 @@ class ExternalDisplayController(
         presentation?.dismiss()
         presentation = null
         unityFailedForDisplayId = null
+        godotFailedForDisplayId = null
     }
 
     fun refresh() {
@@ -88,6 +90,7 @@ class ExternalDisplayController(
             presentation?.dismiss()
             presentation = null
             unityFailedForDisplayId = null
+            godotFailedForDisplayId = null
             onChanged(false, "외부 TV 미검출 · HDMI/DeX 연결 확인")
             return
         }
@@ -111,16 +114,22 @@ class ExternalDisplayController(
             return
         }
 
-        if (godotDisplayId == display.displayId) {
-            val state = if (V143GodotRuntime.setupComplete) "GODOT READY" else "GODOT STARTING"
-            onChanged(true, "TV 연결됨 · ${display.name} · $state")
+        val godotEligible = godotFailedForDisplayId != display.displayId
+        if (godotEligible) {
+            if (godotDisplayId == display.displayId) {
+                val state = if (V143GodotRuntime.setupComplete) "GODOT READY" else "GODOT STARTING"
+                onChanged(true, "TV 연결됨 · ${display.name} · $state")
+                return
+            }
+
+            stopUnity()
+            presentation?.dismiss()
+            presentation = null
+            launchGodot(display)
             return
         }
 
-        stopUnity()
-        presentation?.dismiss()
-        presentation = null
-        launchGodot(display)
+        showFallback(display, "Godot 이전 초기화 실패")
     }
 
     private fun launchUnity(display: Display) {
@@ -185,11 +194,13 @@ class ExternalDisplayController(
                     return@postDelayed
                 }
                 if (!V143GodotTvActivity.isActiveOn(display.displayId) || !V143GodotRuntime.setupComplete) {
+                    godotFailedForDisplayId = display.displayId
                     showFallback(display, "Godot 초기화 실패")
                 }
             }, 7000L)
         } catch (t: Throwable) {
             V143GodotRuntime.lastFailure = t.message ?: t.javaClass.simpleName
+            godotFailedForDisplayId = display.displayId
             showFallback(display, "Godot 실행 실패")
         }
     }
