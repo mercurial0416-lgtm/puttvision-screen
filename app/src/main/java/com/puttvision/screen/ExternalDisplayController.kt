@@ -129,6 +129,15 @@ class ExternalDisplayController(
             return
         }
 
+        // Samsung/DeX can emit repeated display-changed callbacks while the same physical TV stays
+        // attached. If both embedded renderers already failed for this display and the Filament
+        // fallback is healthy, keep that Presentation instead of dismissing/recreating it on every
+        // callback. Reconnect still clears the failure latches via the no-display path above.
+        if (presentation?.display?.displayId == display.displayId) {
+            onChanged(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · embedded renderer unavailable")
+            return
+        }
+
         showFallback(display, "Godot 이전 초기화 실패")
     }
 
