@@ -114,6 +114,22 @@ jobs:
           echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
           echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
 
+      - name: Verify signed APK version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -type f -name aapt | sort -V | tail -1)
+          test -x "$AAPT"
+          verify_version() {
+            local apk="$1"
+            local badging
+            badging=$("$AAPT" dump badging "$apk" | head -1)
+            [[ "$badging" == *"versionCode='$PV_VERSION_CODE'"* ]]
+            [[ "$badging" == *"versionName='$PV_VERSION_NAME'"* ]]
+          }
+          verify_version puttvision-consumer.apk
+          verify_version puttvision.apk
+
       - name: Ensure pinned source is still current main
         shell: bash
         env:
