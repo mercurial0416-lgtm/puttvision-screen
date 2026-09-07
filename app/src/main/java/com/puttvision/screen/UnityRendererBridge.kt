@@ -181,7 +181,9 @@ internal object UnityRendererProtocol {
             state.v135SlipSpeedMps.isFinite() && state.v135SlipSpeedMps >= 0.0
 
     fun physicsFrameJson(state: SimState): String {
-        val out = physicsJsonBuilder.get()
+        val out = requireNotNull(physicsJsonBuilder.get()) {
+            "Unity physics JSON builder unexpectedly missing for producer thread"
+        }
         out.setLength(0)
         out.append('{')
         appendNumber(out, "schemaVersion", UnityRendererBridge.SCHEMA_VERSION.toDouble())
