@@ -114,6 +114,18 @@ jobs:
           echo "PV_RELEASE_SHA=$(cut -d' ' -f1 puttvision-consumer.apk.sha256)" >> "$GITHUB_ENV"
           echo "PV_APK_SIZE=$(stat -c%s puttvision-consumer.apk)" >> "$GITHUB_ENV"
 
+      - name: Ensure pinned source is still current main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LIVE_MAIN_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ "$LIVE_MAIN_SHA" != "$PV_SOURCE_SHA" ]]; then
+            echo "main advanced during release: pinned=$PV_SOURCE_SHA live=$LIVE_MAIN_SHA" >&2
+            exit 1
+          fi
+
       - name: Publish semantic GitHub release
         shell: bash
         env:
