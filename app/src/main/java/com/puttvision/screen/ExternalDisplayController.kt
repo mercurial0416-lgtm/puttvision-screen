@@ -74,7 +74,12 @@ class ExternalDisplayController(
 
     fun refresh() {
         val displays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
-        val display = displays.firstOrNull()
+        // Android does not guarantee a stable ordering for presentation displays. Keep the renderer
+        // on the display it already owns when another HDMI/DeX presentation display is added or
+        // changes, instead of tearing down a healthy TV session just because firstOrNull() moved.
+        val activeDisplayId = unityDisplayId ?: godotDisplayId ?: presentation?.display?.displayId
+        val display = activeDisplayId?.let { id -> displays.firstOrNull { it.displayId == id } }
+            ?: displays.firstOrNull()
         if (display == null) {
             stopUnity()
             stopGodot()
