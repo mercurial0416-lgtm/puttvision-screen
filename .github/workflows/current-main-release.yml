@@ -193,6 +193,13 @@ jobs:
             LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL?cb=${GITHUB_RUN_ID}-${i}")
             if echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" --arg url "$PV_APK_URL" '.versionCode == $vc and .versionName == $vn and .sha256 == $sha and ((has("sizeBytes") | not) or .sizeBytes == $size) and .apkUrl == $url' >/dev/null; then
               echo "$LIVE" | jq .
+              LIVE_APK_URL=$(echo "$LIVE" | jq -r .apkUrl)
+              LIVE_APK_SHA=$(echo "$LIVE" | jq -r .sha256)
+              UPDATER_APK="$RUNNER_TEMP/updater-puttvision-consumer.apk"
+              curl --fail-with-body -sSL --retry 3 --retry-all-errors "$LIVE_APK_URL" -o "$UPDATER_APK"
+              test -s "$UPDATER_APK"
+              test "$(sha256sum "$UPDATER_APK" | cut -d' ' -f1)" = "$LIVE_APK_SHA"
+              test "$(stat -c%s "$UPDATER_APK")" = "$PV_APK_SIZE"
               exit 0
             fi
             sleep 2
