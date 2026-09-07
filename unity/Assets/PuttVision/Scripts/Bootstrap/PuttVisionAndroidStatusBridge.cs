@@ -7,6 +7,7 @@ namespace PuttVision.Bootstrap
         private const string AndroidRuntimeClass = "com.puttvision.screen.UnityTvRuntime";
         private const string UnityPlayerClass = "com.unity3d.player.UnityPlayer";
         private const string DisplayIdExtra = "pv_display_id";
+        private const string LaunchSessionExtra = "pv_launch_session";
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void ReportReady()
@@ -15,14 +16,15 @@ namespace PuttVision.Bootstrap
             try
             {
                 var displayId = CurrentDisplayId();
-                if (displayId < 0)
+                var launchSession = CurrentLaunchSession();
+                if (displayId < 0 || launchSession <= 0)
                 {
-                    Debug.LogWarning("[PuttVision] Renderer ready callback missing display id.");
+                    Debug.LogWarning("[PuttVision] Renderer ready callback missing launch identity.");
                     return;
                 }
 
                 using var runtime = new AndroidJavaClass(AndroidRuntimeClass);
-                runtime.CallStatic("onUnityReady", displayId);
+                runtime.CallStatic("onUnityReady", displayId, launchSession);
             }
             catch (System.Exception exception)
             {
@@ -39,11 +41,12 @@ namespace PuttVision.Bootstrap
             try
             {
                 var displayId = CurrentDisplayId();
-                if (displayId < 0)
+                var launchSession = CurrentLaunchSession();
+                if (displayId < 0 || launchSession <= 0)
                     return;
 
                 using var runtime = new AndroidJavaClass(AndroidRuntimeClass);
-                runtime.CallStatic("onUnityFailure", displayId, message ?? "unknown");
+                runtime.CallStatic("onUnityFailure", displayId, launchSession, message ?? "unknown");
             }
             catch
             {
@@ -52,15 +55,23 @@ namespace PuttVision.Bootstrap
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-        private static int CurrentDisplayId()
+        private static AndroidJavaObject CurrentIntent()
         {
             using var player = new AndroidJavaClass(UnityPlayerClass);
             using var activity = player.GetStatic<AndroidJavaObject>("currentActivity");
-            if (activity == null)
-                return -1;
+            return activity?.Call<AndroidJavaObject>("getIntent");
+        }
 
-            using var intent = activity.Call<AndroidJavaObject>("getIntent");
+        private static int CurrentDisplayId()
+        {
+            using var intent = CurrentIntent();
             return intent?.Call<int>("getIntExtra", DisplayIdExtra, -1) ?? -1;
+        }
+
+        private static long CurrentLaunchSession()
+        {
+            using var intent = CurrentIntent();
+            return intent?.Call<long>("getLongExtra", LaunchSessionExtra, -1L) ?? -1L;
         }
 #endif
     }
