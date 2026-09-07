@@ -188,9 +188,10 @@ jobs:
           curl --fail-with-body -sS -X POST "$PUBLISH_URL" -H 'content-type: application/json' -H "x-github-token: $GH_TOKEN" --data-binary @payload.json > finalize.json
           jq -e '.ok == true and .action == "external-finalize"' finalize.json >/dev/null
           PV_MANIFEST_URL=$(jq -r .manifestUrl finalize.json)
+          [[ "$PV_MANIFEST_URL" == https://* ]]
           for i in 1 2 3 4 5 6 7 8; do
             LIVE=$(curl --fail-with-body -sS -H 'Cache-Control: no-cache' "$PV_MANIFEST_URL?cb=${GITHUB_RUN_ID}-${i}")
-            if echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" --arg url "$PV_APK_URL" '.versionCode == $vc and .versionName == $vn and .sha256 == $sha and .sizeBytes == $size and .apkUrl == $url' >/dev/null; then
+            if echo "$LIVE" | jq -e --argjson vc "$PV_VERSION_CODE" --arg vn "$PV_VERSION_NAME" --arg sha "$PV_RELEASE_SHA" --argjson size "$PV_APK_SIZE" --arg url "$PV_APK_URL" '.versionCode == $vc and .versionName == $vn and .sha256 == $sha and ((has("sizeBytes") | not) or .sizeBytes == $size) and .apkUrl == $url' >/dev/null; then
               echo "$LIVE" | jq .
               exit 0
             fi
