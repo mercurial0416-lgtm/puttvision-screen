@@ -19,6 +19,12 @@ class UpdateTransferUiTest {
     }
 
     @Test
+    fun counterResetPublishesImmediatelyInsteadOfFreezingProgressUi() {
+        val step = UpdateTransferUi.PUBLISH_STEP_BYTES
+        assertTrue(UpdateTransferUi.shouldPublish(8L * step, step / 2L))
+    }
+
+    @Test
     fun negativeTransferCountersNeverPublish() {
         assertFalse(UpdateTransferUi.shouldPublish(-1L, -1L))
     }
