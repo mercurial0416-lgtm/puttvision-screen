@@ -1,5 +1,6 @@
 using System;
 using NUnit.Framework;
+using PuttVision.Presentation;
 using PuttVision.Simulation;
 using PuttVision.Telemetry;
 using UnityEngine;
@@ -33,6 +34,15 @@ namespace PuttVision.Tests
             Assert.That(new PuttPhysicsFrame { surfaceNormalZ = float.PositiveInfinity }.IsUsable, Is.False);
             Assert.That(new PuttPhysicsFrame { elapsedSec = -0.01f }.IsUsable, Is.False);
             Assert.That(new PuttPhysicsFrame { slipSpeedMps = -0.01f }.IsUsable, Is.False);
+        }
+
+        [Test]
+        public void TrailSpacingUsesSquaredDistanceWithoutChangingBoundarySemantics()
+        {
+            var previous = Vector3.zero;
+            Assert.That(PuttTrailPresenter.ShouldAppendPoint(previous, new Vector3(0.011f, 0f, 0f), 0.012f), Is.False);
+            Assert.That(PuttTrailPresenter.ShouldAppendPoint(previous, new Vector3(0.012f, 0f, 0f), 0.012f), Is.True);
+            Assert.That(PuttTrailPresenter.ShouldAppendPoint(previous, new Vector3(0.009f, 0f, 0.009f), 0.012f), Is.True);
         }
 
         [Test]
