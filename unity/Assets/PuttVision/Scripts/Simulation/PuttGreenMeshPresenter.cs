@@ -9,6 +9,7 @@ namespace PuttVision.Simulation
     {
         private const float CupRadiusM = 0.054f;
         private const float CupDepthM = 0.1016f;
+        private const float VisualUvTilesPerMeter = 0.75f;
 
         [SerializeField] private MeshFilter greenMeshFilter;
         [SerializeField] private MeshCollider greenCollider;
@@ -18,6 +19,7 @@ namespace PuttVision.Simulation
         [SerializeField, Range(96, 256)] private int longitudinalSegments = 200;
 
         private Mesh _greenMesh;
+        private Mesh _collisionMesh;
         private GameObject _cupLiner;
         private Material _cupMaterial;
         private PuttTelemetry _shot;
@@ -59,6 +61,7 @@ namespace PuttVision.Simulation
         private void OnDestroy()
         {
             if (_greenMesh != null) Destroy(_greenMesh);
+            if (_collisionMesh != null) Destroy(_collisionMesh);
             if (_cupLiner != null) Destroy(_cupLiner);
         }
 
@@ -120,7 +123,8 @@ namespace PuttVision.Simulation
             var yCount = longitudinalSegments + 1;
             var vertices = new Vector3[xCount * yCount];
             var uvs = new Vector2[vertices.Length];
-            var triangles = new List<int>(lateralSegments * longitudinalSegments * 6);
+            var visualTriangles = new List<int>(lateralSegments * longitudinalSegments * 6);
+            var collisionTriangles = new List<int>(lateralSegments * longitudinalSegments * 6);
             var dx = (maxX - minX) / lateralSegments;
             var dy = (maxNativeY - minNativeY) / longitudinalSegments;
             var cupY = shot.holeDistanceM;
@@ -128,13 +132,12 @@ namespace PuttVision.Simulation
             for (var iy = 0; iy < yCount; iy++)
             {
                 var nativeY = minNativeY + dy * iy;
-                var v = iy / (float)longitudinalSegments;
                 for (var ix = 0; ix < xCount; ix++)
                 {
                     var x = minX + dx * ix;
                     var index = iy * xCount + ix;
                     vertices[index] = new Vector3(x, HeightAt(shot, x, nativeY), nativeY);
-                    uvs[index] = new Vector2(ix / (float)lateralSegments * 3f, v * 6f);
+                    uvs[index] = WorldUvAt(x, nativeY, minX, minNativeY);
                 }
             }
 
@@ -144,37 +147,109 @@ namespace PuttVision.Simulation
                 for (var ix = 0; ix < lateralSegments; ix++)
                 {
                     var cellX = minX + dx * (ix + 0.5f);
-                    if (Mathf.Sqrt(cellX * cellX + (cellY - cupY) * (cellY - cupY)) < CupRadiusM)
+                    var cupDx = cellX;
+                    var cupDy = cellY - cupY;
+                    if (cupDx * cupDx + cupDy * cupDy < CupRadiusM * CupRadiusM)
                         continue;
 
                     var a = iy * xCount + ix;
                     var b = a + 1;
                     var c = a + xCount;
                     var d = c + 1;
-                    triangles.Add(a); triangles.Add(c); triangles.Add(b);
-                    triangles.Add(b); triangles.Add(c); triangles.Add(d);
+                    AddQuad(collisionTriangles, a, b, c, d);
+
+                    if (IsInsideVisualFootprint(cellX, cellY, minX, maxX, minNativeY, maxNativeY) ||
+                        IsInsideGameplayCorridor(shot, cellX, cellY))
+                    {
+                        AddQuad(visualTriangles, a, b, c, d);
+                    }
                 }
             }
 
             if (_greenMesh == null)
             {
-                _greenMesh = new Mesh { name = "PuttVision Authoritative Green" };
+                _greenMesh = new Mesh { name = "PuttVision Visual Green" };
                 _greenMesh.MarkDynamic();
             }
             else _greenMesh.Clear();
 
             _greenMesh.vertices = vertices;
             _greenMesh.uv = uvs;
-            _greenMesh.SetTriangles(triangles, 0, true);
+            _greenMesh.SetTriangles(visualTriangles, 0, true);
             _greenMesh.RecalculateNormals();
             _greenMesh.RecalculateBounds();
             greenMeshFilter.sharedMesh = _greenMesh;
 
             if (greenCollider != null)
             {
+                if (_collisionMesh == null)
+                {
+                    _collisionMesh = new Mesh { name = "PuttVision Authoritative Green Collision" };
+                    _collisionMesh.MarkDynamic();
+                }
+                else _collisionMesh.Clear();
+
+                _collisionMesh.vertices = vertices;
+                _collisionMesh.SetTriangles(collisionTriangles, 0, true);
+                _collisionMesh.RecalculateBounds();
                 greenCollider.sharedMesh = null;
-                greenCollider.sharedMesh = _greenMesh;
+                greenCollider.sharedMesh = _collisionMesh;
             }
+        }
+
+        private static void AddQuad(List<int> triangles, int a, int b, int c, int d)
+        {
+            triangles.Add(a); triangles.Add(c); triangles.Add(b);
+            triangles.Add(b); triangles.Add(c); triangles.Add(d);
+        }
+
+        internal static Vector2 WorldUvAt(float x, float nativeY, float minX, float minNativeY)
+        {
+            return new Vector2(
+                (x - minX) * VisualUvTilesPerMeter,
+                (nativeY - minNativeY) * VisualUvTilesPerMeter);
+        }
+
+        internal static bool IsInsideVisualFootprint(
+            float x,
+            float nativeY,
+            float minX,
+            float maxX,
+            float minNativeY,
+            float maxNativeY)
+        {
+            var halfWidth = Mathf.Max(0.01f, (maxX - minX) * 0.5f);
+            var halfLength = Mathf.Max(0.01f, (maxNativeY - minNativeY) * 0.5f);
+            var centerX = (minX + maxX) * 0.5f;
+            var centerY = (minNativeY + maxNativeY) * 0.5f;
+            var normalizedY = (nativeY - centerY) / halfLength;
+
+            if (Mathf.Abs(normalizedY) > 1f)
+                return false;
+
+            // A small deterministic side drift avoids the raw rectangular data-slab look
+            // while a fourth-power superellipse only trims the visually awkward corners.
+            var sideDrift = Mathf.Sin((normalizedY + 1f) * 2.35f) * halfWidth * 0.055f;
+            var normalizedX = (x - centerX - sideDrift) / halfWidth;
+            var x2 = normalizedX * normalizedX;
+            var y2 = normalizedY * normalizedY;
+            return x2 * x2 + y2 * y2 <= 1f;
+        }
+
+        internal static bool IsInsideGameplayCorridor(PuttTelemetry shot, float x, float nativeY)
+        {
+            if (shot == null) return false;
+
+            var start = new Vector2(shot.startXM, shot.startYM);
+            var cup = new Vector2(0f, shot.holeDistanceM);
+            var point = new Vector2(x, nativeY);
+            var axis = cup - start;
+            var axisLengthSq = axis.sqrMagnitude;
+            var t = axisLengthSq > 1e-6f
+                ? Mathf.Clamp01(Vector2.Dot(point - start, axis) / axisLengthSq)
+                : 0f;
+            var nearest = start + axis * t;
+            return (point - nearest).sqrMagnitude <= 0.75f * 0.75f;
         }
 
         private void PositionCupAndFlag(PuttTelemetry shot)
