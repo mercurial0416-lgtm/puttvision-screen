@@ -28,6 +28,37 @@ namespace PuttVision.Tests
         }
 
         [Test]
+        public void NativeQuaternionConversionStaysStableForCompoundRotationWithoutPreNormalizingBasisVectors()
+        {
+            var native = Quaternion.Euler(23f, -37f, 61f);
+            var frame = new PuttPhysicsFrame
+            {
+                orientationW = native.w * 3.5f,
+                orientationX = native.x * 3.5f,
+                orientationY = native.y * 3.5f,
+                orientationZ = native.z * 3.5f,
+            };
+
+            var rotation = PuttAuthoritativeBallPresenter.NativeQuaternionToUnity(frame);
+
+            var x = native.x;
+            var y = native.y;
+            var z = native.z;
+            var w = native.w;
+            var expectedForward = new Vector3(
+                2f * (x * y - w * z),
+                2f * (y * z + w * x),
+                1f - 2f * (x * x + z * z));
+            var expectedUp = new Vector3(
+                2f * (x * z + w * y),
+                1f - 2f * (x * x + y * y),
+                2f * (y * z - w * x));
+
+            Assert.That(Vector3.Angle(rotation * Vector3.forward, expectedForward), Is.LessThan(0.01f));
+            Assert.That(Vector3.Angle(rotation * Vector3.up, expectedUp), Is.LessThan(0.01f));
+        }
+
+        [Test]
         public void PhysicsFrameRejectsNonFiniteOrNegativePresentationInputs()
         {
             Assert.That(new PuttPhysicsFrame().IsUsable, Is.True);
