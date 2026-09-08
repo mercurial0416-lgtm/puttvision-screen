@@ -235,14 +235,19 @@ class ExternalDisplayController(
         stopUnity()
         stopGodot()
         presentation?.dismiss()
-        presentation = GamePresentation(context, display, engine).also {
-            try {
-                it.show()
-                onChanged(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · $reason")
-            } catch (e: Throwable) {
-                presentation = null
-                onChanged(false, "TV 화면 열기 실패 · ${e.message}")
-            }
+        presentation = null
+
+        val candidate = GamePresentation(context, display, engine)
+        try {
+            candidate.show()
+            presentation = candidate
+            onChanged(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · $reason")
+        } catch (e: Throwable) {
+            // Keep the retained fallback null when show() fails. Assigning through `also` here can
+            // accidentally restore the failed object after the catch and make refresh() treat a
+            // presentation that was never shown as healthy on subsequent display callbacks.
+            try { candidate.dismiss() } catch (_: Throwable) { }
+            onChanged(false, "TV 화면 열기 실패 · ${e.message}")
         }
     }
 
