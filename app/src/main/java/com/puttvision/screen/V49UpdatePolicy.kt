@@ -36,9 +36,13 @@ object V49UpdatePolicy {
         if (publicChannel) {
             val publicApk = validatePublicApkUrl(info.apkUrl)
             if (!publicApk.valid) return publicApk
-            val releaseTag = githubReleaseVersionCode(info.apkUrl)
-            if (releaseTag != null && releaseTag != info.versionCode.toLong()) {
-                return ManifestCheck(false, "GitHub release tag가 manifest versionCode와 일치하지 않습니다")
+            val uri = URI(info.apkUrl.trim())
+            if (uri.host.equals(GITHUB_RELEASE_HOST, true)) {
+                val releaseTag = githubReleaseVersionCode(info.apkUrl)
+                    ?: return ManifestCheck(false, "GitHub release tag versionCode를 읽을 수 없습니다")
+                if (releaseTag != info.versionCode.toLong()) {
+                    return ManifestCheck(false, "GitHub release tag가 manifest versionCode와 일치하지 않습니다")
+                }
             }
         }
         val sha = info.sha256?.trim().orEmpty()
