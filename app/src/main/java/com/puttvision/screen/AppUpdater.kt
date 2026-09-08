@@ -502,20 +502,21 @@ class AppUpdater(
         if (activity.isFinishing || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed)) return
         val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", apk)
         val clip = ClipData.newRawUri("PuttVision update", uri)
-        val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-            data = uri
-            clipData = clip
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
         val viewIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
             clipData = clip
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+        @Suppress("DEPRECATION")
+        val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            data = uri
+            clipData = clip
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
 
-        val failure = runCatching { activity.startActivity(installIntent) }.exceptionOrNull()
+        val failure = runCatching { activity.startActivity(viewIntent) }.exceptionOrNull()
             ?: return
-        runCatching { activity.startActivity(viewIntent) }
+        runCatching { activity.startActivity(installIntent) }
             .onFailure { fallbackFailure ->
                 val detail = fallbackFailure.message ?: failure.message ?: "APK 설치 화면을 열 수 없습니다."
                 onUi { activity.pvMessageDialog("설치 실행 실패", detail).show() }
