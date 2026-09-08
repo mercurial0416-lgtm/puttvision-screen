@@ -33,4 +33,16 @@ class UnityLaunchSessionGuardTest {
         guard.clearIf(7, second)
         assertFalse(guard.matchesDisplay(7))
     }
+
+    @Test
+    fun terminalFailureInvalidatesSameLaunchReadyCallback() {
+        val guard = UnityLaunchSessionGuard()
+        val session = guard.begin(12)
+        assertTrue(guard.matches(12, session))
+
+        guard.clearIf(12, session)
+
+        assertFalse(guard.matches(12, session))
+        assertFalse(guard.matchesDisplay(12))
+    }
 }
