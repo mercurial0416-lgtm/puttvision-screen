@@ -119,7 +119,9 @@ namespace PuttVision.Simulation
             if (unityForward.sqrMagnitude < 1e-8f || unityUp.sqrMagnitude < 1e-8f)
                 return Quaternion.identity;
 
-            return Quaternion.LookRotation(unityForward.normalized, unityUp.normalized);
+            // Quaternion.LookRotation normalizes and orthogonalizes these vectors internally.
+            // Passing raw basis columns avoids two redundant Vector3.normalized square roots per frame.
+            return Quaternion.LookRotation(unityForward, unityUp);
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
