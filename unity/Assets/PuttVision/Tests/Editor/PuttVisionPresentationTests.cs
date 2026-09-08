@@ -55,6 +55,22 @@ namespace PuttVision.Tests
         }
 
         [Test]
+        public void FullTrailCompactionRetainsRecentHalfInsteadOfShiftingEveryFrame()
+        {
+            var method = typeof(PuttTrailPresenter).GetMethod(
+                "RetainedPointCountAfterCompaction",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+
+            int Retained(int count, int max) => (int)method.Invoke(null, new object[] { count, max });
+
+            Assert.That(Retained(2048, 2048), Is.EqualTo(1024));
+            Assert.That(Retained(32, 32), Is.EqualTo(16));
+            Assert.That(Retained(1, 32), Is.EqualTo(1));
+            Assert.That(Retained(0, 32), Is.EqualTo(0));
+        }
+
+        [Test]
         public void UniformGreenUsesSameGlobalSlopeHeightConventionAsNative()
         {
             var shot = new PuttTelemetry { terrainProfileId = -1, holeDistanceM = 5f, sideSlopePct = 2f, longSlopePct = -1f };

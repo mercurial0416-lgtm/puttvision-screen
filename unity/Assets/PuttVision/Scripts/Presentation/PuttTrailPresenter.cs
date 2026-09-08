@@ -72,13 +72,7 @@ namespace PuttVision.Presentation
                 return;
 
             if (_points.Count >= maxPoints)
-            {
-                _points.RemoveAt(0);
-                _points.Add(point);
-                _line.positionCount = _points.Count;
-                for (var i = 0; i < _points.Count; i++) _line.SetPosition(i, _points[i]);
-                return;
-            }
+                CompactFullTrail();
 
             _points.Add(point);
             _line.positionCount = _points.Count;
@@ -90,6 +84,25 @@ namespace PuttVision.Presentation
             var delta = next - previous;
             var threshold = Mathf.Max(0f, minimumSpacingM);
             return delta.sqrMagnitude >= threshold * threshold;
+        }
+
+        internal static int RetainedPointCountAfterCompaction(int pointCount, int configuredMaxPoints)
+        {
+            if (pointCount <= 0) return 0;
+            var boundedMax = Mathf.Max(1, configuredMaxPoints);
+            return Mathf.Min(pointCount, Mathf.Max(1, boundedMax / 2));
+        }
+
+        private void CompactFullTrail()
+        {
+            var retainCount = RetainedPointCountAfterCompaction(_points.Count, maxPoints);
+            var removeCount = _points.Count - retainCount;
+            if (removeCount <= 0) return;
+
+            _points.RemoveRange(0, removeCount);
+            _line.positionCount = _points.Count;
+            for (var i = 0; i < _points.Count; i++)
+                _line.SetPosition(i, _points[i]);
         }
 
         private void Clear()
