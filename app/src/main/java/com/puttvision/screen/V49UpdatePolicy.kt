@@ -36,6 +36,10 @@ object V49UpdatePolicy {
         if (publicChannel) {
             val publicApk = validatePublicApkUrl(info.apkUrl)
             if (!publicApk.valid) return publicApk
+            val releaseTag = githubReleaseVersionCode(info.apkUrl)
+            if (releaseTag != null && releaseTag != info.versionCode.toLong()) {
+                return ManifestCheck(false, "GitHub release tag가 manifest versionCode와 일치하지 않습니다")
+            }
         }
         val sha = info.sha256?.trim().orEmpty()
         if (publicChannel && !isSha256(sha)) return ManifestCheck(false, "공개 업데이트 SHA-256이 없거나 잘못되었습니다")
@@ -69,6 +73,15 @@ object V49UpdatePolicy {
         }
         ManifestCheck(true)
     }.getOrElse { ManifestCheck(false, it.message ?: "공개 APK URL 형식 오류") }
+
+    private fun githubReleaseVersionCode(url: String): Long? = runCatching {
+        val uri = URI(url.trim())
+        if (!uri.host.equals(GITHUB_RELEASE_HOST, true)) return@runCatching null
+        val path = uri.path.orEmpty()
+        if (!path.startsWith(GITHUB_RELEASE_PATH_PREFIX)) return@runCatching null
+        val tag = path.removePrefix(GITHUB_RELEASE_PATH_PREFIX).substringBefore('/')
+        tag.removePrefix("pv-").toLongOrNull()
+    }.getOrNull()
 
     fun validateArtifactVersion(
         installedVersionCode: Long,
