@@ -78,10 +78,11 @@ class ExternalDisplayController(
 
     fun refresh() {
         // During HDMI/DeX handoff Android can briefly keep a removed presentation Display in this
-        // category with isValid=false. Never launch Unity/Godot on that stale surface: a failed
-        // launch would latch the display id and unnecessarily force the healthy replacement session
-        // down to a fallback renderer until another disconnect/reconnect cycle.
-        val displays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).filter { it.isValid }
+        // category either invalid or valid-but-STATE_OFF. Never launch Unity/Godot on that stale
+        // surface: a failed launch would latch the display id and unnecessarily force the healthy
+        // replacement session down to a fallback renderer until another reconnect cycle.
+        val displays = dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
+            .filter { it.isValid && it.state != Display.STATE_OFF }
         // Android does not guarantee a stable ordering for presentation displays. Keep the renderer
         // on the display it already owns when another HDMI/DeX presentation display is added or
         // changes, instead of tearing down a healthy TV session just because firstOrNull() moved.
