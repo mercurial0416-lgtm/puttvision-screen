@@ -1,7 +1,7 @@
 package com.puttvision.screen
 
 import android.app.Activity
-import android.app.ProgressDialog
+import android.app.AlertDialog
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -38,7 +38,7 @@ class AppUpdater(
     private val prefs = activity.getSharedPreferences("puttvision_updater", Context.MODE_PRIVATE)
     private val checkInFlight = AtomicBoolean(false)
     private val downloadInFlight = AtomicBoolean(false)
-    private var transferDialog: ProgressDialog? = null
+    private var transferDialog: AlertDialog? = null
 
     private companion object {
         const val KEY_PENDING_APK = "pending_apk_path"
@@ -245,21 +245,19 @@ class AppUpdater(
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun showTransferDialog(versionName: String) {
         dismissTransferDialog()
-        transferDialog = ProgressDialog(activity).apply {
-            setTitle("PuttVision $versionName 업데이트")
-            setMessage("다운로드 준비 중…")
-            setProgressStyle(ProgressDialog.STYLE_SPINNER)
-            isIndeterminate = true
-            setCancelable(false)
-            setCanceledOnTouchOutside(false)
-            show()
-        }
+        transferDialog = AlertDialog.Builder(activity)
+            .setTitle("PuttVision $versionName 업데이트")
+            .setMessage("다운로드 준비 중…")
+            .setCancelable(false)
+            .create()
+            .apply {
+                setCanceledOnTouchOutside(false)
+                show()
+            }
     }
 
-    @Suppress("DEPRECATION")
     private fun updateTransferDialog(message: String) {
         val dialog = transferDialog ?: return
         if (dialog.isShowing) dialog.setMessage(message)
