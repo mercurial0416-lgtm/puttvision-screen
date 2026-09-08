@@ -12,15 +12,15 @@ class UnityBridgeAbiContractTest {
 
         val ready = runtime.getDeclaredMethod(
             "onUnityReady",
-            Int::class.javaPrimitiveType,
-            Long::class.javaPrimitiveType,
+            Integer.TYPE,
+            java.lang.Long.TYPE,
         )
         assertEquals(Void.TYPE, ready.returnType)
 
         val failure = runtime.getDeclaredMethod(
             "onUnityFailure",
-            Int::class.javaPrimitiveType,
-            Long::class.javaPrimitiveType,
+            Integer.TYPE,
+            java.lang.Long.TYPE,
             String::class.java,
         )
         assertEquals(Void.TYPE, failure.returnType)
