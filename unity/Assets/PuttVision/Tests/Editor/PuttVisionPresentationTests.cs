@@ -78,6 +78,36 @@ namespace PuttVision.Tests
         }
 
         [Test]
+        public void VisualGreenFootprintTrimsDataSlabCornersButKeepsCenter()
+        {
+            Assert.That(PuttGreenMeshPresenter.IsInsideVisualFootprint(0f, 5f, -4f, 4f, 0f, 10f), Is.True);
+            Assert.That(PuttGreenMeshPresenter.IsInsideVisualFootprint(-4f, 0f, -4f, 4f, 0f, 10f), Is.False);
+            Assert.That(PuttGreenMeshPresenter.IsInsideVisualFootprint(4f, 10f, -4f, 4f, 0f, 10f), Is.False);
+        }
+
+        [Test]
+        public void GreenUvUsesSameWorldScaleOnBothAxes()
+        {
+            var origin = PuttGreenMeshPresenter.WorldUvAt(-2f, 1f, -2f, 1f);
+            var oneMeterRight = PuttGreenMeshPresenter.WorldUvAt(-1f, 1f, -2f, 1f);
+            var oneMeterForward = PuttGreenMeshPresenter.WorldUvAt(-2f, 2f, -2f, 1f);
+
+            Assert.That(oneMeterRight.x - origin.x, Is.EqualTo(0.75f).Within(1e-6f));
+            Assert.That(oneMeterForward.y - origin.y, Is.EqualTo(0.75f).Within(1e-6f));
+            Assert.That(oneMeterRight.y, Is.EqualTo(origin.y).Within(1e-6f));
+            Assert.That(oneMeterForward.x, Is.EqualTo(origin.x).Within(1e-6f));
+        }
+
+        [Test]
+        public void VisualGreenAlwaysKeepsGameplayCorridor()
+        {
+            var shot = new PuttTelemetry { startXM = 1.25f, startYM = -0.5f, holeDistanceM = 6f };
+            Assert.That(PuttGreenMeshPresenter.IsInsideGameplayCorridor(shot, 1.25f, -0.5f), Is.True);
+            Assert.That(PuttGreenMeshPresenter.IsInsideGameplayCorridor(shot, 0f, 6f), Is.True);
+            Assert.That(PuttGreenMeshPresenter.IsInsideGameplayCorridor(shot, 2.5f, 3f), Is.False);
+        }
+
+        [Test]
         public void BuiltInProfileZeroMatchesNativeOriginHeight()
         {
             var shot = new PuttTelemetry { terrainProfileId = 0, holeDistanceM = 5f };
