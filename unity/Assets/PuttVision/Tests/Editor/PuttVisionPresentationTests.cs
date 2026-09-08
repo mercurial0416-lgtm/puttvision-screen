@@ -80,17 +80,35 @@ namespace PuttVision.Tests
         [Test]
         public void VisualGreenFootprintTrimsDataSlabCornersButKeepsCenter()
         {
-            Assert.That(PuttGreenMeshPresenter.IsInsideVisualFootprint(0f, 5f, -4f, 4f, 0f, 10f), Is.True);
-            Assert.That(PuttGreenMeshPresenter.IsInsideVisualFootprint(-4f, 0f, -4f, 4f, 0f, 10f), Is.False);
-            Assert.That(PuttGreenMeshPresenter.IsInsideVisualFootprint(4f, 10f, -4f, 4f, 0f, 10f), Is.False);
+            var method = typeof(PuttGreenMeshPresenter).GetMethod(
+                "IsInsideVisualFootprint",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+
+            bool Inside(float x, float y) => (bool)method.Invoke(
+                null,
+                new object[] { x, y, -4f, 4f, 0f, 10f });
+
+            Assert.That(Inside(0f, 5f), Is.True);
+            Assert.That(Inside(-4f, 0f), Is.False);
+            Assert.That(Inside(4f, 10f), Is.False);
         }
 
         [Test]
         public void GreenUvUsesSameWorldScaleOnBothAxes()
         {
-            var origin = PuttGreenMeshPresenter.WorldUvAt(-2f, 1f, -2f, 1f);
-            var oneMeterRight = PuttGreenMeshPresenter.WorldUvAt(-1f, 1f, -2f, 1f);
-            var oneMeterForward = PuttGreenMeshPresenter.WorldUvAt(-2f, 2f, -2f, 1f);
+            var method = typeof(PuttGreenMeshPresenter).GetMethod(
+                "WorldUvAt",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+
+            Vector2 Uv(float x, float y) => (Vector2)method.Invoke(
+                null,
+                new object[] { x, y, -2f, 1f });
+
+            var origin = Uv(-2f, 1f);
+            var oneMeterRight = Uv(-1f, 1f);
+            var oneMeterForward = Uv(-2f, 2f);
 
             Assert.That(oneMeterRight.x - origin.x, Is.EqualTo(0.75f).Within(1e-6f));
             Assert.That(oneMeterForward.y - origin.y, Is.EqualTo(0.75f).Within(1e-6f));
@@ -101,10 +119,19 @@ namespace PuttVision.Tests
         [Test]
         public void VisualGreenAlwaysKeepsGameplayCorridor()
         {
+            var method = typeof(PuttGreenMeshPresenter).GetMethod(
+                "IsInsideGameplayCorridor",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+
             var shot = new PuttTelemetry { startXM = 1.25f, startYM = -0.5f, holeDistanceM = 6f };
-            Assert.That(PuttGreenMeshPresenter.IsInsideGameplayCorridor(shot, 1.25f, -0.5f), Is.True);
-            Assert.That(PuttGreenMeshPresenter.IsInsideGameplayCorridor(shot, 0f, 6f), Is.True);
-            Assert.That(PuttGreenMeshPresenter.IsInsideGameplayCorridor(shot, 2.5f, 3f), Is.False);
+            bool Inside(float x, float y) => (bool)method.Invoke(
+                null,
+                new object[] { shot, x, y });
+
+            Assert.That(Inside(1.25f, -0.5f), Is.True);
+            Assert.That(Inside(0f, 6f), Is.True);
+            Assert.That(Inside(2.5f, 3f), Is.False);
         }
 
         [Test]
