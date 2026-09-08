@@ -36,15 +36,15 @@ class UpdaterInstallerUriGrantRegressionTest {
             } >= 2
         )
         assertTrue(
-            "ACTION_VIEW fallback must declare the APK MIME type",
+            "ACTION_VIEW primary installer must declare the APK MIME type",
             installer.contains("setDataAndType(uri, \"application/vnd.android.package-archive\")")
         )
 
-        val primaryLaunch = installer.indexOf("activity.startActivity(installIntent)")
-        val fallbackLaunch = installer.indexOf("activity.startActivity(viewIntent)")
+        val primaryLaunch = installer.indexOf("activity.startActivity(viewIntent)")
+        val fallbackLaunch = installer.indexOf("activity.startActivity(installIntent)")
         val failureDialog = installer.indexOf("pvMessageDialog(\"설치 실행 실패\"")
-        assertTrue("primary installer launch must remain present", primaryLaunch >= 0)
-        assertTrue("fallback must only run after the primary launch", fallbackLaunch > primaryLaunch)
+        assertTrue("ACTION_VIEW installer launch must remain present", primaryLaunch >= 0)
+        assertTrue("deprecated installer action must only run as fallback", fallbackLaunch > primaryLaunch)
         assertTrue("failure UI must only run after both installer attempts", failureDialog > fallbackLaunch)
     }
 }
