@@ -9,6 +9,7 @@ object UpdateTransferUi {
     fun shouldPublish(lastPublishedBytes: Long, downloadedBytes: Long): Boolean {
         if (downloadedBytes < 0L) return false
         if (lastPublishedBytes < 0L) return true
+        if (downloadedBytes < lastPublishedBytes) return true
         return downloadedBytes - lastPublishedBytes >= PUBLISH_STEP_BYTES
     }
 
