@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,5 +71,13 @@ class UpdaterTransferDialogLifecycleRegressionTest {
             "executor shutdown must happen after transfer UI cleanup is scheduled",
             close.indexOf("onUi { dismissTransferDialog() }") < close.indexOf("executor.shutdownNow()")
         )
+    }
+
+    @Test
+    fun transferDialogUsesNonDeprecatedAlertDialog() {
+        val source = updaterSource()
+        assertFalse("ProgressDialog must not be reintroduced", source.contains("ProgressDialog"))
+        assertTrue("transfer UI should use AlertDialog", source.contains("private var transferDialog: AlertDialog?"))
+        assertTrue("transfer UI should build a non-cancelable AlertDialog", source.contains("AlertDialog.Builder(activity)"))
     }
 }
