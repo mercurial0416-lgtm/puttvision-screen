@@ -28,9 +28,10 @@ class UnityBridgeAbiContractTest {
 
     @Test
     fun unitySourceCallsExactKotlinCallbackContract() {
-        val repoRoot = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
+        val userDir = requireNotNull(System.getProperty("user.dir")) { "user.dir is unavailable" }
+        val repoRoot = generateSequence(File(userDir).absoluteFile) { it.parentFile }
             .firstOrNull { File(it, "unity/Assets/PuttVision/Scripts/Bootstrap/PuttVisionAndroidStatusBridge.cs").isFile }
-            ?: error("Could not locate repository root from ${System.getProperty("user.dir")}")
+            ?: error("Could not locate repository root from $userDir")
 
         val bridge = File(
             repoRoot,
