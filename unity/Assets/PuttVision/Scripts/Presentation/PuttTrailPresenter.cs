@@ -13,6 +13,7 @@ namespace PuttVision.Presentation
 
         private readonly List<Vector3> _points = new List<Vector3>(512);
         private LineRenderer _line;
+        private Material _runtimeMaterial;
 
         private void Awake()
         {
@@ -28,12 +29,12 @@ namespace PuttVision.Presentation
             var shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default");
             if (shader != null)
             {
-                var material = new Material(shader) { name = "PuttVision Trail Runtime" };
-                if (material.HasProperty("_BaseColor"))
-                    material.SetColor("_BaseColor", new Color(0.82f, 0.94f, 1f, 0.82f));
+                _runtimeMaterial = new Material(shader) { name = "PuttVision Trail Runtime" };
+                if (_runtimeMaterial.HasProperty("_BaseColor"))
+                    _runtimeMaterial.SetColor("_BaseColor", new Color(0.82f, 0.94f, 1f, 0.82f));
                 else
-                    material.color = new Color(0.82f, 0.94f, 1f, 0.82f);
-                _line.material = material;
+                    _runtimeMaterial.color = new Color(0.82f, 0.94f, 1f, 0.82f);
+                _line.sharedMaterial = _runtimeMaterial;
             }
             _line.positionCount = 0;
         }
@@ -52,13 +53,22 @@ namespace PuttVision.Presentation
             PuttPhysicsFrameReceiver.RendererReset -= Clear;
         }
 
+        private void OnDestroy()
+        {
+            if (_runtimeMaterial != null)
+            {
+                Destroy(_runtimeMaterial);
+                _runtimeMaterial = null;
+            }
+        }
+
         private void OnShot(PuttTelemetry _) => Clear();
 
         private void OnFrame(PuttPhysicsFrame frame)
         {
             if (frame == null || !frame.IsUsable || _line == null) return;
             var point = new Vector3(frame.xM, Mathf.Max(0.004f, frame.centerZM * 0.22f), frame.yM);
-            if (_points.Count > 0 && Vector3.Distance(_points[_points.Count - 1], point) < minimumPointSpacingM)
+            if (_points.Count > 0 && !ShouldAppendPoint(_points[_points.Count - 1], point, minimumPointSpacingM))
                 return;
 
             if (_points.Count >= maxPoints)
@@ -73,6 +83,13 @@ namespace PuttVision.Presentation
             _points.Add(point);
             _line.positionCount = _points.Count;
             _line.SetPosition(_points.Count - 1, point);
+        }
+
+        internal static bool ShouldAppendPoint(Vector3 previous, Vector3 next, float minimumSpacingM)
+        {
+            var delta = next - previous;
+            var threshold = Mathf.Max(0f, minimumSpacingM);
+            return delta.sqrMagnitude >= threshold * threshold;
         }
 
         private void Clear()
