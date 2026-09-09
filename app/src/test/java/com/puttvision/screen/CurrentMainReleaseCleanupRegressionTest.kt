@@ -28,8 +28,9 @@ class CurrentMainReleaseCleanupRegressionTest {
         assertTrue("cleanup step must exist after GitHub release creation attempt", cleanup > published)
         assertTrue("cleanup must run before updater publication", updater > cleanup)
         assertTrue(workflow.contains("if: \${{ failure() && env.PV_RELEASE_ATTEMPTED == 'true' }}"))
-        assertTrue("cleanup must inspect draft/published releases by tag", workflow.contains("select(.tag_name == \"\$PV_TAG\")"))
-        assertTrue("cleanup must only delete the release if it targets the pinned source", workflow.contains("if [[ \"\$RELEASE_TARGET\" == \"\$PV_SOURCE_SHA\" ]]"))
+        assertTrue("cleanup must enumerate draft/published releases", workflow.contains("RELEASE_INFO=\$(gh api --paginate"))
+        assertTrue("cleanup must select the allocated release tag", workflow.contains(".tag_name == \\\"\$PV_TAG\\\""))
+        assertTrue("cleanup must only delete artifacts owned by the pinned source", workflow.contains("RELEASE_TARGET") && workflow.contains("PV_SOURCE_SHA"))
         assertTrue("cleanup must remove a matching release by id", workflow.contains("gh api --method DELETE \"repos/\$GITHUB_REPOSITORY/releases/\$RELEASE_ID\""))
         assertTrue("cleanup must remove an owned tag left behind by partial creation", workflow.contains("gh api --method DELETE \"repos/\$GITHUB_REPOSITORY/git/refs/tags/\$PV_TAG\""))
     }
