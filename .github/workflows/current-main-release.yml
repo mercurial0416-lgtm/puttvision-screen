@@ -194,8 +194,12 @@ jobs:
         run: |
           set -euo pipefail
           echo "Checking $PV_TAG for cleanup because release creation or verification failed before updater publication"
-          RELEASE_INFO=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq ".[] | select(.tag_name == \"$PV_TAG\") | [.id, .target_commitish] | @tsv" | head -1 || true)
+          RELEASES_JSON="$RUNNER_TEMP/release-cleanup-releases.json"
+          if ! gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RELEASES_JSON"; then
+            echo "Unable to inspect releases safely; leaving release/tag untouched" >&2
+            exit 1
+          fi
+          RELEASE_INFO=$(jq -r --arg tag "$PV_TAG" '.[] | select(.tag_name == $tag) | [.id, .target_commitish] | @tsv' "$RELEASES_JSON" | head -1)
           if [[ -n "$RELEASE_INFO" ]]; then
             IFS=$'\t' read -r RELEASE_ID RELEASE_TARGET <<< "$RELEASE_INFO"
             if [[ "$RELEASE_TARGET" == "$PV_SOURCE_SHA" ]]; then
