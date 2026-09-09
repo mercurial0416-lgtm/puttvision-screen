@@ -130,6 +130,7 @@ object UnityTvRuntime {
             if (!launchSessions.matches(displayId, launchSession)) return
             setupComplete = false
             lastFailure = message?.takeIf { it.isNotBlank() } ?: "Unity renderer failure"
+            UnityRendererBridge.enabled = false
             launchSessions.clearIf(displayId, launchSession)
         }
     }
