@@ -28,6 +28,32 @@ jobs:
           git fetch --depth=1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
 
+      - name: Verify current-main release trigger contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/current-main-release.yml').read_text()
+          marker = '$' + '{{'
+          expected = (
+              "if: " + marker + " github.event.issue.number == 138 && "
+              "github.event.comment.body == '/release-current-main' && "
+              "github.actor == github.repository_owner }}"
+          )
+          release_if_lines = [
+              line.strip()
+              for line in workflow.splitlines()
+              if line.lstrip().startswith('if:')
+          ]
+          if release_if_lines.count(expected) != 1:
+              raise SystemExit(
+                  'current-main owner-only release trigger missing or duplicated: '
+                  + repr(release_if_lines)
+              )
+          PY
+
       - name: Install exact Gradle 8.13 toolchain
         shell: bash
         run: |
