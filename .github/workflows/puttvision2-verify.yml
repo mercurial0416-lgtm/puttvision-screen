@@ -2,7 +2,7 @@ name: PuttVision 2 verify
 
 on:
   push:
-    branches: [ 'puttvision-2-unity' ]
+    branches: [ 'main' ]
   pull_request:
     branches: [ 'main' ]
 
