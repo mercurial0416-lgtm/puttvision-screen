@@ -16,6 +16,9 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import org.godotengine.godot.GodotActivity
 import java.io.File
 import java.io.FileOutputStream
@@ -77,13 +80,15 @@ class V144HardwarelessGodotActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        applyImmersiveMode()
         setContentView(buildUi())
         V148GodotCrashJournal.clear(this)
         handler.postDelayed({ launchEmpty() }, 300L)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersiveMode()
     }
 
     override fun onResume() {
@@ -97,6 +102,14 @@ class V144HardwarelessGodotActivity : Activity() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
+    }
+
+    private fun applyImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     private fun prepareLaunch(mode: String, headline: String, message: String, target: Class<out Activity>) {
@@ -289,10 +302,7 @@ abstract class V149GodotProbeActivity : GodotActivity() {
         super.onCreate(savedInstanceState)
         V148GodotCrashJournal.write(this, probeMode, "onCreate-after-godot")
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        applyImmersiveMode()
 
         val badge = TextView(this).apply {
             text = badgeText
@@ -305,6 +315,11 @@ abstract class V149GodotProbeActivity : GodotActivity() {
             topMargin = dp(10)
             marginStart = dp(10)
         })
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersiveMode()
     }
 
     override fun onGodotSetupCompleted() {
@@ -323,6 +338,14 @@ abstract class V149GodotProbeActivity : GodotActivity() {
         handler.removeCallbacksAndMessages(null)
         if (stable) V148GodotCrashJournal.write(this, probeMode, "$probeMode-finished")
         super.onDestroy()
+    }
+
+    private fun applyImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density + .5f).toInt()
