@@ -15,16 +15,22 @@ class CurrentMainReleaseCleanupRegressionTest {
     }
 
     @Test
-    fun publishedReleaseIsCleanedIfFailureHappensBeforeUpdaterPublish() {
+    fun partialReleaseCreationIsCleanedIfFailureHappensBeforeUpdaterPublish() {
         val workflow = workflow()
-        val publish = workflow.indexOf("echo \"PV_RELEASE_PUBLISHED=true\" >> \"\$GITHUB_ENV\"")
+        val attempted = workflow.indexOf("echo \"PV_RELEASE_ATTEMPTED=true\" >> \"\$GITHUB_ENV\"")
+        val create = workflow.indexOf("gh release create \"\$PV_TAG\"")
+        val published = workflow.indexOf("echo \"PV_RELEASE_PUBLISHED=true\" >> \"\$GITHUB_ENV\"")
         val cleanup = workflow.indexOf("Remove unpublished stale release on pre-updater failure")
         val updater = workflow.indexOf("Publish and verify public updater manifest")
 
-        assertTrue("release publication marker must exist", publish >= 0)
-        assertTrue("cleanup step must exist after GitHub release publication", cleanup > publish)
+        assertTrue("release attempt marker must exist before gh release create", attempted >= 0 && create > attempted)
+        assertTrue("published marker must remain after gh release create", published > create)
+        assertTrue("cleanup step must exist after GitHub release creation attempt", cleanup > published)
         assertTrue("cleanup must run before updater publication", updater > cleanup)
-        assertTrue(workflow.contains("if: \${{ failure() && env.PV_RELEASE_PUBLISHED == 'true' }}"))
-        assertTrue(workflow.contains("gh release delete \"\$PV_TAG\" --cleanup-tag --yes"))
+        assertTrue(workflow.contains("if: \${{ failure() && env.PV_RELEASE_ATTEMPTED == 'true' }}"))
+        assertTrue("cleanup must inspect draft/published releases by tag", workflow.contains("select(.tag_name == \"\$PV_TAG\")"))
+        assertTrue("cleanup must only delete the release if it targets the pinned source", workflow.contains("if [[ \"\$RELEASE_TARGET\" == \"\$PV_SOURCE_SHA\" ]]"))
+        assertTrue("cleanup must remove a matching release by id", workflow.contains("gh api --method DELETE \"repos/\$GITHUB_REPOSITORY/releases/\$RELEASE_ID\""))
+        assertTrue("cleanup must remove an owned tag left behind by partial creation", workflow.contains("gh api --method DELETE \"repos/\$GITHUB_REPOSITORY/git/refs/tags/\$PV_TAG\""))
     }
 }
