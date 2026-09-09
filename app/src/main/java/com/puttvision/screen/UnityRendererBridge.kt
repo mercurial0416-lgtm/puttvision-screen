@@ -84,7 +84,10 @@ object UnityRendererBridge {
         }.isSuccess
         if (!delivered) {
             // A broken Unity transport can otherwise throw on every 60 Hz physics frame. Fail
-            // closed until the active Unity lifecycle explicitly enables the bridge again.
+            // closed until the active Unity lifecycle explicitly enables the bridge again. Drop
+            // the reflected handle too so that lifecycle recovery performs a fresh runtime probe
+            // instead of immediately reusing a stale Method instance.
+            reflectedMethod.set(null)
             enabled = false
         }
         return delivered
