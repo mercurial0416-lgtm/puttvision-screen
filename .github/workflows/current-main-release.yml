@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   release:
-    if: ${{ github.event.issue.number == 138 && github.event.comment.body == '/release-current-main' }}
+    if: ${{ github.event.issue.number == 138 && github.event.comment.body == '/release-current-main' && github.actor == github.repository_owner }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
