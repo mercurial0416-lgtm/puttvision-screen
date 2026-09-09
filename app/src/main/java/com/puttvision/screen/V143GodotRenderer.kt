@@ -2,6 +2,9 @@ package com.puttvision.screen
 
 import android.os.Bundle
 import android.view.WindowManager
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import org.godotengine.godot.Godot
 import org.godotengine.godot.GodotActivity
 import org.godotengine.godot.plugin.GodotPlugin
@@ -274,10 +277,20 @@ class V143GodotTvActivity : GodotActivity() {
         V143GodotRuntime.displayId = display?.displayId ?: -1
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         super.onCreate(savedInstanceState)
-        window.decorView.systemUiVisibility =
-            android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
-                android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        applyImmersiveMode()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersiveMode()
+    }
+
+    private fun applyImmersiveMode() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     override fun getHostPlugins(godot: Godot): Set<GodotPlugin> =
