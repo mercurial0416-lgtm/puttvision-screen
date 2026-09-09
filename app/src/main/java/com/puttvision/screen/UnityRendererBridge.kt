@@ -79,7 +79,15 @@ object UnityRendererBridge {
             return true
         }
         val method = resolveUnitySendMessage() ?: return false
-        return runCatching { method.invoke(null, RECEIVER_GAME_OBJECT, methodName, payload) }.isSuccess
+        val delivered = runCatching {
+            method.invoke(null, RECEIVER_GAME_OBJECT, methodName, payload)
+        }.isSuccess
+        if (!delivered) {
+            // A broken Unity transport can otherwise throw on every 60 Hz physics frame. Fail
+            // closed until the active Unity lifecycle explicitly enables the bridge again.
+            enabled = false
+        }
+        return delivered
     }
 
     private fun resolveUnitySendMessage(): Method? {
