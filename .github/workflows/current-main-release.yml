@@ -150,6 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           ASSETS=(puttvision.apk puttvision.apk.sha256 puttvision-consumer.apk puttvision-consumer.apk.sha256)
+          echo "PV_RELEASE_ATTEMPTED=true" >> "$GITHUB_ENV"
           gh release create "$PV_TAG" "${ASSETS[@]}" --target "$PV_SOURCE_SHA" --title "PuttVision $PV_VERSION_NAME" --notes "Current main production release" --latest
           echo "PV_RELEASE_PUBLISHED=true" >> "$GITHUB_ENV"
           APK_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$PV_TAG/puttvision-consumer.apk"
@@ -185,15 +186,38 @@ jobs:
           fi
 
       - name: Remove unpublished stale release on pre-updater failure
-        if: ${{ failure() && env.PV_RELEASE_PUBLISHED == 'true' }}
+        if: ${{ failure() && env.PV_RELEASE_ATTEMPTED == 'true' }}
         continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          echo "Removing $PV_TAG because the release failed before updater publication"
-          gh release delete "$PV_TAG" --cleanup-tag --yes
+          echo "Checking $PV_TAG for cleanup because release creation or verification failed before updater publication"
+          RELEASES_JSON="$RUNNER_TEMP/release-cleanup-releases.json"
+          if ! gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RELEASES_JSON"; then
+            echo "Unable to inspect releases safely; leaving release/tag untouched" >&2
+            exit 1
+          fi
+          RELEASE_INFO=$(jq -r --arg tag "$PV_TAG" '.[] | select(.tag_name == $tag) | [.id, .target_commitish] | @tsv' "$RELEASES_JSON" | head -1)
+          if [[ -n "$RELEASE_INFO" ]]; then
+            IFS=$'\t' read -r RELEASE_ID RELEASE_TARGET <<< "$RELEASE_INFO"
+            if [[ "$RELEASE_TARGET" == "$PV_SOURCE_SHA" ]]; then
+              echo "Removing stale release $PV_TAG targeting pinned source $PV_SOURCE_SHA"
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"
+            else
+              echo "Refusing to delete release $PV_TAG with unexpected target $RELEASE_TARGET" >&2
+              exit 0
+            fi
+          fi
+
+          TAG_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$PV_TAG" --jq .object.sha 2>/dev/null || true)
+          if [[ "$TAG_SHA" == "$PV_SOURCE_SHA" ]]; then
+            echo "Removing stale tag $PV_TAG targeting pinned source $PV_SOURCE_SHA"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$PV_TAG"
+          elif [[ -n "$TAG_SHA" ]]; then
+            echo "Refusing to delete tag $PV_TAG with unexpected target $TAG_SHA" >&2
+          fi
 
       - name: Publish and verify public updater manifest
         shell: bash
