@@ -171,6 +171,18 @@ jobs:
           test "$(stat -c%s "$PUBLISHED_CONSUMER")" = "$PV_APK_SIZE"
           test "$(stat -c%s "$PUBLISHED_DEVELOPER")" = "$(stat -c%s puttvision.apk)"
 
+      - name: Ensure updater still targets current main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LIVE_MAIN_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [[ "$LIVE_MAIN_SHA" != "$PV_SOURCE_SHA" ]]; then
+            echo "main advanced before updater publish: pinned=$PV_SOURCE_SHA live=$LIVE_MAIN_SHA" >&2
+            exit 1
+          fi
+
       - name: Publish and verify public updater manifest
         shell: bash
         env:
