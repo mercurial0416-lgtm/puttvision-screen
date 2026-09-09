@@ -217,9 +217,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          LIVE_MAIN_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          test "$LIVE_MAIN_SHA" = "$PV_SOURCE_SHA"
+
           LATEST=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest")
           test "$(echo "$LATEST" | jq -r .tag_name)" = "$PV_TAG"
           test "$(echo "$LATEST" | jq -r .name)" = "PuttVision $PV_VERSION_NAME"
+          test "$(echo "$LATEST" | jq -r .target_commitish)" = "$PV_SOURCE_SHA"
           test "$(echo "$LATEST" | jq -r .draft)" = "false"
           test "$(echo "$LATEST" | jq -r .prerelease)" = "false"
           echo "$LATEST" | jq -e '([.assets[].name] | index("puttvision-consumer.apk") != null) and ([.assets[].name] | index("puttvision.apk") != null)' >/dev/null
