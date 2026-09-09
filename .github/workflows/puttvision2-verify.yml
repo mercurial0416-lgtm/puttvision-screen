@@ -47,9 +47,9 @@ jobs:
               for line in workflow.splitlines()
               if line.lstrip().startswith('if:')
           ]
-          if release_if_lines != [expected]:
+          if release_if_lines.count(expected) != 1:
               raise SystemExit(
-                  'current-main release trigger contract changed: '
+                  'current-main owner-only release trigger missing or duplicated: '
                   + repr(release_if_lines)
               )
           PY
