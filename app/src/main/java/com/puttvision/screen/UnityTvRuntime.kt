@@ -99,6 +99,7 @@ object UnityTvRuntime {
                 if (launchSessions.matches(displayId, launchSession)) {
                     lastFailure = throwable.message ?: throwable.javaClass.simpleName
                     setupComplete = false
+                    UnityRendererBridge.enabled = false
                     launchSessions.clearIf(displayId, launchSession)
                 }
             }
