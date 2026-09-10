@@ -67,6 +67,8 @@ object V49UpdatePolicy {
         require(uri.userInfo == null) { "공개 APK URL에 userinfo를 넣을 수 없습니다" }
         require(uri.fragment == null) { "공개 APK URL에 fragment를 넣을 수 없습니다" }
         require(uri.rawQuery == null) { "공개 APK URL에 query를 넣을 수 없습니다" }
+        require(uri.rawPath == uri.path) { "공개 APK URL에 percent-encoded 경로를 넣을 수 없습니다" }
+        require(uri.normalize().path == uri.path) { "공개 APK URL에 dot segment를 넣을 수 없습니다" }
 
         val host = uri.host.orEmpty()
         val path = uri.path.orEmpty()
