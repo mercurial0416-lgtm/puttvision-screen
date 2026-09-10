@@ -49,6 +49,12 @@ class HighSpeedCaptureController(
 
         stability.release()
         provider.unbindAll()
+        // Once the previous CameraX use cases are unbound, their recorder/capture handles must no
+        // longer be considered usable. Clear them before capability probing so every early return
+        // below leaves start() unable to accidentally reuse a stale HFR recorder from an older bind.
+        recorder = null
+        videoCapture = null
+        selectedFps = 0
 
         val selector = CameraSelector.DEFAULT_BACK_CAMERA
         val info = provider.getCameraInfo(selector)
