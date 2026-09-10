@@ -99,11 +99,6 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
-        optIn.addAll(
-            "androidx.camera.core.ExperimentalSessionConfig",
-            "androidx.camera.video.ExperimentalHighSpeedVideo",
-            "androidx.camera.camera2.interop.ExperimentalCamera2Interop"
-        )
     }
 }
 
