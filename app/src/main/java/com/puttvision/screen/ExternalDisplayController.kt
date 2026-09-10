@@ -43,13 +43,16 @@ class ExternalDisplayController(
     private var unityLaunchGeneration = 0
     private var godotLaunchGeneration = 0
     private var started = false
+    private var hasPresentationDisplay = false
 
     private val snapshotPump = object : Runnable {
         override fun run() {
             if (!started) return
-            // Godot remains warm as a rollback renderer. Unity's dynamic 6DOF frames are published
-            // directly at the V126 physics snapshot boundary rather than duplicated by this pump.
-            V143GodotRenderBridge.publish(engine)
+            // Godot only needs warm rollback snapshots while an external presentation display is
+            // actually attached. Avoid bridge snapshot work every 16 ms during normal phone-only use.
+            if (hasPresentationDisplay) {
+                V143GodotRenderBridge.publish(engine)
+            }
             handler.postDelayed(this, 16L)
         }
     }
@@ -66,6 +69,7 @@ class ExternalDisplayController(
     fun stop() {
         if (!started) return
         started = false
+        hasPresentationDisplay = false
         handler.removeCallbacksAndMessages(null)
         try { dm.unregisterDisplayListener(this) } catch (_: Throwable) { }
         stopUnity()
@@ -93,6 +97,7 @@ class ExternalDisplayController(
         val activeDisplayId = unityDisplayId ?: godotDisplayId ?: presentation?.display?.displayId
         val display = activeDisplayId?.let { id -> displays.firstOrNull { it.displayId == id } }
             ?: displays.firstOrNull()
+        hasPresentationDisplay = display != null
         if (display == null) {
             stopUnity()
             stopGodot()
