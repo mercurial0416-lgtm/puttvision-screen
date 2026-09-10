@@ -16,6 +16,7 @@ object V49UpdatePolicy {
     const val MAX_FUTURE_FILE_SKEW_MS = 10L * 60L * 1000L
     private const val PUBLIC_UPDATE_HOST = "razejagceyznnajioxgx.supabase.co"
     private const val PUBLIC_UPDATE_PATH_PREFIX = "/storage/v1/object/public/puttvision-update/"
+    private const val PUBLIC_MANIFEST_PATH = "${PUBLIC_UPDATE_PATH_PREFIX}update-v2.json"
     private const val GITHUB_RELEASE_HOST = "github.com"
     private const val GITHUB_RELEASE_PATH_PREFIX = "/mercurial0416-lgtm/puttvision-screen/releases/download/"
     private const val GITHUB_CONSUMER_APK = "puttvision-consumer.apk"
@@ -23,7 +24,17 @@ object V49UpdatePolicy {
     data class ManifestCheck(val valid: Boolean, val reason: String? = null)
     data class CacheCleanup(val deleted: Int, val kept: Int)
 
-    fun validateManifestUrl(url: String): ManifestCheck = validateHttpsUrl(url, "manifest")
+    fun validateManifestUrl(url: String): ManifestCheck = runCatching {
+        val uri = URI(url.trim())
+        require(uri.scheme.equals("https", true)) { "manifest URL은 HTTPS여야 합니다" }
+        require(uri.port == -1 || uri.port == 443) { "manifest URL은 기본 HTTPS 포트만 허용됩니다" }
+        require(uri.userInfo == null) { "manifest URL에 userinfo를 넣을 수 없습니다" }
+        require(uri.fragment == null) { "manifest URL에 fragment를 넣을 수 없습니다" }
+        require(uri.rawQuery == null) { "manifest URL에 query를 넣을 수 없습니다" }
+        require(uri.host.equals(PUBLIC_UPDATE_HOST, true)) { "manifest host가 허용된 업데이트 저장소가 아닙니다" }
+        require(uri.path == PUBLIC_MANIFEST_PATH) { "manifest 경로가 허용된 공개 업데이트 manifest가 아닙니다" }
+        ManifestCheck(true)
+    }.getOrElse { ManifestCheck(false, it.message ?: "manifest URL 형식 오류") }
 
     fun validateInfo(info: UpdateInfo, publicChannel: Boolean): ManifestCheck {
         if (info.versionCode <= 0) return ManifestCheck(false, "versionCode가 1 이상이어야 합니다")
