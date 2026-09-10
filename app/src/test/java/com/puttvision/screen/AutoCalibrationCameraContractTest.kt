@@ -20,6 +20,25 @@ class AutoCalibrationCameraContractTest {
             ?: error("Unable to locate $modulePath from ${File(".").absolutePath}")
     }
 
+    private fun productionKotlinSources(): List<File> {
+        val candidates = listOf(
+            File("src"),
+            File("app/src"),
+            File("../app/src")
+        )
+        val root = candidates.firstOrNull { it.isDirectory }
+            ?: error("Unable to locate Android source roots from ${File(".").absolutePath}")
+        val nonProductionSourceSets = setOf("test", "androidTest", "testFixtures")
+        return root.listFiles()
+            .orEmpty()
+            .filter { sourceSet -> sourceSet.isDirectory && sourceSet.name !in nonProductionSourceSets }
+            .flatMap { sourceSet ->
+                sourceSet.walkTopDown()
+                    .filter { it.isFile && it.extension == "kt" }
+                    .toList()
+            }
+    }
+
     @Test
     fun autoCalibrationAnalysisKeepsResolutionAndBackpressureContract() {
         val source = mainActivitySource()
@@ -46,6 +65,27 @@ class AutoCalibrationCameraContractTest {
             "Do not add another deprecated target-resolution path; migrate the validated auto-calibration path instead",
             1,
             occurrences
+        )
+    }
+
+    @Test
+    fun legacyTargetResolutionDoesNotSpreadToOtherProductionKotlin() {
+        val matches = productionKotlinSources().flatMap { file ->
+            Regex("\\.setTargetResolution\\s*\\(")
+                .findAll(file.readText())
+                .map { file.name to it.range.first }
+                .toList()
+        }
+
+        assertEquals(
+            "Keep the single deprecated target-resolution call isolated to the validated auto-calibration migration point",
+            listOf("MainActivity.kt"),
+            matches.map { it.first }
+        )
+        assertEquals(
+            "A second legacy target-resolution call must fail CI before it can spread across production camera paths",
+            1,
+            matches.size
         )
     }
 
