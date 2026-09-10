@@ -62,7 +62,7 @@ jobs:
           grep -q 'gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest' "$workflow"
           grep -q 'Ensure pinned source is still current main' "$workflow"
           grep -q 'Ensure updater still targets current main' "$workflow"
-          grep -q 'Verify final release/updater contract' "$workflow"
+          grep -q 'Verify latest release and updater contract' "$workflow"
 
       - name: Accuracy gate self-tests
         run: python3 -m unittest ci.test_v20_accuracy_gate
