@@ -35,15 +35,15 @@ class CurrentMainReleaseContractTest {
 
         assertTrue(
             "Release must re-read live main immediately before publishing",
-            workflow.contains("LIVE_MAIN_SHA=$(gh api \"repos/$GITHUB_REPOSITORY/commits/main\" --jq .sha)")
+            workflow.contains("LIVE_MAIN_SHA=${'$'}(gh api \"repos/${'$'}GITHUB_REPOSITORY/commits/main\" --jq .sha)")
         )
         assertTrue(
             "Release must abort if main moved after the verified checkout",
-            workflow.contains("test \"$LIVE_MAIN_SHA\" = \"$PV_SOURCE_SHA\"")
+            workflow.contains("test \"${'$'}LIVE_MAIN_SHA\" = \"${'$'}PV_SOURCE_SHA\"")
         )
         assertTrue(
             "Published GitHub Release must target the verified source SHA",
-            workflow.contains("test \"$(echo \"$LATEST\" | jq -r .target_commitish)\" = \"$PV_SOURCE_SHA\"")
+            workflow.contains("test \"${'$'}(echo \"${'$'}LATEST\" | jq -r .target_commitish)\" = \"${'$'}PV_SOURCE_SHA\"")
         )
     }
 
@@ -57,19 +57,19 @@ class CurrentMainReleaseContractTest {
         )
         assertTrue(
             "Updater manifest must match release version, hash and URL",
-            workflow.contains(".versionCode == $vc and .versionName == $vn and .sha256 == $sha and .apkUrl == $url")
+            workflow.contains(".versionCode == ${'$'}vc and .versionName == ${'$'}vn and .sha256 == ${'$'}sha and .apkUrl == ${'$'}url")
         )
         assertTrue(
             "Updater verification must download the APK referenced by the live manifest",
-            workflow.contains("curl --fail-with-body -sSL --retry 3 --retry-all-errors \"$LIVE_APK_URL\" -o \"$UPDATER_APK\"")
+            workflow.contains("curl --fail-with-body -sSL --retry 3 --retry-all-errors \"${'$'}LIVE_APK_URL\" -o \"${'$'}UPDATER_APK\"")
         )
         assertTrue(
             "Downloaded updater APK hash must be verified",
-            workflow.contains("sha256sum \"$UPDATER_APK\"")
+            workflow.contains("sha256sum \"${'$'}UPDATER_APK\"")
         )
         assertTrue(
             "Downloaded updater APK size must be verified",
-            workflow.contains("stat -c%s \"$UPDATER_APK\"")
+            workflow.contains("stat -c%s \"${'$'}UPDATER_APK\"")
         )
     }
 
@@ -84,8 +84,8 @@ class CurrentMainReleaseContractTest {
         )
         assertTrue(
             "Final updater contract must prove a previously installed version sees an update",
-            workflow.contains("PREVIOUS_VERSION_CODE=$((PV_VERSION_CODE - 1))") &&
-                workflow.contains(".versionCode > $installed")
+            workflow.contains("PREVIOUS_VERSION_CODE=${'$'}((PV_VERSION_CODE - 1))") &&
+                workflow.contains(".versionCode > ${'$'}installed")
         )
     }
 }
