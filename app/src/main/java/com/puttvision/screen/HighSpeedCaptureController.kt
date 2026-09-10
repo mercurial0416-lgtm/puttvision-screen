@@ -169,39 +169,48 @@ class HighSpeedCaptureController(
         activeFile = file
         val output = FileOutputOptions.Builder(file).build()
 
-        recording = rec.prepareRecording(context, output)
-            .start(callbackExecutor) { event ->
-                when (event) {
-                    is VideoRecordEvent.Start -> {
-                        V50HfrCaptureClockRuntime.onRecordingStarted(file, fpsAtStart)
-                        status("● ${fpsAtStart}fps RECORDING")
-                        onStart(file, fpsAtStart)
-                    }
-
-                    is VideoRecordEvent.Finalize -> {
-                        val recorderError = if (event.hasError()) {
-                            RuntimeException(
-                                "record error=${event.error}; ${event.cause?.message ?: ""}"
-                            )
-                        } else null
-                        val validFile = file.takeIf { it.exists() && it.length() > 0L }
-                        val finalError = recorderError ?: if (validFile == null) {
-                            RuntimeException("HFR recording finalized without a valid video")
-                        } else null
-
-                        if (activeFile == file) activeFile = null
-                        recording = null
-
-                        if (finalError != null) {
-                            failureCircuit.recordFailure()
-                            runCatching { file.delete() }
-                        } else {
-                            failureCircuit.recordSuccess()
+        try {
+            recording = rec.prepareRecording(context, output)
+                .start(callbackExecutor) { event ->
+                    when (event) {
+                        is VideoRecordEvent.Start -> {
+                            V50HfrCaptureClockRuntime.onRecordingStarted(file, fpsAtStart)
+                            status("● ${fpsAtStart}fps RECORDING")
+                            onStart(file, fpsAtStart)
                         }
-                        onFinalize(validFile.takeIf { finalError == null }, fpsAtStart, finalError)
+
+                        is VideoRecordEvent.Finalize -> {
+                            val recorderError = if (event.hasError()) {
+                                RuntimeException(
+                                    "record error=${event.error}; ${event.cause?.message ?: ""}"
+                                )
+                            } else null
+                            val validFile = file.takeIf { it.exists() && it.length() > 0L }
+                            val finalError = recorderError ?: if (validFile == null) {
+                                RuntimeException("HFR recording finalized without a valid video")
+                            } else null
+
+                            if (activeFile == file) activeFile = null
+                            recording = null
+
+                            if (finalError != null) {
+                                failureCircuit.recordFailure()
+                                runCatching { file.delete() }
+                            } else {
+                                failureCircuit.recordSuccess()
+                            }
+                            onFinalize(validFile.takeIf { finalError == null }, fpsAtStart, finalError)
+                        }
                     }
                 }
-            }
+        } catch (t: Throwable) {
+            if (activeFile == file) activeFile = null
+            recording = null
+            failureCircuit.recordFailure()
+            runCatching { file.delete() }
+            status("HFR 녹화 시작 실패: ${t.message ?: t.javaClass.simpleName}")
+            callbackExecutor.execute { onFinalize(null, fpsAtStart, t) }
+        }
     }
 
     fun stop() {
