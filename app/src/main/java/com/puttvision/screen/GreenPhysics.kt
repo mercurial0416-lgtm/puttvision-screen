@@ -87,7 +87,7 @@ class GreenPhysics {
     ): SimState {
         if (
             !metrics.ballSpeedMps.isFinite() || !metrics.launchAngleDeg.isFinite() ||
-            !startX.isFinite() || !startY.isFinite()
+            !startX.isFinite() || !startY.isFinite() || !settingsAreFinite(settings)
         ) {
             val safeX = startX.takeIf { it.isFinite() } ?: 0.0
             val safeY = startY.takeIf { it.isFinite() } ?: 0.0
@@ -119,6 +119,10 @@ class GreenPhysics {
         dtRaw: Double,
         cupEnabled: Boolean = true
     ): SimResult? {
+        if (!settingsAreFinite(settings)) {
+            state.running = false
+            return result(state, settings)
+        }
         if (!state.running) return result(state, settings)
         if (!dtRaw.isFinite() || dtRaw <= 0.0) return null
 
@@ -155,16 +159,30 @@ class GreenPhysics {
         return if (finished || !state.running) result(state, settings) else null
     }
 
+    private fun settingsAreFinite(settings: GreenSettings): Boolean =
+        settings.stimpMeters.isFinite() &&
+            settings.holeDistanceM.isFinite() &&
+            settings.sideSlopePct.isFinite() &&
+            settings.longSlopePct.isFinite() &&
+            settings.grainDirectionDeg.isFinite() &&
+            settings.grainStrength01.isFinite() &&
+            settings.moisture01.isFinite() &&
+            settings.firmness01.isFinite() &&
+            settings.trueness01.isFinite()
+
     private fun result(state: SimState, settings: GreenSettings): SimResult {
-        val dx = state.x
-        val dy = state.y - settings.holeDistanceM
+        val finishX = state.x.takeIf { it.isFinite() } ?: 0.0
+        val finishY = state.y.takeIf { it.isFinite() } ?: 0.0
+        val cupY = settings.holeDistanceM.takeIf { it.isFinite() } ?: finishY
+        val dx = finishX
+        val dy = finishY - cupY
         val bridgeBoundaryContact = state.bridgeCount > 0 && state.cupContacts == 0
         return SimResult(
             holed = state.holed,
-            finishX = state.x,
-            finishY = state.y,
+            finishX = finishX,
+            finishY = finishY,
             distanceToCupM = hypot(dx, dy),
-            elapsedSec = state.elapsed,
+            elapsedSec = state.elapsed.takeIf { it.isFinite() } ?: 0.0,
             lipOut = (state.lipOut || state.bridgeCount > 0) && !state.holed,
             cupContacts = state.cupContacts + if (bridgeBoundaryContact) 1 else 0,
             bridgeCount = state.bridgeCount,
