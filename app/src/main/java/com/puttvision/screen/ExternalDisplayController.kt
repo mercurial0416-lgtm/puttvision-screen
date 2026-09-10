@@ -70,8 +70,7 @@ class ExternalDisplayController(
         try { dm.unregisterDisplayListener(this) } catch (_: Throwable) { }
         stopUnity()
         stopGodot()
-        presentation?.dismiss()
-        presentation = null
+        dismissPresentationSafely()
         unityFailedForDisplayId = null
         godotFailedForDisplayId = null
     }
@@ -92,8 +91,7 @@ class ExternalDisplayController(
         if (display == null) {
             stopUnity()
             stopGodot()
-            presentation?.dismiss()
-            presentation = null
+            dismissPresentationSafely()
             unityFailedForDisplayId = null
             godotFailedForDisplayId = null
             onChanged(false, "외부 TV 미검출 · HDMI/DeX 연결 확인")
@@ -113,8 +111,7 @@ class ExternalDisplayController(
             }
 
             stopGodot()
-            presentation?.dismiss()
-            presentation = null
+            dismissPresentationSafely()
             launchUnity(display)
             return
         }
@@ -128,8 +125,7 @@ class ExternalDisplayController(
             }
 
             stopUnity()
-            presentation?.dismiss()
-            presentation = null
+            dismissPresentationSafely()
             launchGodot(display)
             return
         }
@@ -231,11 +227,19 @@ class ExternalDisplayController(
         godotDisplayId = null
     }
 
+    private fun dismissPresentationSafely() {
+        val current = presentation ?: return
+        // HDMI/DeX removal can invalidate the Presentation window between DisplayManager callbacks.
+        // Clear ownership before dismissing so a WindowManager failure cannot leave a stale fallback
+        // that refresh() later mistakes for a healthy renderer on a recycled display id.
+        presentation = null
+        try { current.dismiss() } catch (_: Throwable) { }
+    }
+
     private fun showFallback(display: Display, reason: String) {
         stopUnity()
         stopGodot()
-        presentation?.dismiss()
-        presentation = null
+        dismissPresentationSafely()
 
         val candidate = GamePresentation(context, display, engine)
         try {
@@ -259,10 +263,7 @@ class ExternalDisplayController(
         // the replacement display with the old id and incorrectly keep a stale renderer/fallback.
         if (unityDisplayId == displayId) stopUnity()
         if (godotDisplayId == displayId) stopGodot()
-        if (presentation?.display?.displayId == displayId) {
-            presentation?.dismiss()
-            presentation = null
-        }
+        if (presentation?.display?.displayId == displayId) dismissPresentationSafely()
         if (unityFailedForDisplayId == displayId) unityFailedForDisplayId = null
         if (godotFailedForDisplayId == displayId) godotFailedForDisplayId = null
         refresh()
