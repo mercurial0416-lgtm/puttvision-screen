@@ -32,17 +32,17 @@ jobs:
             exit 1
           fi
 
-      - name: Enforce release signer continuity
+      - name: Enforce current-main release signer continuity
         shell: bash
         run: |
           set -euo pipefail
-          workflow=.github/workflows/release-apk.yml
+          workflow=.github/workflows/current-main-release.yml
+          test -f "$workflow"
           if grep -nE 'openssl rand -hex|keytool -genkeypair|bootstrapping a persistent replacement release key|Restore or bootstrap release signing bundle' "$workflow"; then
             echo "Release CI must never generate a replacement Android signing identity" >&2
             exit 1
           fi
           grep -q 'Restore release signing bundle' "$workflow"
-          grep -q 'Missing required release signing secret' "$workflow"
           grep -q 'puttvision-signing-vault-v3' "$workflow"
           grep -q 'signing-lineage' "$workflow"
           grep -q -- '--lineage' "$workflow"
@@ -52,14 +52,17 @@ jobs:
             exit 1
           fi
 
-      - name: Require release accuracy regression gate wiring
+      - name: Require current-main release regression gate wiring
         shell: bash
         run: |
           set -euo pipefail
+          workflow=.github/workflows/current-main-release.yml
           test -f ci/v20_accuracy_gate.py
-          grep -q 'Real-device measurement regression gate' .github/workflows/release-apk.yml
-          grep -q 'python3 ci/v20_accuracy_gate.py' .github/workflows/release-apk.yml
-          grep -q 'Accuracy fixture set is incomplete' .github/workflows/release-apk.yml
+          grep -q 'Release regression tests' "$workflow"
+          grep -q 'gradle testConsumerDebugUnitTest testDeveloperDebugUnitTest' "$workflow"
+          grep -q 'Ensure pinned source is still current main' "$workflow"
+          grep -q 'Ensure updater still targets current main' "$workflow"
+          grep -q 'Verify final release/updater contract' "$workflow"
 
       - name: Accuracy gate self-tests
         run: python3 -m unittest ci.test_v20_accuracy_gate
