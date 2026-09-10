@@ -76,6 +76,11 @@ class ExternalDisplayController(
     }
 
     fun refresh() {
+        // DisplayManager callbacks already queued on the main looper can still arrive after stop().
+        // Never let a stale add/remove/change event relaunch Unity/Godot after the controller has
+        // relinquished ownership of the external display lifecycle.
+        if (!started) return
+
         // During HDMI/DeX handoff Android can briefly keep a removed presentation Display in this
         // category either invalid or valid-but-STATE_OFF. Never launch Unity/Godot on that stale
         // surface: a failed launch would latch the display id and unnecessarily force the healthy
