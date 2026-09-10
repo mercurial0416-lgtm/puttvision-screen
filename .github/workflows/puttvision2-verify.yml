@@ -28,7 +28,7 @@ jobs:
           git fetch --depth=1 origin "${GITHUB_SHA}"
           git checkout --detach FETCH_HEAD
 
-      - name: Verify current-main release trigger contract
+      - name: Verify current-main release entrypoint contract
         shell: bash
         run: |
           set -euo pipefail
@@ -51,6 +51,19 @@ jobs:
               raise SystemExit(
                   'current-main owner-only release trigger missing or duplicated: '
                   + repr(release_if_lines)
+              )
+
+          legacy_marker_patterns = ('.release-*', '.v*-*trigger*')
+          stale_markers = sorted({
+              str(path)
+              for pattern in legacy_marker_patterns
+              for path in Path('.').glob(pattern)
+              if path.is_file()
+          })
+          if stale_markers:
+              raise SystemExit(
+                  'legacy release trigger markers are forbidden; use issue #138 '
+                  '/release-current-main only: ' + repr(stale_markers)
               )
           PY
 
