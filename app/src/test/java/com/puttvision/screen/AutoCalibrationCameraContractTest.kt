@@ -22,15 +22,21 @@ class AutoCalibrationCameraContractTest {
 
     private fun productionKotlinSources(): List<File> {
         val candidates = listOf(
-            File("src/main/java/com/puttvision/screen"),
-            File("app/src/main/java/com/puttvision/screen"),
-            File("../app/src/main/java/com/puttvision/screen")
+            File("src"),
+            File("app/src"),
+            File("../app/src")
         )
         val root = candidates.firstOrNull { it.isDirectory }
-            ?: error("Unable to locate production Kotlin sources from ${File(".").absolutePath}")
-        return root.walkTopDown()
-            .filter { it.isFile && it.extension == "kt" }
-            .toList()
+            ?: error("Unable to locate Android source roots from ${File(".").absolutePath}")
+        val nonProductionSourceSets = setOf("test", "androidTest", "testFixtures")
+        return root.listFiles()
+            .orEmpty()
+            .filter { sourceSet -> sourceSet.isDirectory && sourceSet.name !in nonProductionSourceSets }
+            .flatMap { sourceSet ->
+                sourceSet.walkTopDown()
+                    .filter { it.isFile && it.extension == "kt" }
+                    .toList()
+            }
     }
 
     @Test
