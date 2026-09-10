@@ -106,6 +106,7 @@ class GreenPhysics {
         cupEnabled: Boolean = true
     ): SimResult? {
         if (!state.running) return result(state, settings)
+        if (!dtRaw.isFinite() || dtRaw <= 0.0) return null
 
         if (cupEnabled && !settings.flagstickIn && state.v135CaptureForbidden && state.v135Airborne) {
             V135CupEscapeModel.stepEscape(state, settings, dtRaw)
