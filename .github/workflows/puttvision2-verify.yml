@@ -76,7 +76,7 @@ jobs:
           curl --fail --location --retry 5 --retry-delay 3 \
             https://downloads.gradle.org/distributions/gradle-8.13-bin.zip \
             --output "$RUNNER_TEMP/gradle-8.13-bin.zip"
-          echo "dccb1612e69e36aa7f52082be0d820a27f90c1c7c58c7ab4e9df2eed1f3f7f65  $RUNNER_TEMP/gradle-8.13-bin.zip" \
+          echo "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78  $RUNNER_TEMP/gradle-8.13-bin.zip" \
             | sha256sum --check --strict
           unzip -q "$RUNNER_TEMP/gradle-8.13-bin.zip" -d "$RUNNER_TEMP"
           "$RUNNER_TEMP/gradle-8.13/bin/gradle" --version
