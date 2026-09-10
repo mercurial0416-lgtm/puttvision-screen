@@ -53,11 +53,13 @@ jobs:
                   + repr(release_if_lines)
               )
 
-          stale_markers = sorted(
+          legacy_marker_patterns = ('.release-*', '.v*-*trigger*')
+          stale_markers = sorted({
               str(path)
-              for path in Path('.').glob('.release-*')
+              for pattern in legacy_marker_patterns
+              for path in Path('.').glob(pattern)
               if path.is_file()
-          )
+          })
           if stale_markers:
               raise SystemExit(
                   'legacy release trigger markers are forbidden; use issue #138 '
