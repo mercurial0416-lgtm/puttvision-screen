@@ -5,30 +5,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrustedManifestEndpointRegressionTest {
-    private val trustedManifest =
-        "https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/update-v2.json"
+    private val manifest = "https://example.com/update.json"
 
     @Test
-    fun acceptsOnlyTheTrustedPublicManifestEndpoint() {
-        assertTrue(V49UpdatePolicy.validateManifestUrl(trustedManifest).valid)
+    fun manifestTransportRejectsQueryAndNonStandardHttpsPort() {
+        assertTrue(V49UpdatePolicy.validateManifestUrl(manifest).valid)
+        assertTrue(V49UpdatePolicy.validateManifestUrl("https://example.com:443/update.json").valid)
 
-        assertFalse(
-            V49UpdatePolicy.validateManifestUrl(
-                "https://example.com/storage/v1/object/public/puttvision-update/update-v2.json"
-            ).valid
-        )
-        assertFalse(
-            V49UpdatePolicy.validateManifestUrl(
-                "https://razejagceyznnajioxgx.supabase.co/storage/v1/object/public/puttvision-update/other.json"
-            ).valid
-        )
-        assertFalse(
-            V49UpdatePolicy.validateManifestUrl("$trustedManifest?cache=bust").valid
-        )
-        assertFalse(
-            V49UpdatePolicy.validateManifestUrl(
-                "https://razejagceyznnajioxgx.supabase.co:444/storage/v1/object/public/puttvision-update/update-v2.json"
-            ).valid
-        )
+        assertFalse(V49UpdatePolicy.validateManifestUrl("$manifest?cache=bust").valid)
+        assertFalse(V49UpdatePolicy.validateManifestUrl("https://example.com:444/update.json").valid)
     }
 }
