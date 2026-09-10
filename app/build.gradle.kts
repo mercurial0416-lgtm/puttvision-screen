@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -89,17 +91,19 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += listOf(
-            "-opt-in=androidx.camera.core.ExperimentalSessionConfig",
-            "-opt-in=androidx.camera.video.ExperimentalHighSpeedVideo",
-            "-opt-in=androidx.camera.camera2.interop.ExperimentalCamera2Interop"
-        )
-    }
-
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+        optIn.addAll(
+            "androidx.camera.core.ExperimentalSessionConfig",
+            "androidx.camera.video.ExperimentalHighSpeedVideo",
+            "androidx.camera.camera2.interop.ExperimentalCamera2Interop"
+        )
     }
 }
 
