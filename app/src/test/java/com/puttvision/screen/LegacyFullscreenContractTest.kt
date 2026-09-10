@@ -28,7 +28,7 @@ class LegacyFullscreenContractTest {
     }
 
     @Test
-    fun legacyFullscreenIsConfinedToHardwarelessGodotActivity() {
+    fun productionCodeHasNoLegacyFullscreenAssignments() {
         val assignment = Regex("\\.systemUiVisibility\\s*=")
         val sourceRoot = productionSourceRoot()
         val offenders = sourceRoot.walkTopDown()
@@ -40,24 +40,31 @@ class LegacyFullscreenContractTest {
             .toList()
 
         assertEquals(
-            "Keep deprecated systemUiVisibility assignments confined to the one LAB activity",
-            listOf("V144HardwarelessGodotActivity.kt" to 1),
+            "Do not reintroduce deprecated systemUiVisibility assignments into production code",
+            emptyList<Pair<String, Int>>(),
             offenders
         )
     }
 
-    @Test
-    fun productionMainActivityUsesInsetsControllerForImmersiveMode() {
-        val source = sourceFile("src/main/java/com/puttvision/screen/MainActivity.kt")
+    private fun assertModernImmersive(source: String) {
         val compact = source.replace(Regex("\\s+"), "")
-
         assertFalse(
-            "Do not reintroduce deprecated systemUiVisibility into MainActivity",
+            "Do not use deprecated systemUiVisibility for immersive mode",
             Regex("\\.systemUiVisibility\\s*=").containsMatchIn(source)
         )
         assertTrue(compact.contains("WindowCompat.setDecorFitsSystemWindows(window,false)"))
         assertTrue(compact.contains("WindowInsetsControllerCompat(window,window.decorView)"))
         assertTrue(compact.contains("hide(WindowInsetsCompat.Type.systemBars())"))
         assertTrue(compact.contains("BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE"))
+    }
+
+    @Test
+    fun productionMainActivityUsesInsetsControllerForImmersiveMode() {
+        assertModernImmersive(sourceFile("src/main/java/com/puttvision/screen/MainActivity.kt"))
+    }
+
+    @Test
+    fun hardwarelessGodotActivityUsesInsetsControllerForImmersiveMode() {
+        assertModernImmersive(sourceFile("src/main/java/com/puttvision/screen/V144HardwarelessGodotActivity.kt"))
     }
 }
