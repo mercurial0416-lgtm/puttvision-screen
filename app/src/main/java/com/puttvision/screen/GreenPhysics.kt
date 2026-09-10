@@ -85,6 +85,20 @@ class GreenPhysics {
         startX: Double = 0.0,
         startY: Double = 0.0
     ): SimState {
+        if (
+            !metrics.ballSpeedMps.isFinite() || !metrics.launchAngleDeg.isFinite() ||
+            !startX.isFinite() || !startY.isFinite()
+        ) {
+            val safeX = startX.takeIf { it.isFinite() } ?: 0.0
+            val safeY = startY.takeIf { it.isFinite() } ?: 0.0
+            return SimState(
+                x = safeX,
+                y = safeY,
+                running = false,
+                trail = mutableListOf(safeX to safeY)
+            )
+        }
+
         val a = Math.toRadians(metrics.launchAngleDeg)
         val speed = metrics.ballSpeedMps.coerceIn(0.05, 5.0)
         UnityRendererBridge.publishShot(metrics, settings, startX, startY)
