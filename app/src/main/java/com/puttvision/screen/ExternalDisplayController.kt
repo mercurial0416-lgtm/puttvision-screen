@@ -31,7 +31,7 @@ class GamePresentation(
 class ExternalDisplayController(
     private val context: Context,
     private val engine: GameEngine,
-    private val onChanged: (Boolean, String) -> Unit
+    onChanged: (Boolean, String) -> Unit
 ) : DisplayManager.DisplayListener {
     companion object {
         private const val SNAPSHOT_ACTIVE_INTERVAL_MS = 16L
@@ -40,6 +40,7 @@ class ExternalDisplayController(
 
     private val dm = context.getSystemService(DisplayManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
+    private val statusReporter = DistinctDisplayStatusReporter(onChanged)
     private var presentation: GamePresentation? = null
     private var unityDisplayId: Int? = null
     private var unityFailedForDisplayId: Int? = null
@@ -68,6 +69,7 @@ class ExternalDisplayController(
     fun start() {
         if (started) return
         started = true
+        statusReporter.reset()
         V143GodotRenderBridge.publish(engine)
         handler.post(snapshotPump)
         dm.registerDisplayListener(this, handler)
@@ -85,6 +87,7 @@ class ExternalDisplayController(
         dismissPresentationSafely()
         unityFailedForDisplayId = null
         godotFailedForDisplayId = null
+        statusReporter.reset()
     }
 
     fun refresh() {
@@ -119,7 +122,7 @@ class ExternalDisplayController(
             dismissPresentationSafely()
             unityFailedForDisplayId = null
             godotFailedForDisplayId = null
-            onChanged(false, "외부 TV 미검출 · HDMI/DeX 연결 확인")
+            statusReporter.report(false, "외부 TV 미검출 · HDMI/DeX 연결 확인")
             return
         }
 
@@ -131,7 +134,7 @@ class ExternalDisplayController(
                 } else {
                     "UNITY STARTING"
                 }
-                onChanged(true, "TV 연결됨 · ${display.name} · $state")
+                statusReporter.report(true, "TV 연결됨 · ${display.name} · $state")
                 return
             }
 
@@ -145,7 +148,7 @@ class ExternalDisplayController(
         if (godotEligible) {
             if (godotDisplayId == display.displayId) {
                 val state = if (V143GodotRuntime.setupComplete) "GODOT READY" else "GODOT STARTING"
-                onChanged(true, "TV 연결됨 · ${display.name} · $state")
+                statusReporter.report(true, "TV 연결됨 · ${display.name} · $state")
                 return
             }
 
@@ -160,7 +163,7 @@ class ExternalDisplayController(
         // fallback is healthy, keep that Presentation instead of dismissing/recreating it on every
         // callback. Reconnect still clears the failure latches via the no-display path above.
         if (presentation?.display?.displayId == display.displayId) {
-            onChanged(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · embedded renderer unavailable")
+            statusReporter.report(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · embedded renderer unavailable")
             return
         }
 
@@ -179,7 +182,7 @@ class ExternalDisplayController(
 
         unityDisplayId = display.displayId
         val launchGeneration = ++unityLaunchGeneration
-        onChanged(true, "TV 연결됨 · ${display.name} · PUTTVISION UNITY")
+        statusReporter.report(true, "TV 연결됨 · ${display.name} · PUTTVISION UNITY")
 
         // ActivityManager launch success is not enough; the scene calls UnityTvRuntime.onUnityReady
         // after it has actually loaded. If that callback never arrives, roll back automatically.
@@ -195,7 +198,7 @@ class ExternalDisplayController(
                 stopUnity()
                 launchGodot(display, reason)
             } else {
-                onChanged(true, "TV 연결됨 · ${display.name} · UNITY READY")
+                statusReporter.report(true, "TV 연결됨 · ${display.name} · UNITY READY")
             }
         }, 9000L)
     }
@@ -220,7 +223,7 @@ class ExternalDisplayController(
             context.startActivity(intent, options.toBundle())
             godotDisplayId = display.displayId
             val prefix = unityReason?.let { "UNITY FALLBACK · $it · " } ?: ""
-            onChanged(true, "TV 연결됨 · ${display.name} · ${prefix}GODOT")
+            statusReporter.report(true, "TV 연결됨 · ${display.name} · ${prefix}GODOT")
 
             // A launch can succeed at ActivityManager level but fail during native engine setup.
             // Ignore stale watchdogs from an older launch even if Android reused the displayId.
@@ -270,13 +273,13 @@ class ExternalDisplayController(
         try {
             candidate.show()
             presentation = candidate
-            onChanged(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · $reason")
+            statusReporter.report(true, "TV 연결됨 · ${display.name} · FILAMENT FALLBACK · $reason")
         } catch (e: Throwable) {
             // Keep the retained fallback null when show() fails. Assigning through `also` here can
             // accidentally restore the failed object after the catch and make refresh() treat a
             // presentation that was never shown as healthy on subsequent display callbacks.
             try { candidate.dismiss() } catch (_: Throwable) { }
-            onChanged(false, "TV 화면 열기 실패 · ${e.message}")
+            statusReporter.report(false, "TV 화면 열기 실패 · ${e.message}")
         }
     }
 
