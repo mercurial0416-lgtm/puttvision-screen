@@ -77,11 +77,7 @@ object HfrCapabilityProbe {
             }
         }
 
-        return HfrCapabilities(
-            modes.distinctBy {
-                "${it.cameraId}:${it.size.width}x${it.size.height}:${it.fpsRange.lower}-${it.fpsRange.upper}"
-            }
-        )
+        return HfrCapabilities(modes.distinct())
     }
 
     fun preferred(caps: HfrCapabilities): HfrMode? =
