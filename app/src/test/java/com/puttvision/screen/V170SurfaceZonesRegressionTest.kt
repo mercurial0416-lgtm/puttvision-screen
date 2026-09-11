@@ -33,6 +33,29 @@ class V170SurfaceZonesRegressionTest {
     }
 
     @Test
+    fun nonFiniteCoordinatesFailClosedToRoughAndKeepResistanceFinite() {
+        val settings = GreenSettings(stimpMeters = Double.NaN, terrainProfileId = 0)
+        val nonFinite = listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)
+
+        nonFinite.forEach { coordinate ->
+            assertEquals(
+                "non-finite x must not be classified as playable green",
+                V170SurfaceZone.ROUGH,
+                V170SurfaceZones.zoneAt(settings, coordinate, 14.25)
+            )
+            assertEquals(
+                "non-finite y must not be classified as playable green",
+                V170SurfaceZone.ROUGH,
+                V170SurfaceZones.zoneAt(settings, 0.0, coordinate)
+            )
+        }
+
+        val effectiveStimp = V170SurfaceZones.effectiveStimpMeters(settings, Double.NaN, 14.25)
+        assertTrue("surface resistance must stay finite", effectiveStimp.isFinite())
+        assertEquals("invalid Stimp falls back before rough scaling", 2.8 * 0.28, effectiveStimp, 1e-12)
+    }
+
+    @Test
     fun slowerTurfAddsPhysicalResistanceWithoutChangingGreen() {
         fun speedAfter(x: Double): Double {
             val settings = GreenSettings(stimpMeters = 2.8, terrainProfileId = 0, trueness01 = 1.0)
