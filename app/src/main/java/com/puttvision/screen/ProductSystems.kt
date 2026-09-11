@@ -83,7 +83,12 @@ class CameraQualityEstimator {
 
         val sample = if (n == values.size) values else values.copyOf(n)
         val mean = sample.average()
-        val variance = sample.map { (it - mean) * (it - mean) }.average()
+        var varianceTotal = 0.0
+        for (value in sample) {
+            val delta = value - mean
+            varianceTotal += delta * delta
+        }
+        val variance = varianceTotal / sample.size
         val contrast = sqrt(variance)
 
         var edgeTotal = 0.0
