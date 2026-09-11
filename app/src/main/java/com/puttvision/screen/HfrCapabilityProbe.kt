@@ -81,7 +81,7 @@ object HfrCapabilityProbe {
     }
 
     fun preferred(caps: HfrCapabilities): HfrMode? =
-        caps.modes.sortedWith(
+        caps.modes.minWithOrNull(
             compareByDescending<HfrMode> {
                 when (it.fps) {
                     240 -> 1000
@@ -99,5 +99,5 @@ object HfrCapabilityProbe {
             }.thenBy {
                 it.cameraId
             }
-        ).firstOrNull()
+        )
 }
