@@ -82,10 +82,12 @@ jobs:
           unzip -q "$RUNNER_TEMP/gradle-8.13-bin.zip" -d "$RUNNER_TEMP"
           "$RUNNER_TEMP/gradle-8.13/bin/gradle" --version
 
-      - name: Compile and run Android unit regression suites
+      - name: Compile, package, and run Android unit regression suites
         shell: bash
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/gradle-8.13/bin/gradle" \
             testConsumerDebugUnitTest \
-            testDeveloperDebugUnitTest
+            testDeveloperDebugUnitTest \
+            assembleConsumerDebug \
+            assembleDeveloperDebug
