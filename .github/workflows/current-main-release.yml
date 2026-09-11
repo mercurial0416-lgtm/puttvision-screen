@@ -7,6 +7,9 @@ on:
 permissions:
   contents: write
   issues: write
+  # Issue #138 is a pull request; posting the release result to its conversation
+  # requires pull-request write permission even though the REST path is /issues/.
+  pull-requests: write
 
 concurrency:
   group: puttvision-current-main-release
