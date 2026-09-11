@@ -98,6 +98,10 @@ object HfrCapabilityProbe {
                     it.size.width == 1280 && it.size.height == 720 -> 90
                     else -> it.size.width * it.size.height / 100000
                 }
+            }.thenByDescending {
+                it.size.width.toLong() * it.size.height.toLong()
+            }.thenBy {
+                it.cameraId
             }
         ).firstOrNull()
 }
