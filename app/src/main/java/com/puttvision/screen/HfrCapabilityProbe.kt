@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import android.content.Context
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.util.Range
@@ -24,9 +25,24 @@ object HfrCapabilityProbe {
     fun queryBackCamera(context: Context): HfrCapabilities {
         val manager = context.getSystemService(CameraManager::class.java)
         val modes = ArrayList<HfrMode>()
+        val cameraIds = try {
+            manager.cameraIdList
+        } catch (_: CameraAccessException) {
+            return HfrCapabilities(emptyList())
+        } catch (_: SecurityException) {
+            return HfrCapabilities(emptyList())
+        }
 
-        for (id in manager.cameraIdList) {
-            val chars = manager.getCameraCharacteristics(id)
+        for (id in cameraIds) {
+            val chars = try {
+                manager.getCameraCharacteristics(id)
+            } catch (_: CameraAccessException) {
+                continue
+            } catch (_: IllegalArgumentException) {
+                continue
+            } catch (_: SecurityException) {
+                continue
+            }
             if (chars.get(CameraCharacteristics.LENS_FACING) !=
                 CameraCharacteristics.LENS_FACING_BACK
             ) continue
