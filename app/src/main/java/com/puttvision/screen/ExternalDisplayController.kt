@@ -33,6 +33,11 @@ class ExternalDisplayController(
     private val engine: GameEngine,
     private val onChanged: (Boolean, String) -> Unit
 ) : DisplayManager.DisplayListener {
+    companion object {
+        private const val SNAPSHOT_ACTIVE_INTERVAL_MS = 16L
+        private const val SNAPSHOT_IDLE_INTERVAL_MS = 1000L
+    }
+
     private val dm = context.getSystemService(DisplayManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
     private var presentation: GamePresentation? = null
@@ -53,7 +58,10 @@ class ExternalDisplayController(
             if (hasPresentationDisplay) {
                 V143GodotRenderBridge.publish(engine)
             }
-            handler.postDelayed(this, 16L)
+            handler.postDelayed(
+                this,
+                if (hasPresentationDisplay) SNAPSHOT_ACTIVE_INTERVAL_MS else SNAPSHOT_IDLE_INTERVAL_MS
+            )
         }
     }
 
@@ -97,7 +105,14 @@ class ExternalDisplayController(
         val activeDisplayId = unityDisplayId ?: godotDisplayId ?: presentation?.display?.displayId
         val display = activeDisplayId?.let { id -> displays.firstOrNull { it.displayId == id } }
             ?: displays.firstOrNull()
+        val hadPresentationDisplay = hasPresentationDisplay
         hasPresentationDisplay = display != null
+        if (!hadPresentationDisplay && hasPresentationDisplay) {
+            // The phone-only pump deliberately sleeps at a low cadence. Wake it immediately when
+            // HDMI/DeX appears so the TV renderer never waits for that idle interval for snapshots.
+            handler.removeCallbacks(snapshotPump)
+            handler.post(snapshotPump)
+        }
         if (display == null) {
             stopUnity()
             stopGodot()

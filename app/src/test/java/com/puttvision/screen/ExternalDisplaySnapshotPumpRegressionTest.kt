@@ -21,12 +21,29 @@ class ExternalDisplaySnapshotPumpRegressionTest {
         val compact = controllerSource().replace(Regex("\\s+"), "")
 
         assertTrue(
-            "The 16 ms Godot rollback snapshot pump must stay idle without an external presentation display",
+            "Godot rollback snapshots must stay gated by a valid external presentation display",
             compact.contains("if(hasPresentationDisplay){V143GodotRenderBridge.publish(engine)}")
         )
         assertTrue(
             "refresh() must derive snapshot-pump activity from the currently selected valid presentation display",
-            compact.contains("hasPresentationDisplay=display!=nullif(display==null)")
+            compact.contains("hasPresentationDisplay=display!=null")
+        )
+        assertTrue(
+            "phone-only mode must use a lower snapshot-pump wake cadence while TV mode stays at 16 ms",
+            compact.contains("if(hasPresentationDisplay)SNAPSHOT_ACTIVE_INTERVAL_MSelseSNAPSHOT_IDLE_INTERVAL_MS") &&
+                compact.contains("SNAPSHOT_ACTIVE_INTERVAL_MS=16L") &&
+                compact.contains("SNAPSHOT_IDLE_INTERVAL_MS=1000L")
+        )
+
+        val reconnectWakeSection = compact
+            .substringAfter("if(!hadPresentationDisplay&&hasPresentationDisplay){", "")
+            .substringBefore("if(display==null)", "")
+        assertTrue(
+            "a newly attached HDMI/DeX presentation display must wake the idle pump immediately",
+            reconnectWakeSection.contains("handler.removeCallbacks(snapshotPump)") &&
+                reconnectWakeSection.contains("handler.post(snapshotPump)") &&
+                reconnectWakeSection.indexOf("handler.removeCallbacks(snapshotPump)") <
+                    reconnectWakeSection.indexOf("handler.post(snapshotPump)")
         )
         assertTrue(
             "stop() must clear presentation-display state before cancelling callbacks",
