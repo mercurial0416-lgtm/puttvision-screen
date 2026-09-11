@@ -34,9 +34,16 @@ class ExternalDisplaySnapshotPumpRegressionTest {
                 compact.contains("SNAPSHOT_ACTIVE_INTERVAL_MS=16L") &&
                 compact.contains("SNAPSHOT_IDLE_INTERVAL_MS=1000L")
         )
+
+        val reconnectWakeSection = compact
+            .substringAfter("if(!hadPresentationDisplay&&hasPresentationDisplay){", "")
+            .substringBefore("if(display==null)", "")
         assertTrue(
             "a newly attached HDMI/DeX presentation display must wake the idle pump immediately",
-            compact.contains("if(!hadPresentationDisplay&&hasPresentationDisplay){handler.removeCallbacks(snapshotPump)handler.post(snapshotPump)}")
+            reconnectWakeSection.contains("handler.removeCallbacks(snapshotPump)") &&
+                reconnectWakeSection.contains("handler.post(snapshotPump)") &&
+                reconnectWakeSection.indexOf("handler.removeCallbacks(snapshotPump)") <
+                    reconnectWakeSection.indexOf("handler.post(snapshotPump)")
         )
         assertTrue(
             "stop() must clear presentation-display state before cancelling callbacks",
