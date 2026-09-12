@@ -41,19 +41,29 @@ object HfrCapabilityProbe {
             } catch (_: RuntimeException) {
                 continue
             }
-            if (chars.get(CameraCharacteristics.LENS_FACING) !=
-                CameraCharacteristics.LENS_FACING_BACK
-            ) continue
+            val lensFacing = try {
+                chars.get(CameraCharacteristics.LENS_FACING)
+            } catch (_: RuntimeException) {
+                continue
+            }
+            if (lensFacing != CameraCharacteristics.LENS_FACING_BACK) continue
 
-            val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
-                ?: intArrayOf()
+            val caps = try {
+                chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+            } catch (_: RuntimeException) {
+                continue
+            } ?: intArrayOf()
 
             if (!caps.contains(
                     CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO
                 )
             ) continue
 
-            val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: continue
+            val map = try {
+                chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            } catch (_: RuntimeException) {
+                continue
+            } ?: continue
             val highSpeedSizes = try {
                 map.highSpeedVideoSizes
             } catch (_: RuntimeException) {
