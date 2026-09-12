@@ -65,16 +65,16 @@ object HfrCapabilityProbe {
                 continue
             } ?: continue
             val highSpeedSizes = try {
-                map.highSpeedVideoSizes
+                map.highSpeedVideoSizes?.toList() ?: emptyList()
             } catch (_: RuntimeException) {
                 continue
             }
 
             for (size in highSpeedSizes) {
                 val ranges = try {
-                    map.getHighSpeedVideoFpsRangesFor(size)
+                    map.getHighSpeedVideoFpsRangesFor(size)?.toList() ?: emptyList()
                 } catch (_: RuntimeException) {
-                    emptyArray()
+                    emptyList()
                 }
 
                 for (range in ranges) {
