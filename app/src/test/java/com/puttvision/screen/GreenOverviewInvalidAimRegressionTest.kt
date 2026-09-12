@@ -27,4 +27,21 @@ class GreenOverviewInvalidAimRegressionTest {
         assertTrue(source.contains("return false\n    return absf(offset_m) > OVERVIEW_AIM_VISUAL_SPAN_M"))
         assertTrue(source.contains("return Vector2(center_x, V183_MAP_ORIGIN.y + 18.0)"))
     }
+
+    @Test
+    fun invalidLiveTelemetryStaysNeutralInsteadOfInventingDirection() {
+        val source = asset("green_read_direction_truth.gd")
+        assertTrue(source.contains("func _live_curve_readout(cross_track_cm: float) -> String:"))
+        assertTrue(source.contains("if not _telemetry_value_is_valid(cross_track_cm):\n        return \"--\""))
+        assertTrue(source.contains("func _live_peak_readout(peak_signed_cm: float) -> String:"))
+        assertTrue(source.contains("if not _telemetry_value_is_valid(peak_signed_cm):\n        return \"PEAK --\""))
+    }
+
+    @Test
+    fun invalidSlopeTelemetryKeepsReadCardNeutral() {
+        val source = asset("green_read_direction_truth.gd")
+        assertTrue(source.contains("var slope_valid := _telemetry_value_is_valid(side_pct) and _telemetry_value_is_valid(long_pct)"))
+        assertTrue(source.contains("if not slope_valid:\n        _v165_aim_label.text = \"%s   |   READ --\" % aim_text"))
+        assertTrue(source.contains("_v165_detail_label.text = \"BREAK --   |   LIVE FLOW | CONTOUR | CUP 0.125m\""))
+    }
 }
