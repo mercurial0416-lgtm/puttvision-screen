@@ -129,6 +129,9 @@ object UnityTvRuntime {
             if (!launchSessions.matches(displayId, launchSession)) return
             setupComplete = UnityRendererBridge.enableIfRuntimeAvailable()
             lastFailure = if (setupComplete) null else "Unity renderer bridge unavailable"
+            if (!setupComplete) {
+                launchSessions.clearIf(displayId, launchSession)
+            }
         }
     }
 
