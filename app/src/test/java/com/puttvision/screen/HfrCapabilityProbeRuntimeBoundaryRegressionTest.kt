@@ -84,4 +84,18 @@ class HfrCapabilityProbeRuntimeBoundaryRegressionTest {
         assertTrue(characteristicsRead.contains("catch (_: RuntimeException)"))
         assertTrue(characteristicsRead.contains("continue"))
     }
+
+    @Test
+    fun hfrSizeRankingUsesOverflowSafePixelArea() {
+        val source = probeSource()
+
+        assertTrue(
+            "HFR size ranking must widen dimensions before multiplying vendor-provided sizes",
+            source.contains("it.size.width.toLong() * it.size.height.toLong() / 100000L")
+        )
+        assertFalse(
+            "HFR size ranking must not multiply dimensions as Int before widening",
+            source.contains("it.size.width * it.size.height / 100000")
+        )
+    }
 }
