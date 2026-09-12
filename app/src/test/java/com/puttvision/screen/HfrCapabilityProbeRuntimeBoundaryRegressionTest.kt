@@ -71,6 +71,10 @@ class HfrCapabilityProbeRuntimeBoundaryRegressionTest {
     fun cameraEnumerationAndCharacteristicsKeepSafeFallbacks() {
         val source = probeSource()
         val cameraIdRead = source.substringAfter("val cameraIds = try {").substringBefore("for (id in cameraIds)")
+        assertTrue(
+            "Camera IDs must be materialized inside the guarded read so null/platform failures stay fail-closed",
+            cameraIdRead.contains("manager.cameraIdList.toList()")
+        )
         assertTrue(cameraIdRead.contains("catch (_: CameraAccessException)"))
         assertTrue(cameraIdRead.contains("catch (_: RuntimeException)"))
         assertTrue(cameraIdRead.contains("return HfrCapabilities(emptyList())"))
