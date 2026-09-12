@@ -58,14 +58,14 @@ object HfrCapabilityProbe {
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: continue
             val highSpeedSizes = try {
                 map.highSpeedVideoSizes
-            } catch (_: Throwable) {
+            } catch (_: RuntimeException) {
                 continue
             }
 
             for (size in highSpeedSizes) {
                 val ranges = try {
                     map.getHighSpeedVideoFpsRangesFor(size)
-                } catch (_: Throwable) {
+                } catch (_: RuntimeException) {
                     emptyArray()
                 }
 
