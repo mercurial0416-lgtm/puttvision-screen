@@ -98,9 +98,9 @@ object HfrCapabilityProbe {
                 }
             }.thenByDescending {
                 when {
-                    it.size.width == 1920 && it.size.height == 1080 -> 100
-                    it.size.width == 1280 && it.size.height == 720 -> 90
-                    else -> it.size.width * it.size.height / 100000
+                    it.size.width == 1920 && it.size.height == 1080 -> 100L
+                    it.size.width == 1280 && it.size.height == 720 -> 90L
+                    else -> it.size.width.toLong() * it.size.height.toLong() / 100000L
                 }
             }.thenByDescending {
                 it.size.width.toLong() * it.size.height.toLong()
