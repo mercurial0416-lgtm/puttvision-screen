@@ -48,10 +48,14 @@ class UnityRuntimeFailureBridgeRegressionTest {
         val matchGuard = ready.indexOf("if (!launchSessions.matches(displayId, launchSession)) return")
         val bridgeGate = ready.indexOf("setupComplete = UnityRendererBridge.enableIfRuntimeAvailable()")
         val failureState = ready.indexOf("lastFailure = if (setupComplete) null else \"Unity renderer bridge unavailable\"")
+        val failedReadyGuard = ready.indexOf("if (!setupComplete) {", startIndex = failureState)
+        val clearSession = ready.indexOf("launchSessions.clearIf(displayId, launchSession)", startIndex = failedReadyGuard)
 
         assertTrue("stale Unity readiness must be rejected before mutating runtime state", matchGuard >= 0)
         assertTrue("Unity readiness must be gated by a usable renderer bridge", bridgeGate > matchGuard)
         assertTrue("bridge-unavailable readiness must remain observable as a failure state", failureState > bridgeGate)
+        assertTrue("bridge-unavailable readiness must enter a fail-closed branch", failedReadyGuard > failureState)
+        assertTrue("failed readiness must retire the launch session so duplicate callbacks stay stale", clearSession > failedReadyGuard)
     }
 
     @Test
