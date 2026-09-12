@@ -1,7 +1,7 @@
 package com.puttvision.screen
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFailsWith
+import org.junit.Assert.fail
 import org.junit.Test
 
 class DistinctDisplayStatusReporterTest {
@@ -71,8 +71,11 @@ class DistinctDisplayStatusReporterTest {
             events += connected to message
         }
 
-        assertFailsWith<IllegalStateException> {
+        try {
             reporter.report(true, "TV 연결됨 · HDMI · UNITY READY")
+            fail("First callback should fail")
+        } catch (_: IllegalStateException) {
+            // Expected: a failed delivery must not be cached as successfully reported.
         }
         reporter.report(true, "TV 연결됨 · HDMI · UNITY READY")
         reporter.report(true, "TV 연결됨 · HDMI · UNITY READY")
