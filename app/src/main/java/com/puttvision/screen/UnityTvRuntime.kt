@@ -73,7 +73,15 @@ object UnityTvRuntime {
     }.isSuccess
 
     fun launch(context: Context, display: Display): Boolean {
-        if (!isAvailable()) return false
+        if (!isAvailable()) {
+            synchronized(stateLock) {
+                setupComplete = false
+                lastFailure = "Unity runtime unavailable"
+                launchSessions.clear()
+                UnityRendererBridge.enabled = false
+            }
+            return false
+        }
         val displayId = display.displayId
         val launchSession = synchronized(stateLock) {
             setupComplete = false

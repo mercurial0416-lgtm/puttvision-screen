@@ -15,6 +15,29 @@ class UnityRuntimeFailureBridgeRegressionTest {
     }
 
     @Test
+    fun unavailableUnityLaunchFailsClosedBeforeReturning() {
+        val source = runtimeSource()
+        val launchStart = source.indexOf("fun launch(context: Context, display: Display): Boolean")
+        val readyStart = source.indexOf("fun isReadyOn(displayId: Int)", startIndex = launchStart)
+        assertTrue("launch must exist before isReadyOn", launchStart >= 0 && readyStart > launchStart)
+
+        val launch = source.substring(launchStart, readyStart)
+        val unavailableGuard = launch.indexOf("if (!isAvailable()) {")
+        val clearReady = launch.indexOf("setupComplete = false", startIndex = unavailableGuard)
+        val failureState = launch.indexOf("lastFailure = \"Unity runtime unavailable\"", startIndex = clearReady)
+        val clearSession = launch.indexOf("launchSessions.clear()", startIndex = failureState)
+        val disableBridge = launch.indexOf("UnityRendererBridge.enabled = false", startIndex = clearSession)
+        val returnFalse = launch.indexOf("return false", startIndex = disableBridge)
+
+        assertTrue("unavailable Unity runtime must be handled explicitly", unavailableGuard >= 0)
+        assertTrue("unavailable runtime must clear setupComplete", clearReady > unavailableGuard)
+        assertTrue("unavailable runtime must expose a failure reason", failureState > clearReady)
+        assertTrue("unavailable runtime must clear any stale launch session", clearSession > failureState)
+        assertTrue("unavailable runtime must disable the renderer bridge", disableBridge > clearSession)
+        assertTrue("launch may return false only after state fails closed", returnFalse > disableBridge)
+    }
+
+    @Test
     fun activeUnityReadyRequiresBridgeBeforeReportingSetupComplete() {
         val source = runtimeSource()
         val readyStart = source.indexOf("fun onUnityReady(")
