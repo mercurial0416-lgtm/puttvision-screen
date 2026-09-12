@@ -40,6 +40,20 @@ class HfrCapabilityProbeRuntimeBoundaryRegressionTest {
     }
 
     @Test
+    fun nullVendorHighSpeedArraysRemainFailClosed() {
+        val source = probeSource()
+
+        assertTrue(
+            "Null high-speed size arrays must degrade to no HFR modes",
+            source.contains("map.highSpeedVideoSizes?.toList() ?: emptyList()")
+        )
+        assertTrue(
+            "Null FPS-range arrays must degrade to no ranges for that size",
+            source.contains("map.getHighSpeedVideoFpsRangesFor(size)?.toList() ?: emptyList()")
+        )
+    }
+
+    @Test
     fun hfrProbeDoesNotSwallowFatalJvmErrors() {
         val source = probeSource()
 
