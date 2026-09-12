@@ -15,6 +15,23 @@ class UnityRuntimeFailureBridgeRegressionTest {
     }
 
     @Test
+    fun activeUnityReadyRequiresBridgeBeforeReportingSetupComplete() {
+        val source = runtimeSource()
+        val readyStart = source.indexOf("fun onUnityReady(")
+        val failureStart = source.indexOf("fun onUnityFailure(", startIndex = readyStart)
+        assertTrue("onUnityReady must exist before onUnityFailure", readyStart >= 0 && failureStart > readyStart)
+
+        val ready = source.substring(readyStart, failureStart)
+        val matchGuard = ready.indexOf("if (!launchSessions.matches(displayId, launchSession)) return")
+        val bridgeGate = ready.indexOf("setupComplete = UnityRendererBridge.enableIfRuntimeAvailable()")
+        val failureState = ready.indexOf("lastFailure = if (setupComplete) null else \"Unity renderer bridge unavailable\"")
+
+        assertTrue("stale Unity readiness must be rejected before mutating runtime state", matchGuard >= 0)
+        assertTrue("Unity readiness must be gated by a usable renderer bridge", bridgeGate > matchGuard)
+        assertTrue("bridge-unavailable readiness must remain observable as a failure state", failureState > bridgeGate)
+    }
+
+    @Test
     fun activeUnityFailureDisablesBridgeBeforeSessionIsCleared() {
         val source = runtimeSource()
         val failureStart = source.indexOf("fun onUnityFailure(")
