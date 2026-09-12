@@ -26,7 +26,7 @@ object HfrCapabilityProbe {
         val manager = context.getSystemService(CameraManager::class.java)
         val modes = ArrayList<HfrMode>()
         val cameraIds = try {
-            manager.cameraIdList
+            manager.cameraIdList.toList()
         } catch (_: CameraAccessException) {
             return HfrCapabilities(emptyList())
         } catch (_: RuntimeException) {
