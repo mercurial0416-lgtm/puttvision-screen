@@ -115,10 +115,10 @@ class CameraQualityEstimator {
         val edge = if (edgeCount > 0) edgeTotal / edgeCount else 0.0
         val residual = if (residualCount > 0) residualTotal / residualCount else 40.0
 
-        val old = previous
+        val comparablePrevious = previous?.takeIf { it.size == sample.size }
         var motionDelta = 0.0
-        if (old != null && old.size == sample.size) {
-            for (i in sample.indices) motionDelta += abs(sample[i] - old[i])
+        if (comparablePrevious != null) {
+            for (i in sample.indices) motionDelta += abs(sample[i] - comparablePrevious[i])
             motionDelta /= sample.size
         }
         previous = sample
@@ -132,7 +132,7 @@ class CameraQualityEstimator {
         }.coerceIn(0.0, 100.0)
         val contrastScore = ((contrast - 8.0) / 28.0 * 100.0).coerceIn(0.0, 100.0)
         val sharpnessScore = ((edge - 4.0) / 20.0 * 100.0).coerceIn(0.0, 100.0)
-        val motionScore = if (old == null) 82.0 else (100.0 - max(0.0, motionDelta - 2.0) * 5.0).coerceIn(0.0, 100.0)
+        val motionScore = if (comparablePrevious == null) 82.0 else (100.0 - max(0.0, motionDelta - 2.0) * 5.0).coerceIn(0.0, 100.0)
         val noiseScore = (100.0 - max(0.0, residual - 10.0) * 3.2).coerceIn(0.0, 100.0)
         val overall = (
             brightnessScore * 0.24 +
