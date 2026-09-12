@@ -119,9 +119,8 @@ object UnityTvRuntime {
     fun onUnityReady(displayId: Int, launchSession: Long) {
         synchronized(stateLock) {
             if (!launchSessions.matches(displayId, launchSession)) return
-            setupComplete = true
-            lastFailure = null
-            UnityRendererBridge.enableIfRuntimeAvailable()
+            setupComplete = UnityRendererBridge.enableIfRuntimeAvailable()
+            lastFailure = if (setupComplete) null else "Unity renderer bridge unavailable"
         }
     }
 
