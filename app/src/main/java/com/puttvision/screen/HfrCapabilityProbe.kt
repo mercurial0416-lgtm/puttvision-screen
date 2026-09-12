@@ -29,7 +29,7 @@ object HfrCapabilityProbe {
             manager.cameraIdList
         } catch (_: CameraAccessException) {
             return HfrCapabilities(emptyList())
-        } catch (_: SecurityException) {
+        } catch (_: RuntimeException) {
             return HfrCapabilities(emptyList())
         }
 
@@ -38,9 +38,7 @@ object HfrCapabilityProbe {
                 manager.getCameraCharacteristics(id)
             } catch (_: CameraAccessException) {
                 continue
-            } catch (_: IllegalArgumentException) {
-                continue
-            } catch (_: SecurityException) {
+            } catch (_: RuntimeException) {
                 continue
             }
             if (chars.get(CameraCharacteristics.LENS_FACING) !=
