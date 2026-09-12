@@ -15,9 +15,9 @@ class DistinctDisplayStatusReporter(
 
     fun report(connected: Boolean, message: String) {
         if (lastConnected == connected && lastMessage == message) return
+        callback(connected, message)
         lastConnected = connected
         lastMessage = message
-        callback(connected, message)
     }
 
     fun reset() {
