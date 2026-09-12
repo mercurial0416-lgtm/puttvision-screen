@@ -1,6 +1,7 @@
 package com.puttvision.screen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFailsWith
 import org.junit.Test
 
 class DistinctDisplayStatusReporterTest {
@@ -58,5 +59,25 @@ class DistinctDisplayStatusReporterTest {
             ),
             events
         )
+    }
+
+    @Test
+    fun failedCallbackDoesNotSuppressRetryOfSameStatus() {
+        var attempts = 0
+        val events = mutableListOf<Pair<Boolean, String>>()
+        val reporter = DistinctDisplayStatusReporter { connected, message ->
+            attempts++
+            if (attempts == 1) throw IllegalStateException("HUD callback failed")
+            events += connected to message
+        }
+
+        assertFailsWith<IllegalStateException> {
+            reporter.report(true, "TV 연결됨 · HDMI · UNITY READY")
+        }
+        reporter.report(true, "TV 연결됨 · HDMI · UNITY READY")
+        reporter.report(true, "TV 연결됨 · HDMI · UNITY READY")
+
+        assertEquals(2, attempts)
+        assertEquals(listOf(true to "TV 연결됨 · HDMI · UNITY READY"), events)
     }
 }
