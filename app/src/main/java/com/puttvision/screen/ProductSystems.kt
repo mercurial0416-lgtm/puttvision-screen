@@ -121,7 +121,7 @@ class CameraQualityEstimator {
             for (i in sample.indices) motionDelta += abs(sample[i] - old[i])
             motionDelta /= sample.size
         }
-        previous = sample.copyOf()
+        previous = sample
 
         val brightnessScore = when {
             mean < 35.0 -> (mean / 35.0 * 35.0)
