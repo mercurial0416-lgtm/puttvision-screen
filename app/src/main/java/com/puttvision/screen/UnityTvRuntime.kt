@@ -149,6 +149,7 @@ object UnityTvRuntime {
     fun finishCurrent() {
         synchronized(stateLock) {
             setupComplete = false
+            lastFailure = null
             launchSessions.clear()
             UnityRendererBridge.enabled = false
         }

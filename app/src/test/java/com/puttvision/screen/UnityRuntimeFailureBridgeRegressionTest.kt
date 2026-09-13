@@ -93,4 +93,22 @@ class UnityRuntimeFailureBridgeRegressionTest {
         assertTrue("active launch failure must disable the renderer bridge", disableBridge > matchGuard)
         assertTrue("bridge must fail closed before the failed launch session is cleared", clearSession > disableBridge)
     }
+
+    @Test
+    fun finishingUnityClearsFailureBeforeRetiringSession() {
+        val source = runtimeSource()
+        val finishStart = source.indexOf("fun finishCurrent()")
+        assertTrue("finishCurrent must exist", finishStart >= 0)
+
+        val finish = source.substring(finishStart)
+        val clearReady = finish.indexOf("setupComplete = false")
+        val clearFailure = finish.indexOf("lastFailure = null", startIndex = clearReady)
+        val clearSession = finish.indexOf("launchSessions.clear()", startIndex = clearFailure)
+        val disableBridge = finish.indexOf("UnityRendererBridge.enabled = false", startIndex = clearSession)
+
+        assertTrue("finishing Unity must clear setupComplete", clearReady >= 0)
+        assertTrue("finishing Unity must clear stale failure state", clearFailure > clearReady)
+        assertTrue("failure state must clear before the launch session is retired", clearSession > clearFailure)
+        assertTrue("renderer bridge must still fail closed during finish", disableBridge > clearSession)
+    }
 }
