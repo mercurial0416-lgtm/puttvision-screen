@@ -19,7 +19,6 @@ import android.widget.Toast
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
-import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageProxy
@@ -165,7 +164,6 @@ class CameraQualityEstimator {
 }
 
 /** Pins focus to the putting zone and locks exposure / white balance after metering. */
-@OptIn(ExperimentalCamera2Interop::class)
 class CameraStabilityController {
     private var activeCamera: Camera? = null
 
