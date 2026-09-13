@@ -57,7 +57,10 @@ class ExternalDisplayController(
             // Godot only needs warm rollback snapshots while an external presentation display is
             // actually attached. Avoid bridge snapshot work every 16 ms during normal phone-only use.
             if (hasPresentationDisplay) {
-                V143GodotRenderBridge.publish(engine)
+                // Snapshot publication must never be allowed to terminate the periodic pump. A
+                // transient renderer/engine exception would otherwise leave later Godot fallback
+                // frames permanently stale until the controller is restarted.
+                runCatching { V143GodotRenderBridge.publish(engine) }
             }
             handler.postDelayed(
                 this,
