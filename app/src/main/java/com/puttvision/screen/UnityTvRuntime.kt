@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.view.Display
 
+internal data class UnityLaunchIdentity(val displayId: Int, val sessionId: Long)
+
 /** Keeps asynchronous Unity callbacks bound to the exact launch that created them. */
 internal class UnityLaunchSessionGuard {
     private var nextSessionId = 0L
@@ -26,6 +28,13 @@ internal class UnityLaunchSessionGuard {
 
     @Synchronized
     fun matchesDisplay(displayId: Int): Boolean = activeDisplayId == displayId
+
+    @Synchronized
+    fun currentIdentity(): UnityLaunchIdentity? {
+        val displayId = activeDisplayId ?: return null
+        val sessionId = activeSessionId ?: return null
+        return UnityLaunchIdentity(displayId, sessionId)
+    }
 
     @Synchronized
     fun clearIf(displayId: Int, sessionId: Long) {
@@ -147,17 +156,21 @@ object UnityTvRuntime {
     }
 
     fun finishCurrent() {
-        synchronized(stateLock) {
+        val retiredLaunch = synchronized(stateLock) {
+            val identity = launchSessions.currentIdentity()
             setupComplete = false
             lastFailure = null
             launchSessions.clear()
             UnityRendererBridge.enabled = false
+            identity
         }
 
         // UnityPlayerActivity owns Unity's lifecycle. Finishing the Activity is intentionally used
         // instead of UnityPlayer.quit(), because Unity documents quit as terminating the hosting
-        // process. If a future Unity version hides currentActivity, this safely becomes a no-op and
-        // the system will reclaim the old task when its display disappears.
+        // process. The activity identity is checked against the session retired above: a new HDMI
+        // launch can otherwise become current while reflection is running and get finished by stale
+        // cleanup from the previous session.
+        if (retiredLaunch == null) return
         runCatching {
             val playerClass = Class.forName(UNITY_PLAYER)
             val activity = sequenceOf("currentActivity", "mCurrentActivity")
@@ -169,7 +182,15 @@ object UnityTvRuntime {
                 }
                 .firstOrNull()
 
-            if (activity != null && activity.javaClass.name.contains("UnityPlayer")) {
+            val intent = activity?.intent
+            val belongsToRetiredLaunch =
+                intent?.getIntExtra(DISPLAY_ID_EXTRA, Int.MIN_VALUE) == retiredLaunch.displayId &&
+                    intent.getLongExtra(LAUNCH_SESSION_EXTRA, Long.MIN_VALUE) == retiredLaunch.sessionId
+            if (
+                activity != null &&
+                activity.javaClass.name.contains("UnityPlayer") &&
+                belongsToRetiredLaunch
+            ) {
                 activity.runOnUiThread {
                     runCatching { activity.finish() }
                 }
