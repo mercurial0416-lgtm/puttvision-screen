@@ -83,4 +83,18 @@ class DistinctDisplayStatusReporterTest {
         assertEquals(2, attempts)
         assertEquals(listOf(true to "TV 연결됨 · HDMI · UNITY READY"), events)
     }
+
+    @Test
+    fun identicalReentrantStatusIsSuppressedWhileCallbackIsRunning() {
+        var callbacks = 0
+        lateinit var reporter: DistinctDisplayStatusReporter
+        reporter = DistinctDisplayStatusReporter { connected, message ->
+            callbacks++
+            reporter.report(connected, message)
+        }
+
+        reporter.report(true, "TV 연결됨 · HDMI · UNITY READY")
+
+        assertEquals(1, callbacks)
+    }
 }
