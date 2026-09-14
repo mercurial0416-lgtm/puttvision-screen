@@ -54,6 +54,25 @@ jobs:
                   + repr(release_if_lines)
               )
 
+          # Production releases must be serialized. Two overlapping issue-comment
+          # dispatches can otherwise allocate the same next tag or race public
+          # updater publication even though each individual run is valid.
+          required_concurrency_fragments = (
+              'concurrency:',
+              'group: puttvision-current-main-release',
+              'cancel-in-progress: false',
+          )
+          missing_concurrency_fragments = [
+              fragment
+              for fragment in required_concurrency_fragments
+              if workflow.count(fragment) != 1
+          ]
+          if missing_concurrency_fragments:
+              raise SystemExit(
+                  'current-main release serialization guard missing or duplicated: '
+                  + repr(missing_concurrency_fragments)
+              )
+
           # The stale-release cleanup must stay strictly before public updater
           # publication. Deleting a release after publishing its APK URL would
           # leave installed clients with a manifest that points at a dead asset.
