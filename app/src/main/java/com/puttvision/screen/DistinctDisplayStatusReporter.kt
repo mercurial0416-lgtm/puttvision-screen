@@ -14,8 +14,8 @@ class DistinctDisplayStatusReporter(
     private var lastMessage: String? = null
     private var stateVersion: Long = 0
 
-    fun report(connected: Boolean, message: String) {
-        if (lastConnected == connected && lastMessage == message) return
+    fun report(connected: Boolean, message: String) = synchronized(this) {
+        if (lastConnected == connected && lastMessage == message) return@synchronized
         val previousConnected = lastConnected
         val previousMessage = lastMessage
         val reportVersion = ++stateVersion
@@ -35,7 +35,7 @@ class DistinctDisplayStatusReporter(
         }
     }
 
-    fun reset() {
+    fun reset() = synchronized(this) {
         lastConnected = null
         lastMessage = null
         stateVersion++
