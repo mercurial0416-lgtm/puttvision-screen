@@ -54,6 +54,43 @@ jobs:
                   + repr(release_if_lines)
               )
 
+          # The stale-release cleanup must stay strictly before public updater
+          # publication. Deleting a release after publishing its APK URL would
+          # leave installed clients with a manifest that points at a dead asset.
+          ordered_steps = (
+              '- name: Remove unpublished stale release on pre-updater failure',
+              '- name: Publish and verify public updater manifest',
+              '- name: Verify latest release and updater contract',
+          )
+          positions = []
+          for step in ordered_steps:
+              count = workflow.count(step)
+              if count != 1:
+                  raise SystemExit(
+                      f'current-main release safety step missing or duplicated: '
+                      f'{step!r} count={count}'
+                  )
+              positions.append(workflow.index(step))
+          if positions != sorted(positions):
+              raise SystemExit(
+                  'unsafe current-main release step order; stale cleanup must '
+                  'precede updater publication, which must precede final contract '
+                  f'verification: {positions!r}'
+              )
+
+          cleanup_name = ordered_steps[0]
+          cleanup_start = workflow.index(cleanup_name)
+          publish_start = workflow.index(ordered_steps[1])
+          cleanup_block = workflow[cleanup_start:publish_start]
+          cleanup_guard = (
+              "if: " + marker
+              + " failure() && env.PV_RELEASE_ATTEMPTED == 'true' }}"
+          )
+          if cleanup_guard not in cleanup_block:
+              raise SystemExit(
+                  'pre-updater stale-release cleanup lost its failure-only guard'
+              )
+
           legacy_marker_patterns = ('.release-*', '.v*-*trigger*')
           stale_markers = sorted({
               str(path)
@@ -74,7 +111,8 @@ jobs:
           set -euo pipefail
           java -version
           test -n "${ANDROID_HOME:-}"
-          curl --fail --location --retry 5 --retry-delay 3 \
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 15 --max-time 300 \
             https://downloads.gradle.org/distributions/gradle-8.13-bin.zip \
             --output "$RUNNER_TEMP/gradle-8.13-bin.zip"
           echo "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78  $RUNNER_TEMP/gradle-8.13-bin.zip" \
