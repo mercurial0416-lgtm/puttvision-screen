@@ -12,18 +12,25 @@ class DistinctDisplayStatusReporter(
 ) {
     private var lastConnected: Boolean? = null
     private var lastMessage: String? = null
+    private var stateVersion: Long = 0
 
     fun report(connected: Boolean, message: String) {
         if (lastConnected == connected && lastMessage == message) return
         val previousConnected = lastConnected
         val previousMessage = lastMessage
+        val reportVersion = ++stateVersion
         lastConnected = connected
         lastMessage = message
         try {
             callback(connected, message)
         } catch (t: Throwable) {
-            lastConnected = previousConnected
-            lastMessage = previousMessage
+            // A reentrant callback may have reported a newer status or reset the reporter. Do not
+            // let the failed outer delivery roll that newer state back to a stale snapshot.
+            if (stateVersion == reportVersion) {
+                lastConnected = previousConnected
+                lastMessage = previousMessage
+                stateVersion++
+            }
             throw t
         }
     }
@@ -31,5 +38,6 @@ class DistinctDisplayStatusReporter(
     fun reset() {
         lastConnected = null
         lastMessage = null
+        stateVersion++
     }
 }
