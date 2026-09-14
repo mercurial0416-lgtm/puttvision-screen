@@ -83,13 +83,13 @@ class UnityRuntimeFailureBridgeRegressionTest {
         assertTrue("launch must exist before isReadyOn", launchStart >= 0 && readyStart > launchStart)
 
         val launch = source.substring(launchStart, readyStart)
-        val catchStart = launch.indexOf("}.getOrElse { throwable ->")
-        val matchGuard = launch.indexOf("if (launchSessions.matches(displayId, launchSession))", startIndex = catchStart)
+        val failureGuard = launch.indexOf("if (launchFailure != null) {")
+        val matchGuard = launch.indexOf("if (launchSessions.matches(displayId, launchSession))", startIndex = failureGuard)
         val disableBridge = launch.indexOf("UnityRendererBridge.enabled = false", startIndex = matchGuard)
         val clearSession = launch.indexOf("launchSessions.clearIf(displayId, launchSession)", startIndex = disableBridge)
 
-        assertTrue("launch failure handler must exist", catchStart >= 0)
-        assertTrue("only the active failed launch may mutate bridge state", matchGuard > catchStart)
+        assertTrue("launch failure handler must exist", failureGuard >= 0)
+        assertTrue("only the active failed launch may mutate bridge state", matchGuard > failureGuard)
         assertTrue("active launch failure must disable the renderer bridge", disableBridge > matchGuard)
         assertTrue("bridge must fail closed before the failed launch session is cleared", clearSession > disableBridge)
     }
