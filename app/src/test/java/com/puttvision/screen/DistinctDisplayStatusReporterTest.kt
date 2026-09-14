@@ -97,4 +97,50 @@ class DistinctDisplayStatusReporterTest {
 
         assertEquals(1, callbacks)
     }
+
+    @Test
+    fun failedOuterCallbackDoesNotClobberNewerReentrantStatus() {
+        val callbacks = mutableListOf<String>()
+        lateinit var reporter: DistinctDisplayStatusReporter
+        reporter = DistinctDisplayStatusReporter { _, message ->
+            callbacks += message
+            if (message == "UNITY STARTING") {
+                reporter.report(true, "UNITY READY")
+                throw IllegalStateException("outer callback failed after READY")
+            }
+        }
+
+        try {
+            reporter.report(true, "UNITY STARTING")
+            fail("Outer callback should fail")
+        } catch (_: IllegalStateException) {
+            // The nested READY report succeeded and must remain the cached latest state.
+        }
+        reporter.report(true, "UNITY READY")
+
+        assertEquals(listOf("UNITY STARTING", "UNITY READY"), callbacks)
+    }
+
+    @Test
+    fun failedOuterCallbackDoesNotUndoReentrantReset() {
+        var callbacks = 0
+        lateinit var reporter: DistinctDisplayStatusReporter
+        reporter = DistinctDisplayStatusReporter { _, _ ->
+            callbacks++
+            if (callbacks == 1) {
+                reporter.reset()
+                throw IllegalStateException("outer callback failed after reset")
+            }
+        }
+
+        try {
+            reporter.report(false, "외부 TV 미검출")
+            fail("Outer callback should fail")
+        } catch (_: IllegalStateException) {
+            // Reset is newer state than the failing report and must survive its rollback.
+        }
+        reporter.report(false, "외부 TV 미검출")
+
+        assertEquals(2, callbacks)
+    }
 }
