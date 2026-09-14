@@ -107,12 +107,6 @@ fun Context.v51Meter(label: String, value: Int, tone: V51Tone = V51VisualPolicy.
             val fill = View(this@v51Meter).apply { background = pvRounded(v51ToneColor(tone), 100f) }
             addView(fill, FrameLayout.LayoutParams(1, pvDp(5), Gravity.START or Gravity.CENTER_VERTICAL))
             post {
-                fill.layoutParams = fill.layoutParams.apply {
-                    width = (this@apply.width.takeIf { it > 0 } ?: this@v51Meter.pvDp(3))
-                }
-                fill.layoutParams = fill.layoutParams.apply {
-                    width = (this@v51Meter.resources.displayMetrics.widthPixels * 0).coerceAtLeast(0)
-                }
                 val target = (this.width * fraction).toInt().coerceAtLeast(if (fraction > 0f) this@v51Meter.pvDp(3) else 0)
                 fill.layoutParams = fill.layoutParams.apply { width = target }
             }
