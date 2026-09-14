@@ -1,6 +1,13 @@
 package com.puttvision.screen
 
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
@@ -142,5 +149,51 @@ class DistinctDisplayStatusReporterTest {
         reporter.report(false, "외부 TV 미검출")
 
         assertEquals(2, callbacks)
+    }
+
+    @Test
+    fun concurrentStatusCallbacksAreSerialized() {
+        val callbacks = CopyOnWriteArrayList<String>()
+        val activeCallbacks = AtomicInteger(0)
+        val firstEntered = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val secondTaskStarted = CountDownLatch(1)
+        val overlappingCallback = CountDownLatch(1)
+        val reporter = DistinctDisplayStatusReporter { _, message ->
+            if (activeCallbacks.incrementAndGet() > 1) overlappingCallback.countDown()
+            try {
+                callbacks += message
+                if (message == "UNITY STARTING") {
+                    firstEntered.countDown()
+                    assertTrue(releaseFirst.await(2, TimeUnit.SECONDS))
+                }
+            } finally {
+                activeCallbacks.decrementAndGet()
+            }
+        }
+        val executor = Executors.newFixedThreadPool(2)
+
+        try {
+            val first = executor.submit { reporter.report(true, "UNITY STARTING") }
+            assertTrue(firstEntered.await(2, TimeUnit.SECONDS))
+            val second = executor.submit {
+                secondTaskStarted.countDown()
+                reporter.report(true, "UNITY READY")
+            }
+            assertTrue(secondTaskStarted.await(2, TimeUnit.SECONDS))
+
+            assertFalse(
+                "A second display callback entered before the first callback completed",
+                overlappingCallback.await(250, TimeUnit.MILLISECONDS)
+            )
+            releaseFirst.countDown()
+            first.get(2, TimeUnit.SECONDS)
+            second.get(2, TimeUnit.SECONDS)
+
+            assertEquals(listOf("UNITY STARTING", "UNITY READY"), callbacks)
+        } finally {
+            releaseFirst.countDown()
+            executor.shutdownNow()
+        }
     }
 }
