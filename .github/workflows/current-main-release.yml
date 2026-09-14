@@ -158,7 +158,8 @@ jobs:
           echo "PV_RELEASE_PUBLISHED=true" >> "$GITHUB_ENV"
           APK_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$PV_TAG/puttvision-consumer.apk"
           echo "PV_APK_URL=$APK_URL" >> "$GITHUB_ENV"
-          curl --fail-with-body -sSIL "$APK_URL" >/dev/null
+          curl --fail-with-body -sSIL --retry 5 --retry-all-errors --retry-delay 2 \
+            --connect-timeout 15 --max-time 120 "$APK_URL" >/dev/null
 
       - name: Verify published APK integrity
         shell: bash

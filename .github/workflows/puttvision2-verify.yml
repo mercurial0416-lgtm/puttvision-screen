@@ -91,6 +91,30 @@ jobs:
                   'pre-updater stale-release cleanup lost its failure-only guard'
               )
 
+          release_publish_name = '- name: Publish semantic GitHub release'
+          integrity_name = '- name: Verify published APK integrity'
+          release_publish_start = workflow.index(release_publish_name)
+          integrity_start = workflow.index(integrity_name)
+          release_publish_block = workflow[release_publish_start:integrity_start]
+          required_probe_fragments = (
+              'curl --fail-with-body -sSIL',
+              '--retry 5',
+              '--retry-all-errors',
+              '--retry-delay 2',
+              '--connect-timeout 15',
+              '--max-time 120',
+          )
+          missing_probe_fragments = [
+              fragment
+              for fragment in required_probe_fragments
+              if fragment not in release_publish_block
+          ]
+          if missing_probe_fragments:
+              raise SystemExit(
+                  'published APK availability probe lost retry/timeout safety: '
+                  + repr(missing_probe_fragments)
+              )
+
           legacy_marker_patterns = ('.release-*', '.v*-*trigger*')
           stale_markers = sorted({
               str(path)
