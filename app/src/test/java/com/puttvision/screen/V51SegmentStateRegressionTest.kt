@@ -30,4 +30,22 @@ class V51SegmentStateRegressionTest {
         assertTrue(V51VisualPolicy.segmentStates(0, 0, finished = false).isEmpty())
         assertTrue(V51VisualPolicy.segmentStates(0, -1, finished = false).isEmpty())
     }
+
+    @Test fun preStartIndexKeepsEverySegmentPending() {
+        assertEquals(
+            listOf(1, 1, 1),
+            V51VisualPolicy.segmentStates(blockIndex = -1, blockCount = 3, finished = false)
+        )
+    }
+
+    @Test fun indexPastLastBlockTreatsEverySegmentAsComplete() {
+        assertEquals(
+            listOf(-1, -1, -1),
+            V51VisualPolicy.segmentStates(blockIndex = 3, blockCount = 3, finished = false)
+        )
+        assertEquals(
+            listOf(-1, -1, -1),
+            V51VisualPolicy.segmentStates(blockIndex = Int.MAX_VALUE, blockCount = 3, finished = false)
+        )
+    }
 }
