@@ -29,4 +29,15 @@ class V51VisualPolicyRegressionTest {
         assertEquals(1.0f, V51VisualPolicy.progress(100))
         assertEquals(1.0f, V51VisualPolicy.progress(101))
     }
+
+    @Test fun scoreToneThresholdsStayStableAtEveryBoundary() {
+        assertEquals(V51Tone.BAD, V51VisualPolicy.toneForScore(Int.MIN_VALUE))
+        assertEquals(V51Tone.BAD, V51VisualPolicy.toneForScore(49))
+        assertEquals(V51Tone.WARN, V51VisualPolicy.toneForScore(50))
+        assertEquals(V51Tone.WARN, V51VisualPolicy.toneForScore(67))
+        assertEquals(V51Tone.INFO, V51VisualPolicy.toneForScore(68))
+        assertEquals(V51Tone.INFO, V51VisualPolicy.toneForScore(84))
+        assertEquals(V51Tone.GOOD, V51VisualPolicy.toneForScore(85))
+        assertEquals(V51Tone.GOOD, V51VisualPolicy.toneForScore(Int.MAX_VALUE))
+    }
 }
