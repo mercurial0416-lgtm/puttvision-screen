@@ -70,7 +70,10 @@ class ExternalDisplayController(
         if (started) return
         started = true
         statusReporter.reset()
-        V143GodotRenderBridge.publish(engine)
+        // Snapshot publication is only a warm-up. A transient bridge failure must not strand the
+        // controller in started=true before its listener/pump are registered, because subsequent
+        // start() calls would then return early and HDMI/DeX lifecycle ownership would be lost.
+        runCatching { V143GodotRenderBridge.publish(engine) }
         handler.post(snapshotPump)
         dm.registerDisplayListener(this, handler)
         refresh()
@@ -210,7 +213,10 @@ class ExternalDisplayController(
         stopGodot()
         V143GodotRuntime.setupComplete = false
         V143GodotRuntime.lastFailure = null
-        V143GodotRenderBridge.publish(engine)
+        // Keep launch ownership independent from snapshot serialization. Godot can request a fresh
+        // bridge snapshot after startup, so one transient warm-up failure must not prevent the TV
+        // Activity from launching and falling through its normal readiness watchdog/fallback path.
+        runCatching { V143GodotRenderBridge.publish(engine) }
         val launchGeneration = ++godotLaunchGeneration
         try {
             val options = ActivityOptions.makeBasic().setLaunchDisplayId(display.displayId)
