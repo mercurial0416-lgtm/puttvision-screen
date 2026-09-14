@@ -98,7 +98,7 @@ object UnityTvRuntime {
             launchSessions.begin(displayId)
         }
 
-        return runCatching {
+        val launchFailure = runCatching {
             val activityClass = Class.forName(UNITY_ACTIVITY)
             val options = ActivityOptions.makeBasic().setLaunchDisplayId(displayId)
             val intent = Intent(context, activityClass).apply {
@@ -109,19 +109,26 @@ object UnityTvRuntime {
                 putExtra(LAUNCH_SESSION_EXTRA, launchSession)
             }
             context.startActivity(intent, options.toBundle())
-            UnityRendererBridge.enableIfRuntimeAvailable()
-            true
-        }.getOrElse { throwable ->
+        }.exceptionOrNull()
+
+        if (launchFailure != null) {
             synchronized(stateLock) {
                 if (launchSessions.matches(displayId, launchSession)) {
-                    lastFailure = throwable.message ?: throwable.javaClass.simpleName
+                    lastFailure = launchFailure.message ?: launchFailure.javaClass.simpleName
                     setupComplete = false
                     UnityRendererBridge.enabled = false
                     launchSessions.clearIf(displayId, launchSession)
                 }
             }
-            false
+            return false
         }
+
+        // Activity launch is the critical boundary. Eager bridge activation is only a warm-up: the
+        // Unity callback below is authoritative and retries activation after Unity is actually ready.
+        // A transient bridge/reflection exception here must not retire an Activity that already
+        // launched successfully, otherwise HDMI reconnect can lose ownership of the live Unity task.
+        runCatching { UnityRendererBridge.enableIfRuntimeAvailable() }
+        return true
     }
 
     fun isReadyOn(displayId: Int): Boolean = synchronized(stateLock) {
