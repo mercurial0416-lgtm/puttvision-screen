@@ -9,6 +9,12 @@ class V51StatusTonePrecedenceRegressionTest {
         assertEquals(V51Tone.BAD, V51VisualPolicy.toneForStatus("low confidence connected"))
     }
 
+    @Test fun severeStatusWinsOverCalibratedSignal() {
+        assertEquals(V51Tone.BAD, V51VisualPolicy.toneForStatus("calibrated error"))
+        assertEquals(V51Tone.BAD, V51VisualPolicy.toneForStatus("calibrated fail"))
+        assertEquals(V51Tone.BAD, V51VisualPolicy.toneForStatus("calibrated low confidence"))
+    }
+
     @Test fun transitionalStatusWinsOverHealthySignals() {
         assertEquals(V51Tone.WARN, V51VisualPolicy.toneForStatus("wait connected"))
         assertEquals(V51Tone.WARN, V51VisualPolicy.toneForStatus("partial data ready"))
