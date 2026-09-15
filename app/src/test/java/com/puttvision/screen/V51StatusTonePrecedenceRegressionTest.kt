@@ -9,6 +9,12 @@ class V51StatusTonePrecedenceRegressionTest {
         assertEquals(V51Tone.BAD, V51VisualPolicy.toneForStatus("low confidence connected"))
     }
 
+    @Test fun statusPrecedenceIsCaseInsensitive() {
+        assertEquals(V51Tone.BAD, V51VisualPolicy.toneForStatus("Camera ERROR Ready"))
+        assertEquals(V51Tone.WARN, V51VisualPolicy.toneForStatus("Wait Connected"))
+        assertEquals(V51Tone.INFO, V51VisualPolicy.toneForStatus("Sync Active"))
+    }
+
     @Test fun transitionalStatusWinsOverHealthySignals() {
         assertEquals(V51Tone.WARN, V51VisualPolicy.toneForStatus("wait connected"))
         assertEquals(V51Tone.WARN, V51VisualPolicy.toneForStatus("partial data ready"))
