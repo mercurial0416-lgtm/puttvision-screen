@@ -30,4 +30,9 @@ class V51StatusTonePrecedenceRegressionTest {
         assertEquals(V51Tone.INFO, V51VisualPolicy.toneForStatus("sync active"))
         assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("idle"))
     }
+
+    @Test fun emptyAndWhitespaceOnlyStatusesStayNeutral() {
+        assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus(""))
+        assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("   \t\n"))
+    }
 }
