@@ -34,5 +34,7 @@ class V51StatusTonePrecedenceRegressionTest {
     @Test fun emptyAndWhitespaceOnlyStatusesStayNeutral() {
         assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus(""))
         assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("   \t\n"))
+        assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("\r\n\t"))
+        assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("\u2003\u2003"))
     }
 }
