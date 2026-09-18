@@ -37,5 +37,6 @@ class V51StatusTonePrecedenceRegressionTest {
         assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("\r\n\t"))
         assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("\u2003\u2003"))
         assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("\u00a0\u00a0"))
+        assertEquals(V51Tone.NEUTRAL, V51VisualPolicy.toneForStatus("\u3000\u3000"))
     }
 }
