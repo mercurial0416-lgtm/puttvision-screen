@@ -21,8 +21,10 @@ class ExternalDisplaySnapshotPumpRegressionTest {
         val compact = controllerSource().replace(Regex("\\s+"), "")
 
         assertTrue(
-            "Godot rollback snapshots must stay gated by a valid external presentation display",
-            compact.contains("if(hasPresentationDisplay){V143GodotRenderBridge.publish(engine)}")
+            "Godot rollback snapshots must stay gated by a valid external presentation display and isolate transient publish failures",
+            compact.contains(
+                "if(hasPresentationDisplay){runCatching{V143GodotRenderBridge.publish(engine)}}"
+            )
         )
         assertTrue(
             "refresh() must derive snapshot-pump activity from the currently selected valid presentation display",
